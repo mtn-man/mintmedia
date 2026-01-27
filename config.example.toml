@@ -1,0 +1,94 @@
+# mintmedia example configuration
+# Copy this file to your config location and edit paths/values as needed.
+
+[paths]
+# Folder watched for incoming media (drop zone).
+# Use an absolute path or "~" if mintmedia expands it.
+drop_folder = "~/Downloads/MintDrop"
+state_dir   = "~/.local/state/mintmedia"
+error_dir = "~/.local/state/mintmedia/error"
+
+
+# State directory (history, internal bookkeeping, etc.)
+# macOS idiomatic default: "~/Library/Application Support/mintmedia"
+# Linux common default: "~/.local/state/mintmedia" (or $XDG_STATE_HOME/mintmedia)
+state_dir = "~/Library/Application Support/mintmedia"
+
+
+[destinations]
+# Destination for processed movies
+dest_dir_movies = "~/Movies/Movies"
+
+# Destination for processed TV shows
+dest_dir_shows = "~/Movies/Shows"
+
+
+[system]
+# If true, mintmedia will attempt to create missing destination directories.
+auto_create_missing_dirs = true
+
+# If true, mintmedia will wait until destinations exist and are writable before processing.
+defer_destination_checks = true
+
+
+[features]
+# Enable media processing (rename/move/organize)
+enable_processing = true
+
+# Enable torrent client automation/integration (e.g., Transmission)
+# Default off in the example config to avoid surprises.
+enable_torrent_automation = false
+
+
+[clipboard]
+# Monitor clipboard for magnet links (optional / opinionated)
+enabled = false
+
+# How often to poll the clipboard when enabled
+poll_interval = "250ms"
+
+
+[media]
+# Main media file extensions (movies/episodes)
+main_media_extensions = [".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm"]
+
+# Files that should follow the main media (subtitles, metadata, etc.)
+associated_file_extensions = [".srt", ".sub", ".ass", ".idx", ".vtt", ".nfo"]
+
+
+[naming]
+# Patterns/tags to strip from names (resolution, codec, source tags, etc.)
+# These are typically treated as regex patterns.
+media_tag_blacklist = [
+  "2160p",
+  "1080p",
+  "720p",
+  "x265",
+  "x264",
+  "hevc",
+  "h\\.264",
+  "h\\.265",
+  "web[- ]?dl",
+  "webrip",
+  "bluray",
+  "ELiTE",
+]
+
+
+[processing]
+# History filename (stored under state_dir)
+history_file = "history.log"
+
+
+[torrent]
+# Keep the section present for discoverability, but default it OFF.
+enabled = false
+
+# Transmission RPC host (host:port)
+host = "localhost:9091"
+
+# Path to transmission-remote binary (example for Homebrew on macOS)
+transmission_remote_path = "/opt/homebrew/bin/transmission-remote"
+
+# Optional authentication (only if required)
+# auth = "user:pass"
