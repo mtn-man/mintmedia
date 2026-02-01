@@ -86,13 +86,13 @@ func NewTerminalReporter(out *os.File, opts ReportOptions) Reporter {
 		opts.BarMinBytes = 200 * 1024 * 1024 // 200MB
 	}
 	if opts.BarMinElapsed <= 0 {
-		opts.BarMinElapsed = 1 * time.Second
+		opts.BarMinElapsed = 500 * time.Millisecond
 	}
 	if opts.BarWidth <= 0 {
 		opts.BarWidth = 24
 	}
 	if opts.EtaMinElapsed <= 0 {
-		opts.EtaMinElapsed = 2 * time.Second
+		opts.EtaMinElapsed = 500 * time.Millisecond
 	}
 
 	return &terminalReporter{out: out, inPlace: inPlace, opts: opts}

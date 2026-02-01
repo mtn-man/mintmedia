@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -63,7 +64,7 @@ func (e *CleanupError) Unwrap() error {
 }
 
 // Transferer moves a file from src -> dst.
-// Implementations should attempt rename, then fall back to copy+atomic finalize.
+// If src/dst are on different devices, we copy+replace. If same device, we attempt os.Rename and return any error without fallback.
 type Transferer interface {
 	Move(ctx context.Context, src, dst string) error
 }
@@ -84,6 +85,28 @@ func NewRenameOrCopy(opts Options) *RenameOrCopy {
 	return &RenameOrCopy{opts: opts}
 }
 
+func sameDevice(srcPath, dstDir string) (bool, error) {
+	srcInfo, err := os.Lstat(srcPath)
+	if err != nil {
+		return false, fmt.Errorf("lstat source %q: %w", srcPath, err)
+	}
+	dstInfo, err := os.Stat(dstDir)
+	if err != nil {
+		return false, fmt.Errorf("stat destination dir %q: %w", dstDir, err)
+	}
+
+	srcStat, ok := srcInfo.Sys().(*syscall.Stat_t)
+	if !ok || srcStat == nil {
+		return false, fmt.Errorf("stat source %q: missing syscall.Stat_t", srcPath)
+	}
+	dstStat, ok := dstInfo.Sys().(*syscall.Stat_t)
+	if !ok || dstStat == nil {
+		return false, fmt.Errorf("stat destination dir %q: missing syscall.Stat_t", dstDir)
+	}
+
+	return srcStat.Dev == dstStat.Dev, nil
+}
+
 func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -100,13 +123,19 @@ func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 		return fmt.Errorf("stat destination: %w", err)
 	}
 
-	// Try rename first
-	if err := os.Rename(src, dst); err == nil {
-		return nil
+	same, err := sameDevice(src, filepath.Dir(dst))
+	if err != nil {
+		return err
+	}
+	if !same {
+		return t.copyThenReplace(ctx, src, dst)
 	}
 
-	// Fall back to copy+atomic finalize.
-	return t.copyThenReplace(ctx, src, dst)
+	// Same device: try rename, return any error without fallback.
+	if err := os.Rename(src, dst); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) error {

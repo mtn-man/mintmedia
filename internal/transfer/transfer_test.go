@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -140,6 +141,62 @@ func TestMove_DestinationExists(t *testing.T) {
 		t.Fatalf("expected destination exists error, got: %v", err)
 	}
 
+	if _, err := os.Stat(src); err != nil {
+		t.Fatalf("expected source to remain, stat err=%v", err)
+	}
+}
+
+func TestSameDevice_TempDir(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "src.mkv")
+	writeFile(t, src, "data")
+
+	same, err := sameDevice(src, root)
+	if err != nil {
+		t.Fatalf("sameDevice error: %v", err)
+	}
+	if !same {
+		t.Fatalf("expected same device for temp dir paths")
+	}
+}
+
+func TestSameDevice_StatError(t *testing.T) {
+	root := t.TempDir()
+	_, err := sameDevice(filepath.Join(root, "missing.mkv"), root)
+	if err == nil {
+		t.Fatalf("expected error for missing source path")
+	}
+}
+
+func TestMove_SameDeviceRenameFailure_NoFallback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod semantics differ on windows")
+	}
+
+	root := t.TempDir()
+	src := filepath.Join(root, "src.mkv")
+	writeFile(t, src, strings.Repeat("d", 16))
+
+	dstDir := filepath.Join(root, "dstdir")
+	if err := os.MkdirAll(dstDir, 0o755); err != nil {
+		t.Fatalf("mkdir dest dir: %v", err)
+	}
+	if err := os.Chmod(dstDir, 0o555); err != nil {
+		t.Fatalf("chmod dest dir: %v", err)
+	}
+	defer func() {
+		_ = os.Chmod(dstDir, 0o755)
+	}()
+
+	dst := filepath.Join(dstDir, "dst.mkv")
+	xfer := NewRenameOrCopy(Options{})
+	if err := xfer.Move(context.Background(), src, dst); err == nil {
+		t.Fatalf("expected rename error, got nil")
+	}
+
+	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+		t.Fatalf("expected destination to not exist, stat err=%v", err)
+	}
 	if _, err := os.Stat(src); err != nil {
 		t.Fatalf("expected source to remain, stat err=%v", err)
 	}
