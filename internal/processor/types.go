@@ -147,4 +147,7 @@ var (
 
 	// ErrUncategorized indicates the processor could not determine Movies vs Shows.
 	ErrUncategorized = errors.New("unable to categorize media")
+
+	// ErrAmbiguousShow indicates multiple possible show folders matched with no clear choice.
+	ErrAmbiguousShow = errors.New("ambiguous show folder match")
 )

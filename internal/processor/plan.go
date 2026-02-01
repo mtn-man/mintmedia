@@ -234,15 +234,15 @@ func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath s
 		if err != nil {
 			return Plan{}, err
 		}
+		showFolder, resolvedYear, err := resolveShowFolder(p.cfg.ShowsDir, showName, showYear)
+		if err != nil {
+			return Plan{}, err
+		}
+
 		pl.ShowName = showName
-		pl.ShowYear = showYear
+		pl.ShowYear = resolvedYear
 		pl.Season = season
 		pl.Episode = episode
-
-		showFolder := showName
-		if showYear != "" {
-			showFolder = fmt.Sprintf("%s (%s)", showName, showYear)
-		}
 
 		seasonFolder := fmt.Sprintf("Season %02d", season)
 		epFolder := fmt.Sprintf("%s S%02dE%s", showName, season, padEpisode(episode))

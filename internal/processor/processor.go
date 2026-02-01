@@ -118,7 +118,7 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 				Reason:  ErrInputMissing.Error(),
 			}}, nil
 		}
-		if errors.Is(err, ErrNotMedia) || errors.Is(err, ErrNoMainMediaFound) {
+		if errors.Is(err, ErrNotMedia) || errors.Is(err, ErrNoMainMediaFound) || errors.Is(err, ErrAmbiguousShow) {
 			return []Result{{
 				Handled: true,
 				Applied: false,

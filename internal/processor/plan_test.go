@@ -177,6 +177,163 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowFile_Fallout_YearPrefersNoYearFolder",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Fallout"))
+
+				name := "Fallout 2024 S02E07 1080p x265-ELiTE[EZTVx.to].mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.ShowName != "Fallout" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Fallout")
+				}
+				if pl.ShowYear != "" {
+					t.Fatalf("ShowYear = %q, want empty", pl.ShowYear)
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "Fallout")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			name: "ShowFile_Fallout_YearMatchesExactFolder",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Fallout (2024)"))
+
+				name := "Fallout 2024 S02E07 1080p x265-ELiTE[EZTVx.to].mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.ShowYear != "2024" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2024")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "Fallout (2024)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			name: "ShowFile_Fallout_YearCreatesNewWhenOnlyDifferentYearExists",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Fallout (1997)"))
+
+				name := "Fallout 2024 S02E07 1080p x265-ELiTE[EZTVx.to].mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.ShowYear != "2024" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2024")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "Fallout (2024)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			name: "ShowFile_Fallout_NoYearPrefersNoYearFolder",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Fallout"))
+
+				name := "Fallout S02E07 1080p x265-ELiTE[EZTVx.to].mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.ShowYear != "" {
+					t.Fatalf("ShowYear = %q, want empty", pl.ShowYear)
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "Fallout")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			name: "ShowFile_Fallout_NoYearSingleYearFolder",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Fallout (2024)"))
+
+				name := "Fallout S02E07 1080p x265-ELiTE[EZTVx.to].mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.ShowYear != "2024" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2024")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "Fallout (2024)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			name: "ShowFile_Fallout_NoYearAmbiguousYearFolders",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Fallout (1997)"))
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Fallout (2024)"))
+
+				name := "Fallout S02E07 1080p x265-ELiTE[EZTVx.to].mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if err != ErrAmbiguousShow {
+					t.Fatalf("error = %v, want ErrAmbiguousShow", err)
+				}
+			},
+		},
+		{
 			name: "ShowFile_LowercaseSeasonEpisodeToken",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
