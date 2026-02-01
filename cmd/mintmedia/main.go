@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	pflag "github.com/spf13/pflag"
 
 	"github.com/Mtn-Man/mintmedia/internal/clipboard"
 	"github.com/Mtn-Man/mintmedia/internal/config"
@@ -38,22 +39,39 @@ const (
 )
 
 func main() {
-	configPath := flag.String(
+	configPath := pflag.String(
 		"config",
 		"",
 		"Path to config.toml (default: ~/.config/mintmedia/config.toml)",
 	)
 
 	// One-shot processor harness flags
-	planPath := flag.String("plan", "", "Compute and print the processing plan for a path (no changes)")
-	applyPath := flag.String("apply", "", "Plan and apply changes for a path (filesystem writes)")
-	processPath := flag.String("process", "", "Process a path with policy (ignore non-media/no-media dirs)")
-	processDropShort := flag.Bool("p", false, "Process all paths currently in the drop folder (one-shot)")
-	processDropLong := flag.Bool("process-drop", false, "Process all paths currently in the drop folder (one-shot)")
+	planPath := pflag.String("plan", "", "Compute and print the processing plan for a path (no changes)")
+	applyPath := pflag.String("apply", "", "Plan and apply changes for a path (filesystem writes)")
+	processPath := pflag.String("process", "", "Process a path with policy (ignore non-media/no-media dirs)")
+	processDrop := pflag.BoolP("process-drop", "p", false, "Process all paths currently in the drop folder (one-shot)")
+	daemonFlag := pflag.BoolP("daemon", "d", false, "Run the daemon (watch/poll/automations)")
+	verbose := pflag.BoolP("verbose", "v", false, "Verbose startup output (prints config summary)")
+	help := pflag.BoolP("help", "h", false, "Show help")
 
-	verbose := flag.Bool("verbose", false, "Verbose startup output (prints config summary in daemon mode)")
+	pflag.Usage = func() {
+		out := pflag.CommandLine.Output()
+		fmt.Fprintf(out, "Usage: %s [flags]\n\n", filepath.Base(os.Args[0]))
+		fmt.Fprintln(out, "Modes (choose one; default is -p/--process-drop):")
+		fmt.Fprintln(out, "  --plan <path>        Compute and print the processing plan (no changes)")
+		fmt.Fprintln(out, "  --apply <path>       Plan and apply changes for a path (filesystem writes)")
+		fmt.Fprintln(out, "  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
+		fmt.Fprintln(out, "  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
+		fmt.Fprintln(out, "  -d, --daemon         Run the daemon (watch/poll/automations)")
+		fmt.Fprintln(out, "\nFlags:")
+		pflag.PrintDefaults()
+	}
 
-	flag.Parse()
+	pflag.Parse()
+	if *help {
+		pflag.Usage()
+		return
+	}
 
 	cfg, resolved, err := config.Load(*configPath)
 	if err != nil {
@@ -61,12 +79,13 @@ func main() {
 		os.Exit(exitError)
 	}
 
-	// Determine whether we're in one-shot mode.
+	// Determine which mode we're in.
 	ops := 0
 	plan := strings.TrimSpace(*planPath)
 	apply := strings.TrimSpace(*applyPath)
 	process := strings.TrimSpace(*processPath)
-	processDrop := *processDropShort || *processDropLong
+	processDropMode := *processDrop
+	daemonMode := *daemonFlag
 	if plan != "" {
 		ops++
 	}
@@ -76,20 +95,27 @@ func main() {
 	if process != "" {
 		ops++
 	}
-	if processDrop {
+	if processDropMode {
+		ops++
+	}
+	if daemonMode {
 		ops++
 	}
 	if ops > 1 {
-		fmt.Fprintln(os.Stderr, "Use only one of --plan, --apply, --process, or --process-drop at a time.")
+		fmt.Fprintln(os.Stderr, "Use only one of --plan, --apply, --process, --process-drop, or --daemon at a time.")
 		os.Exit(exitUsage)
 	}
+	if ops == 0 {
+		processDropMode = true
+		ops = 1
+	}
 
-	if ops > 0 || *verbose {
+	if *verbose {
 		printConfigSummary(cfg, resolved)
 	}
-	if ops == 0 && !*verbose {
-		fmt.Println("Mintmedia starting...")
-	fmt.Printf("Config file: %s\n\n", resolved.ConfigPathAbs)
+	if processDropMode && !*verbose {
+		fmt.Println("Mintmedia starting (process-drop)...")
+		fmt.Printf("Config file: %s\n\n", resolved.ConfigPathAbs)
 	}
 
 	if !cfg.Features.EnableProcessing {
@@ -153,7 +179,7 @@ func main() {
 		return
 	}
 
-	if processDrop {
+	if processDropMode {
 		errCount := processDropFolder(ctx, proc, resolved.DropFolderAbs)
 		if errCount > 0 {
 			os.Exit(exitError)
@@ -161,7 +187,7 @@ func main() {
 		return
 	}
 
-	// ---- Default behavior: run daemon --------------------------------------
+	// ---- Daemon mode ---------------------------------------------------------
 	lockPath := filepath.Join(resolved.StateDirAbs, "mintmedia.lock")
 	releaseLock, err := state.AcquireLock(lockPath)
 	if err != nil {
