@@ -63,8 +63,10 @@ func main() {
 		fmt.Fprintln(out, "  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
 		fmt.Fprintln(out, "  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
 		fmt.Fprintln(out, "  -d, --daemon         Run the daemon (watch/poll/automations)")
-		fmt.Fprintln(out, "\nFlags:")
-		pflag.PrintDefaults()
+		fmt.Fprintln(out, "\nOther flags:")
+		fmt.Fprintln(out, "  --config <path>      Path to config.toml (default: ~/.config/mintmedia/config.toml)")
+		fmt.Fprintln(out, "  -v, --verbose        Verbose startup output (prints config summary)")
+		fmt.Fprintln(out, "  -h, --help           Show help")
 	}
 
 	pflag.Parse()
