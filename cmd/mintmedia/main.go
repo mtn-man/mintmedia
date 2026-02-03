@@ -18,6 +18,7 @@ import (
 	"github.com/Mtn-Man/mintmedia/internal/clipboard"
 	"github.com/Mtn-Man/mintmedia/internal/config"
 	"github.com/Mtn-Man/mintmedia/internal/daemon"
+	"github.com/Mtn-Man/mintmedia/internal/notify"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 	"github.com/Mtn-Man/mintmedia/internal/state"
 	"github.com/Mtn-Man/mintmedia/internal/transfer"
@@ -188,7 +189,7 @@ func main() {
 	}
 
 	if processDropMode {
-		errCount := processDropFolder(ctx, proc, resolved.DropFolderAbs)
+		errCount := processDropFolder(ctx, proc, resolved.DropFolderAbs, defaultSoundDone)
 		if errCount > 0 {
 			os.Exit(exitError)
 		}
@@ -341,7 +342,7 @@ type dropCandidate struct {
 	modTime time.Time
 }
 
-func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot string) int {
+func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot string, soundDone string) int {
 	entries, err := os.ReadDir(dropRoot)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -387,6 +388,9 @@ func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot s
 		if len(res) > 0 {
 			PrintResults(res)
 		}
+		if anyApplied(res) && strings.TrimSpace(soundDone) != "" {
+			_ = notify.PlaySound(context.WithoutCancel(ctx), soundDone)
+		}
 	}
 
 	if errCount > 0 {
@@ -394,4 +398,13 @@ func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot s
 	}
 
 	return errCount
+}
+
+func anyApplied(results []processor.Result) bool {
+	for _, r := range results {
+		if r.Applied {
+			return true
+		}
+	}
+	return false
 }
