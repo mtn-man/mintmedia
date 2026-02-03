@@ -45,12 +45,12 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 
 	case st.IsDir():
 		mainPaths, hitMaxDepth, err := listMainMediaFromDir(ctx, p, abs)
-			if err != nil {
-				if errors.Is(err, ErrNoMainMediaFound) && hitMaxDepth {
-					fmt.Fprintf(os.Stderr, "WARN: max depth %d reached while scanning %s; no main media found\n", paths.MaxDepth, abs)
-				}
-				return nil, err
+		if err != nil {
+			if errors.Is(err, ErrNoMainMediaFound) && hitMaxDepth {
+				fmt.Fprintf(os.Stderr, "WARN: max depth %d reached while scanning %s; no main media found\n", paths.MaxDepth, abs)
 			}
+			return nil, err
+		}
 		plans := make([]Plan, 0, len(mainPaths))
 		for _, main := range mainPaths {
 			pl, err := planForMain(ctx, p, req, abs, main)

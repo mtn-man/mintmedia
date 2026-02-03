@@ -1,5 +1,3 @@
-
-
 // internal/processor/regex.go
 package processor
 
@@ -24,5 +22,4 @@ var (
 
 	// Language tag suffix (case-insensitive), e.g. ".en" at end of a stem.
 	reLangTag = regexp.MustCompile(`(?i)\.([a-z]{2,3})$`)
-
 )
