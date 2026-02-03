@@ -61,7 +61,7 @@ func NewFileHistoryWriter(path string, opts HistoryOptions) (*FileHistoryWriter,
 
 // Append writes a preformatted line to the history file.
 // The caller is responsible for including a timestamp if desired.
-func (w *FileHistoryWriter) Append(ctx context.Context, entry string) error {
+func (w *FileHistoryWriter) Append(ctx context.Context, entry string) (retErr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -82,7 +82,11 @@ func (w *FileHistoryWriter) Append(ctx context.Context, entry string) error {
 	if err != nil {
 		return fmt.Errorf("open history file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil && retErr == nil {
+			retErr = fmt.Errorf("close history file: %w", err)
+		}
+	}()
 
 	if err := ctx.Err(); err != nil {
 		return err
@@ -91,7 +95,11 @@ func (w *FileHistoryWriter) Append(ctx context.Context, entry string) error {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		return fmt.Errorf("lock history file: %w", err)
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer func() {
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil && retErr == nil {
+			retErr = fmt.Errorf("unlock history file: %w", err)
+		}
+	}()
 
 	_, err = f.WriteString(entry + "\n")
 	if err != nil {

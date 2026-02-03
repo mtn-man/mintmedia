@@ -138,7 +138,7 @@ func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 	return nil
 }
 
-func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) error {
+func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (retErr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -172,7 +172,11 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) err
 		_ = os.Remove(tmp)
 		return fmt.Errorf("open source file: %w", err)
 	}
-	defer in.Close()
+	defer func() {
+		if err := in.Close(); err != nil && retErr == nil {
+			retErr = fmt.Errorf("close source file: %w", err)
+		}
+	}()
 
 	out := tmpFile
 	cleanupTmp := true

@@ -121,7 +121,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if err := d.Watcher.Start(ctx); err != nil {
 		return fmt.Errorf("start watcher: %w", err)
 	}
-	defer d.Watcher.Close()
+	defer func() {
+		if err := d.Watcher.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "watcher close warning: %v\n", err)
+		}
+	}()
 
 	var pollerEvents <-chan string
 	var pollerErrors <-chan error

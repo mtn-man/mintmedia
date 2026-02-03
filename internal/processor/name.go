@@ -245,9 +245,10 @@ func trimRightJunk(s string) string {
 	s = strings.TrimSpace(s)
 	return strings.TrimRightFunc(s, func(r rune) bool {
 		// keep letters/digits; trim everything else
-		return !(r >= '0' && r <= '9') &&
-			!(r >= 'A' && r <= 'Z') &&
-			!(r >= 'a' && r <= 'z')
+		isAlphaNum := (r >= '0' && r <= '9') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= 'a' && r <= 'z')
+		return !isAlphaNum
 	})
 }
 

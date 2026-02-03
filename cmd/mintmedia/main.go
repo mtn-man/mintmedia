@@ -56,17 +56,23 @@ func main() {
 
 	pflag.Usage = func() {
 		out := pflag.CommandLine.Output()
-		fmt.Fprintf(out, "Usage: %s [flags]\n\n", filepath.Base(os.Args[0]))
-		fmt.Fprintln(out, "Modes (choose one; default is -p/--process-drop):")
-		fmt.Fprintln(out, "  --plan <path>        Compute and print the processing plan (no changes)")
-		fmt.Fprintln(out, "  --apply <path>       Plan and apply changes for a path (filesystem writes)")
-		fmt.Fprintln(out, "  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
-		fmt.Fprintln(out, "  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
-		fmt.Fprintln(out, "  -d, --daemon         Run the daemon (watch/poll/automations)")
-		fmt.Fprintln(out, "\nOther flags:")
-		fmt.Fprintln(out, "  --config <path>      Path to config.toml (default: ~/.config/mintmedia/config.toml)")
-		fmt.Fprintln(out, "  -v, --verbose        Verbose startup output (prints config summary)")
-		fmt.Fprintln(out, "  -h, --help           Show help")
+		write := func(format string, args ...any) {
+			_, _ = fmt.Fprintf(out, format, args...)
+		}
+		writeln := func(args ...any) {
+			_, _ = fmt.Fprintln(out, args...)
+		}
+		write("Usage: %s [flags]\n\n", filepath.Base(os.Args[0]))
+		writeln("Modes (choose one; default is -p/--process-drop):")
+		writeln("  --plan <path>        Compute and print the processing plan (no changes)")
+		writeln("  --apply <path>       Plan and apply changes for a path (filesystem writes)")
+		writeln("  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
+		writeln("  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
+		writeln("  -d, --daemon         Run the daemon (watch/poll/automations)")
+		writeln("\nOther flags:")
+		writeln("  --config <path>      Path to config.toml (default: ~/.config/mintmedia/config.toml)")
+		writeln("  -v, --verbose        Verbose startup output (prints config summary)")
+		writeln("  -h, --help           Show help")
 	}
 
 	pflag.Parse()
