@@ -37,13 +37,18 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 		if !isExtInSet(ext, p.mainExtSet) {
 			return nil, ErrNotMedia
 		}
-		pl, err := planForMain(ctx, p, req, abs, abs)
+		pl, err := planForMain(ctx, p, req, abs, abs, showHint{})
 		if err != nil {
 			return nil, err
 		}
 		return []Plan{pl}, nil
 
 	case st.IsDir():
+		hint := showHint{}
+		if name, year, ok := deriveShowHintFromFolder(p.blacklist, filepath.Base(abs)); ok {
+			hint = showHint{name: name, year: year, ok: true}
+		}
+
 		mainPaths, hitMaxDepth, err := listMainMediaFromDir(ctx, p, abs)
 		if err != nil {
 			if errors.Is(err, ErrNoMainMediaFound) && hitMaxDepth {
@@ -52,15 +57,23 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 			return nil, err
 		}
 		plans := make([]Plan, 0, len(mainPaths))
+		issues := make([]PlanIssue, 0)
 		for _, main := range mainPaths {
-			pl, err := planForMain(ctx, p, req, abs, main)
+			pl, err := planForMain(ctx, p, req, abs, main, hint)
 			if err != nil {
+				if isSkippablePlanError(err) {
+					issues = append(issues, PlanIssue{Path: main, Err: err})
+					continue
+				}
 				return nil, err
 			}
 			plans = append(plans, pl)
 		}
-		if len(plans) > 0 {
+		if len(plans) > 0 && len(issues) == 0 {
 			plans[len(plans)-1].DeleteEmptyInputDir = true
+		}
+		if len(issues) > 0 {
+			return plans, &PartialPlanError{Issues: issues}
 		}
 		return plans, nil
 
@@ -150,6 +163,27 @@ func determineCategoryFromName(name string) Category {
 	return CategoryMovie
 }
 
+type showHint struct {
+	name string
+	year string
+	ok   bool
+}
+
+func isSkippablePlanError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pse *ParseShowError
+	var pme *ParseMovieError
+	if errors.As(err, &pse) || errors.As(err, &pme) {
+		return true
+	}
+	if errors.Is(err, ErrAmbiguousShow) {
+		return true
+	}
+	return false
+}
+
 // --- associated files planning ---------------------------------------------
 
 func planAssociatedMoves(ctx context.Context, p *processorImpl, pl Plan) ([]Move, error) {
@@ -205,7 +239,7 @@ func planAssociatedMoves(ctx context.Context, p *processorImpl, pl Plan) ([]Move
 
 // --- plan construction ------------------------------------------------------
 
-func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath string, mainPath string) (Plan, error) {
+func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath string, mainPath string, hint showHint) (Plan, error) {
 	pl := Plan{
 		InputPath:    inputPath,
 		CategoryHint: req.CategoryHint,
@@ -218,12 +252,16 @@ func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath s
 	// 2) Determine category (Movies vs Shows)
 	cat := normalizeCategory(req.CategoryHint)
 	if cat == "" {
-		// Prefer the input item name, but fall back to the main file name if needed.
-		nameForCategory := filepath.Base(pl.InputPath)
-		if !reSeasonEpisode.MatchString(nameForCategory) {
-			nameForCategory = pl.MainBaseName
+		if hint.ok {
+			cat = CategoryShow
+		} else {
+			// Prefer the input item name, but fall back to the main file name if needed.
+			nameForCategory := filepath.Base(pl.InputPath)
+			if !reSeasonEpisode.MatchString(nameForCategory) {
+				nameForCategory = pl.MainBaseName
+			}
+			cat = determineCategoryFromName(nameForCategory)
 		}
-		cat = determineCategoryFromName(nameForCategory)
 	}
 	pl.Category = cat
 
@@ -231,8 +269,20 @@ func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath s
 	switch pl.Category {
 	case CategoryShow:
 		showName, showYear, season, episode, err := parseShowFromName(p.blacklist, filepath.Base(pl.InputPath), pl.MainBaseName)
+		if err != nil && hint.ok && hint.name != "" {
+			if s, e, ok := parseSeasonEpisode(pl.MainBaseName); ok {
+				showName = hint.name
+				showYear = hint.year
+				season = s
+				episode = e
+				err = nil
+			}
+		}
 		if err != nil {
 			return Plan{}, err
+		}
+		if showYear == "" && hint.ok && hint.year != "" {
+			showYear = hint.year
 		}
 		showFolder, resolvedYear, err := resolveShowFolder(p.cfg.ShowsDir, showName, showYear)
 		if err != nil {

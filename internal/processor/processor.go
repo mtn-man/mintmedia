@@ -102,7 +102,8 @@ func (p *processorImpl) Apply(ctx context.Context, plans []Plan) ([]Result, erro
 // - All other errors are returned to the caller.
 func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, error) {
 	plans, err := p.Plan(ctx, req)
-	if err != nil {
+	var partial *PartialPlanError
+	if err != nil && !errors.As(err, &partial) {
 		var noMediaErr *NoMainMediaFoundError
 		if errors.As(err, &noMediaErr) && noMediaErr.DepthHit {
 			appendHistory(p, ctx, fmt.Sprintf(
@@ -116,6 +117,15 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 				Handled: true,
 				Applied: false,
 				Reason:  ErrInputMissing.Error(),
+			}}, nil
+		}
+		var pse *ParseShowError
+		var pme *ParseMovieError
+		if errors.As(err, &pse) || errors.As(err, &pme) {
+			return []Result{{
+				Handled: true,
+				Applied: false,
+				Reason:  err.Error(),
 			}}, nil
 		}
 		if errors.Is(err, ErrNotMedia) || errors.Is(err, ErrNoMainMediaFound) || errors.Is(err, ErrAmbiguousShow) {
@@ -139,6 +149,18 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 		}
 		if res[i].Reason == "" {
 			res[i].Reason = "applied"
+		}
+	}
+
+	if partial != nil && len(partial.Issues) > 0 {
+		for _, issue := range partial.Issues {
+			reason := fmt.Sprintf("skipped: %s: %v", issue.Path, issue.Err)
+			res = append(res, Result{
+				Plan:    Plan{InputPath: issue.Path},
+				Handled: true,
+				Applied: false,
+				Reason:  reason,
+			})
 		}
 	}
 	return res, nil

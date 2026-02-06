@@ -4,6 +4,7 @@ package processor
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 // Category represents Mintmedia's two canonical library targets.
@@ -73,6 +74,41 @@ type Result struct {
 	// (e.g., quarantined non-media inputs, ignored unsupported items, etc.).
 	Handled bool
 	Reason  string
+}
+
+// PlanIssue captures a skipped path and the associated error.
+type PlanIssue struct {
+	Path string
+	Err  error
+}
+
+// PartialPlanError indicates that some items were skipped but planning succeeded for others.
+type PartialPlanError struct {
+	Issues []PlanIssue
+}
+
+func (e *PartialPlanError) Error() string {
+	return fmt.Sprintf("partial plan: %d item(s) skipped", len(e.Issues))
+}
+
+// ParseShowError indicates a failure to parse show info from names.
+type ParseShowError struct {
+	BaseName string
+	FileName string
+}
+
+func (e *ParseShowError) Error() string {
+	return fmt.Sprintf("failed to parse show info from %q or %q", e.BaseName, e.FileName)
+}
+
+// ParseMovieError indicates a failure to parse movie info from names.
+type ParseMovieError struct {
+	BaseName string
+	FileName string
+}
+
+func (e *ParseMovieError) Error() string {
+	return fmt.Sprintf("failed to parse movie info from %q or %q", e.BaseName, e.FileName)
 }
 
 // Processor is the core media decision+execution engine.

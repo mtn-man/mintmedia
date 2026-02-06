@@ -44,7 +44,44 @@ func parseShowFromName(blacklist []*regexp.Regexp, baseName string, fileName str
 	if sn, sy, s, e, ok := parseShowOnce(blacklist, fileName); ok {
 		return sn, sy, s, e, nil
 	}
-	return "", "", 0, 0, fmt.Errorf("failed to parse show info from %q or %q", baseName, fileName)
+	return "", "", 0, 0, &ParseShowError{BaseName: baseName, FileName: fileName}
+}
+
+// deriveShowHintFromFolder attempts to extract a show name/year from a season-pack style folder.
+// It only returns ok=true when a season range marker is present.
+func deriveShowHintFromFolder(blacklist []*regexp.Regexp, folderName string) (showName, showYear string, ok bool) {
+	raw := strings.TrimSpace(folderName)
+	if raw == "" {
+		return "", "", false
+	}
+
+	if !reSeasonRange.MatchString(raw) && !reSeasonWordRange.MatchString(raw) {
+		return "", "", false
+	}
+
+	// Remove season range markers before cleaning.
+	raw = reSeasonWordRange.ReplaceAllString(raw, " ")
+	raw = reSeasonRange.ReplaceAllString(raw, " ")
+
+	raw = cleanReleaseName(blacklist, raw)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", "", false
+	}
+
+	// Extract and remove year token if present.
+	if y := findYear(raw); y != "" {
+		showYear = y
+		raw = removeYearToken(raw, y)
+		raw = strings.TrimSpace(raw)
+	}
+
+	if raw == "" {
+		return "", "", false
+	}
+
+	showName = titleCaseSimple(raw)
+	return showName, showYear, true
 }
 
 func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear string, season, episode int, ok bool) {
@@ -59,7 +96,8 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 
 	season = atoiSafe(seasonStr)
 	episode = atoiSafe(episodeStr)
-	if season <= 0 || episode <= 0 {
+	// Allow episode 00 (specials), but keep season > 0.
+	if season <= 0 || episode < 0 {
 		return "", "", 0, 0, false
 	}
 
@@ -87,6 +125,25 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 	return showName, showYear, season, episode, true
 }
 
+func parseSeasonEpisode(raw string) (season, episode int, ok bool) {
+	// idxs layout: [fullStart, fullEnd, g1Start, g1End, g2Start, g2End]
+	idxs := reSeasonEpisode.FindStringSubmatchIndex(raw)
+	if idxs == nil || len(idxs) != 6 {
+		return 0, 0, false
+	}
+
+	seasonStr := raw[idxs[2]:idxs[3]]
+	episodeStr := raw[idxs[4]:idxs[5]]
+
+	season = atoiSafe(seasonStr)
+	episode = atoiSafe(episodeStr)
+	if season <= 0 || episode < 0 {
+		return 0, 0, false
+	}
+
+	return season, episode, true
+}
+
 func parseMovieFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (title string, year string, err error) {
 	if t, y, ok := parseMovieOnce(blacklist, baseName); ok {
 		return t, y, nil
@@ -94,7 +151,7 @@ func parseMovieFromName(blacklist []*regexp.Regexp, baseName string, fileName st
 	if t, y, ok := parseMovieOnce(blacklist, fileName); ok {
 		return t, y, nil
 	}
-	return "", "", fmt.Errorf("failed to parse movie info from %q or %q", baseName, fileName)
+	return "", "", &ParseMovieError{BaseName: baseName, FileName: fileName}
 }
 
 func parseMovieOnce(blacklist []*regexp.Regexp, raw string) (title string, year string, ok bool) {

@@ -2,6 +2,7 @@ package processor
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,6 +18,36 @@ func TestPlan_TableDriven(t *testing.T) {
 	}
 
 	cases := []tc{
+		{
+			name: "ShowFile_Sherlock_S04E00_AllowsEpisodeZero",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Sherlock.S04E00.The.Abominable.Bride.2016.1080p.x265.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Sherlock" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Sherlock")
+				}
+				if pl.Season != 4 || pl.Episode != 0 {
+					t.Fatalf("Season/Episode = %d/%d, want 4/0", pl.Season, pl.Episode)
+				}
+				if pl.DestRadix != "Sherlock - S04E00" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Sherlock - S04E00")
+				}
+			},
+		},
 		{
 			name: "ShowFile_StrangerThings_S05E08_WithSubtitle",
 			setup: func(t *testing.T, p *processorImpl) string {
@@ -77,6 +108,179 @@ func TestPlan_TableDriven(t *testing.T) {
 				}
 				if !found {
 					t.Fatalf("expected associated move for %q", sub)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_SeasonPack_ProcessesSubfolders",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Sherlock.Season.1-4.S01-S04.1080p.10bit.BluRay.5.1.x265.HEVC-MZABI")
+				season01 := filepath.Join(root, "Season 01")
+				season04 := filepath.Join(root, "Season 04")
+				writeFile(t, filepath.Join(season01, "Sherlock.S01E01.1080p.x265.mkv"), "dummy")
+				writeFile(t, filepath.Join(season04, "Sherlock.S04E00.1080p.x265.mkv"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 2 {
+					t.Fatalf("expected 2 plans, got %d", len(plans))
+				}
+
+				want := map[string]struct{}{
+					filepath.Join(inputPath, "Season 01", "Sherlock.S01E01.1080p.x265.mkv"): {},
+					filepath.Join(inputPath, "Season 04", "Sherlock.S04E00.1080p.x265.mkv"): {},
+				}
+
+				for _, pl := range plans {
+					if pl.Category != CategoryShow {
+						t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+					}
+					if pl.ShowName != "Sherlock" {
+						t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Sherlock")
+					}
+					if _, ok := want[pl.MainSourcePath]; !ok {
+						t.Fatalf("unexpected plan for %q", pl.MainSourcePath)
+					}
+				}
+			},
+		},
+		{
+			name: "ShowFolder_SeasonPack_HintFallback_NoShowInFilename",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Sherlock.Season.1-4.S01-S04")
+				writeFile(t, filepath.Join(root, "S01E01.mkv"), "dummy")
+				writeFile(t, filepath.Join(root, "S01E02.mkv"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 2 {
+					t.Fatalf("expected 2 plans, got %d", len(plans))
+				}
+				for _, pl := range plans {
+					if pl.Category != CategoryShow {
+						t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+					}
+					if pl.ShowName != "Sherlock" {
+						t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Sherlock")
+					}
+					if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "Sherlock")) {
+						t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+					}
+				}
+			},
+		},
+		{
+			name: "ShowFolder_SeasonPack_PartialSkip_UnparseableFile",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Sherlock.Season.1-4.S01-S04")
+				writeFile(t, filepath.Join(root, "S01E01.mkv"), "dummy")
+				writeFile(t, filepath.Join(root, "Episode01.mkv"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				var partial *PartialPlanError
+				if !errors.As(err, &partial) {
+					t.Fatalf("expected PartialPlanError, got %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+				if plans[0].DeleteEmptyInputDir {
+					t.Fatalf("DeleteEmptyInputDir = true, want false")
+				}
+				if partial == nil || len(partial.Issues) != 1 {
+					t.Fatalf("expected 1 issue, got %v", partial)
+				}
+				wantPath := filepath.Join(inputPath, "Episode01.mkv")
+				if partial.Issues[0].Path != wantPath {
+					t.Fatalf("issue path = %q, want %q", partial.Issues[0].Path, wantPath)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_SeasonPack_HintYear_UsedWhenFilenameHasNoYear",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Sherlock.2010.Season.1-4.S01-S04")
+				writeFile(t, filepath.Join(root, "S01E01.mkv"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+				if plans[0].ShowYear != "2010" {
+					t.Fatalf("ShowYear = %q, want %q", plans[0].ShowYear, "2010")
+				}
+			},
+		},
+		{
+			name: "ShowFolder_SeasonPack_FilenameYear_WinsOverHintYear",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Sherlock.2010.Season.1-4.S01-S04")
+				writeFile(t, filepath.Join(root, "Sherlock.2017.S01E01.mkv"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+				if plans[0].ShowYear != "2017" {
+					t.Fatalf("ShowYear = %q, want %q", plans[0].ShowYear, "2017")
+				}
+			},
+		},
+		{
+			name: "ShowFolder_SeasonPack_ConflictingYear_FilenameWins",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Sherlock.2010.Season.1-4.S01-S04")
+				writeFile(t, filepath.Join(root, "Sherlock.2014.S01E02.mkv"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+				if plans[0].ShowYear != "2014" {
+					t.Fatalf("ShowYear = %q, want %q", plans[0].ShowYear, "2014")
 				}
 			},
 		},
