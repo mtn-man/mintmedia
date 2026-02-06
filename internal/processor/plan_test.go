@@ -375,8 +375,8 @@ func TestPlan_TableDriven(t *testing.T) {
 				if pl.Season != 2 || pl.Episode != 4 {
 					t.Fatalf("Season/Episode = %d/%d, want 2/4", pl.Season, pl.Episode)
 				}
-				if pl.DestRadix != "Fallout - S02E04" {
-					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Fallout - S02E04")
+				if pl.DestRadix != "Fallout (2024) - S02E04" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Fallout (2024) - S02E04")
 				}
 			},
 		},
@@ -405,6 +405,68 @@ func TestPlan_TableDriven(t *testing.T) {
 					t.Fatalf("ShowYear = %q, want empty", pl.ShowYear)
 				}
 				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "Fallout")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			name: "ShowFile_TheBear_YearInParens_PrefersNoYearFolder",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "The Bear"))
+
+				name := "The Bear (2022) - S02E01 - Beef (1080p HULU WEB-DL x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.ShowName != "The Bear" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "The Bear")
+				}
+				if pl.ShowYear != "" {
+					t.Fatalf("ShowYear = %q, want empty", pl.ShowYear)
+				}
+				if pl.DestRadix != "The Bear - S02E01" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Bear - S02E01")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Bear")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			name: "ShowFile_TheBear_YearInParens_CreatesYearFolder",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Bear (2022) - S02E01 - Beef (1080p HULU WEB-DL x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.ShowName != "The Bear" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "The Bear")
+				}
+				if pl.ShowYear != "2022" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2022")
+				}
+				if pl.DestRadix != "The Bear (2022) - S02E01" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Bear (2022) - S02E01")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Bear (2022)")) {
 					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
 				}
 			},
@@ -680,7 +742,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				if pl.Season != 1 || pl.Episode != 1 {
 					t.Fatalf("Season/Episode = %d/%d, want 1/1", pl.Season, pl.Episode)
 				}
-				wantRadix := "Robin Hood - S01E01"
+				wantRadix := "Robin Hood (2025) - S01E01"
 				if pl.DestRadix != wantRadix {
 					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, wantRadix)
 				}

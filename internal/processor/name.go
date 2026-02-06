@@ -318,6 +318,15 @@ func removeYearToken(s string, year string) string {
 		if p == year {
 			continue
 		}
+		trimmed := strings.TrimFunc(p, func(r rune) bool {
+			isAlphaNum := (r >= '0' && r <= '9') ||
+				(r >= 'A' && r <= 'Z') ||
+				(r >= 'a' && r <= 'z')
+			return !isAlphaNum
+		})
+		if trimmed == year {
+			continue
+		}
 		out = append(out, p)
 	}
 	return strings.Join(out, " ")
