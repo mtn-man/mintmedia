@@ -269,6 +269,7 @@ func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath s
 	switch pl.Category {
 	case CategoryShow:
 		showName, showYear, season, episode, err := parseShowFromName(p.blacklist, filepath.Base(pl.InputPath), pl.MainBaseName)
+		inputHadYear := err == nil && showYear != ""
 		if err != nil && hint.ok && hint.name != "" {
 			if s, e, ok := parseSeasonEpisode(pl.MainBaseName); ok {
 				showName = hint.name
@@ -296,7 +297,7 @@ func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath s
 
 		seasonFolder := fmt.Sprintf("Season %02d", season)
 		displayShowName := showName
-		if showYear != "" && resolvedYear != "" {
+		if inputHadYear && resolvedYear != "" {
 			displayShowName = fmt.Sprintf("%s (%s)", showName, resolvedYear)
 		}
 		epFolder := fmt.Sprintf("%s S%02dE%s", displayShowName, season, padEpisode(episode))
