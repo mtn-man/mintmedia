@@ -188,7 +188,7 @@ func main() {
 	}
 
 	if processDropMode {
-		errCount := processDropFolder(ctx, proc, resolved.DropFolderAbs, defaultSoundDone)
+		errCount := processDropFolder(ctx, proc, resolved.DropFolderAbs, defaultSoundDone, *verbose)
 		if errCount > 0 {
 			os.Exit(exitError)
 		}
@@ -341,7 +341,9 @@ type dropCandidate struct {
 	modTime time.Time
 }
 
-func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot string, soundDone string) int {
+func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot string, soundDone string, verbose bool) int {
+	start := time.Now()
+
 	entries, err := os.ReadDir(dropRoot)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -378,19 +380,36 @@ func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot s
 		return candidates[i].modTime.Before(candidates[j].modTime)
 	})
 
+	PrintProcessDropCandidates(len(candidates), verbose)
+
+	summary := ProcessDropSummary{
+		Candidates: len(candidates),
+	}
+
 	for _, item := range candidates {
 		res, err := proc.Process(ctx, processor.Request{InputPath: item.path})
 		if err != nil {
 			PrintProcessDropItemError(item.path, err)
 			errCount++
 		}
-		PrintProcessDropResults(res)
+		PrintProcessDropResults(res, verbose)
+		for _, r := range res {
+			summary.Results++
+			if r.Applied {
+				summary.Applied++
+				continue
+			}
+			summary.Skipped++
+		}
 		if anyApplied(res) && strings.TrimSpace(soundDone) != "" {
 			_ = notify.PlaySound(context.WithoutCancel(ctx), soundDone)
 		}
 	}
 
-	PrintProcessDropSummary(errCount)
+	summary.Errors = errCount
+	summary.Elapsed = time.Since(start)
+
+	PrintProcessDropSummary(summary)
 
 	return errCount
 }

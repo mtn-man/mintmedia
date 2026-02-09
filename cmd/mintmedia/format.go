@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 )
@@ -95,6 +98,14 @@ func PrintProcessDropStartup(configPath string, verbose bool) {
 	fmt.Printf("Config file: %s\n\n", configPath)
 }
 
+// PrintProcessDropCandidates writes process-drop candidate discovery output.
+func PrintProcessDropCandidates(count int, verbose bool) {
+	if verbose {
+		return
+	}
+	fmt.Printf("Discovered %d candidate(s).\n\n", count)
+}
+
 // PrintProcessDropStatError writes a process-drop stat error to stderr.
 func PrintProcessDropStatError(path string, err error) {
 	fmt.Fprintf(os.Stderr, "process-drop: stat %s: %v\n", path, err)
@@ -106,17 +117,75 @@ func PrintProcessDropItemError(path string, err error) {
 }
 
 // PrintProcessDropResults writes process-drop results to stdout.
-func PrintProcessDropResults(results []processor.Result) {
+func PrintProcessDropResults(results []processor.Result, verbose bool) {
 	if len(results) == 0 {
+		return
+	}
+	if !verbose {
+		for _, res := range results {
+			fmt.Println(processDropCompactLine(res))
+		}
 		return
 	}
 	PrintResults(results)
 }
 
-// PrintProcessDropSummary writes process-drop completion summary to stderr when needed.
-func PrintProcessDropSummary(errCount int) {
-	if errCount <= 0 {
-		return
+// ProcessDropSummary captures final process-drop run stats for compact rendering.
+type ProcessDropSummary struct {
+	Candidates int
+	Results    int
+	Applied    int
+	Skipped    int
+	Errors     int
+	Elapsed    time.Duration
+}
+
+// PrintProcessDropSummary writes process-drop completion summary.
+func PrintProcessDropSummary(s ProcessDropSummary) {
+	fmt.Println()
+	fmt.Println(processDropSummaryLine(s))
+	if s.Errors > 0 {
+		fmt.Fprintf(os.Stderr, "process-drop completed with %d error(s).\n", s.Errors)
 	}
-	fmt.Fprintf(os.Stderr, "process-drop completed with %d error(s).\n", errCount)
+}
+
+func processDropCompactLine(res processor.Result) string {
+	if res.Applied {
+		dest := strings.TrimSpace(res.Plan.DestMainPath)
+		name := filepath.Base(dest)
+		if name == "." || name == string(os.PathSeparator) || strings.TrimSpace(name) == "" {
+			name = "(unknown)"
+		}
+		if dest == "" {
+			return fmt.Sprintf("OK   %s", name)
+		}
+		return fmt.Sprintf("OK   %s -> %s", name, dest)
+	}
+
+	ref := strings.TrimSpace(res.Plan.InputPath)
+	if ref == "" {
+		ref = strings.TrimSpace(res.Plan.MainSourcePath)
+	}
+	name := filepath.Base(ref)
+	if name == "." || name == string(os.PathSeparator) || strings.TrimSpace(name) == "" {
+		name = "(unknown)"
+	}
+	reason := strings.TrimSpace(res.Reason)
+	if reason == "" {
+		reason = "not applied"
+	}
+	return fmt.Sprintf("SKIP %s (%s)", name, reason)
+}
+
+func processDropSummaryLine(s ProcessDropSummary) string {
+	elapsed := s.Elapsed.Round(time.Second)
+	return fmt.Sprintf(
+		"SUMMARY candidates=%d results=%d applied=%d skipped=%d errors=%d elapsed=%s",
+		s.Candidates,
+		s.Results,
+		s.Applied,
+		s.Skipped,
+		s.Errors,
+		elapsed,
+	)
 }
