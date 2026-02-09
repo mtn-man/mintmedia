@@ -13,7 +13,11 @@ func TestTerminalReporter_Done_PrintsByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.Pipe: %v", err)
 	}
-	defer r.Close()
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Errorf("close reader pipe: %v", err)
+		}
+	})
 
 	reporter := NewTerminalReporter(w, ReportOptions{})
 	reporter.Done(Snapshot{
@@ -37,7 +41,11 @@ func TestTerminalReporter_Done_CanBeSuppressed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.Pipe: %v", err)
 	}
-	defer r.Close()
+	t.Cleanup(func() {
+		if err := r.Close(); err != nil {
+			t.Errorf("close reader pipe: %v", err)
+		}
+	})
 
 	reporter := NewTerminalReporter(w, ReportOptions{
 		SuppressDoneLine: true,
