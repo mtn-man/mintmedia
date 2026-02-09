@@ -53,6 +53,10 @@ type ReportOptions struct {
 	// EnableBar controls whether a progress bar may be rendered when conditions are met.
 	EnableBar bool
 
+	// SuppressDoneLine suppresses final "COPY DONE" renderer output while still
+	// allowing progress updates and in-place line cleanup.
+	SuppressDoneLine bool
+
 	// BarMinBytes is the minimum total size required to show a bar.
 	// Typical use: avoid bar for small/local copies.
 	BarMinBytes int64
@@ -141,6 +145,10 @@ func (r *terminalReporter) Done(s Snapshot) {
 	// End any in-place line cleanly.
 	if r.inPlace {
 		_, _ = fmt.Fprint(r.out, "\r\033[2K")
+	}
+
+	if r.opts.SuppressDoneLine {
+		return
 	}
 
 	// Print completion line.

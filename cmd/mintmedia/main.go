@@ -141,7 +141,9 @@ func main() {
 		os.Exit(exitError)
 	}
 
-	proc, err := newGoProcessor(resolved, hist)
+	suppressReporterDone := processDropMode && !*verbose
+
+	proc, err := newGoProcessor(resolved, hist, suppressReporterDone)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(exitError)
@@ -272,7 +274,7 @@ func main() {
 
 // --- Go-native processor wiring --------------------------------------------
 
-func newGoProcessor(res *config.Resolved, hist state.HistoryWriter) (processor.Processor, error) {
+func newGoProcessor(res *config.Resolved, hist state.HistoryWriter, suppressReporterDone bool) (processor.Processor, error) {
 	pcfg := processor.Config{
 		DropFolder:  res.DropFolderAbs,
 		MoviesDir:   res.DestDirMoviesAbs,
@@ -294,8 +296,9 @@ func newGoProcessor(res *config.Resolved, hist state.HistoryWriter) (processor.P
 
 		// Structured reporter enables the progress bar for large/slow copies.
 		Reporter: transfer.NewTerminalReporter(os.Stdout, transfer.ReportOptions{
-			EnableBar: true,
-			EnableETA: true,
+			EnableBar:        true,
+			EnableETA:        true,
+			SuppressDoneLine: suppressReporterDone,
 		}),
 		ReportEvery: defaultReportEvery,
 
