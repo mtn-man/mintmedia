@@ -218,8 +218,9 @@ func titleCaseSimple(s string) string {
 	caser := cases.Title(language.English)
 
 	// Common acronyms worth preserving even if input arrives in lowercase.
+	// "US" is handled separately so we can avoid forcing uppercase in the middle
+	// of regular titles like "All of Us Strangers".
 	acronyms := map[string]struct{}{
-		"US":  {},
 		"UK":  {},
 		"UAE": {},
 		"EU":  {},
@@ -234,6 +235,15 @@ func titleCaseSimple(s string) string {
 		if len(up) >= 2 && reRomanNumeral.MatchString(up) {
 			parts[i] = up
 			continue
+		}
+
+		// Preserve "US" only if explicitly uppercase in source, or if it appears
+		// as a trailing suffix token (e.g. "Hells Kitchen us" => "Hells Kitchen US").
+		if up == "US" {
+			if tok == up || i == len(parts)-1 {
+				parts[i] = up
+				continue
+			}
 		}
 
 		// Preserve allowlisted acronyms regardless of case.

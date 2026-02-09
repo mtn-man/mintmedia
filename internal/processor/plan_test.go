@@ -795,6 +795,33 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "MovieFile_AllOfUsStrangers_UsNotForcedUppercase",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "All.Of.Us.Strangers.2023.1080p.WebRip.X264.Will1869.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryMovie {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryMovie)
+				}
+				if pl.MovieTitle != "All of Us Strangers (2023)" {
+					t.Fatalf("MovieTitle = %q, want %q", pl.MovieTitle, "All of Us Strangers (2023)")
+				}
+				if !strings.HasSuffix(pl.DestMainPath, "All of Us Strangers (2023).mkv") {
+					t.Fatalf("DestMainPath = %q, want suffix %q", pl.DestMainPath, "All of Us Strangers (2023).mkv")
+				}
+			},
+		},
+		{
 			name: "ShowFile_AssociatedNFO_NoLangTag",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
@@ -852,6 +879,30 @@ func TestPlan_TableDriven(t *testing.T) {
 				t.Helper()
 
 				name := "Hells.Kitchen.US.S24E14.1080p.HEVC.x265.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Hells Kitchen US" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Hells Kitchen US")
+				}
+			},
+		},
+		{
+			name: "ShowFile_AcronymUS_PreservedUppercase_WhenSuffixLowercase",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Hells.Kitchen.us.S24E14.1080p.HEVC.x265.mkv"
 				src := filepath.Join(p.cfg.DropFolder, name)
 				writeFile(t, src, "dummy")
 				return src
