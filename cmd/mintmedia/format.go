@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 )
@@ -83,4 +84,39 @@ func printResultBody(res processor.Result) {
 	if res.Applied {
 		fmt.Printf("Dest:    %s\n", res.Plan.DestMainPath)
 	}
+}
+
+// PrintProcessDropStartup writes process-drop startup output.
+func PrintProcessDropStartup(configPath string, verbose bool) {
+	if verbose {
+		return
+	}
+	fmt.Println("Mintmedia starting (process-drop)...")
+	fmt.Printf("Config file: %s\n\n", configPath)
+}
+
+// PrintProcessDropStatError writes a process-drop stat error to stderr.
+func PrintProcessDropStatError(path string, err error) {
+	fmt.Fprintf(os.Stderr, "process-drop: stat %s: %v\n", path, err)
+}
+
+// PrintProcessDropItemError writes a process-drop item error to stderr.
+func PrintProcessDropItemError(path string, err error) {
+	fmt.Fprintf(os.Stderr, "process-drop: %s: %v\n", path, err)
+}
+
+// PrintProcessDropResults writes process-drop results to stdout.
+func PrintProcessDropResults(results []processor.Result) {
+	if len(results) == 0 {
+		return
+	}
+	PrintResults(results)
+}
+
+// PrintProcessDropSummary writes process-drop completion summary to stderr when needed.
+func PrintProcessDropSummary(errCount int) {
+	if errCount <= 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "process-drop completed with %d error(s).\n", errCount)
 }

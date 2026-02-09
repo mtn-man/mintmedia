@@ -122,9 +122,8 @@ func main() {
 	if *verbose {
 		printConfigSummary(cfg, resolved)
 	}
-	if processDropMode && !*verbose {
-		fmt.Println("Mintmedia starting (process-drop)...")
-		fmt.Printf("Config file: %s\n\n", resolved.ConfigPathAbs)
+	if processDropMode {
+		PrintProcessDropStartup(resolved.ConfigPathAbs, *verbose)
 	}
 
 	if !cfg.Features.EnableProcessing {
@@ -361,7 +360,7 @@ func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot s
 
 		info, err := ent.Info()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "process-drop: stat %s: %v\n", path, err)
+			PrintProcessDropStatError(path, err)
 			errCount++
 			continue
 		}
@@ -382,20 +381,16 @@ func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot s
 	for _, item := range candidates {
 		res, err := proc.Process(ctx, processor.Request{InputPath: item.path})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "process-drop: %s: %v\n", item.path, err)
+			PrintProcessDropItemError(item.path, err)
 			errCount++
 		}
-		if len(res) > 0 {
-			PrintResults(res)
-		}
+		PrintProcessDropResults(res)
 		if anyApplied(res) && strings.TrimSpace(soundDone) != "" {
 			_ = notify.PlaySound(context.WithoutCancel(ctx), soundDone)
 		}
 	}
 
-	if errCount > 0 {
-		fmt.Fprintf(os.Stderr, "process-drop completed with %d error(s).\n", errCount)
-	}
+	PrintProcessDropSummary(errCount)
 
 	return errCount
 }
