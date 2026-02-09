@@ -20,6 +20,12 @@ var (
 	// Matches worded season ranges, e.g. "Season 1-4", "Seasons.01-04".
 	reSeasonWordRange = regexp.MustCompile(`(?i)\bSeasons?\s*[\s._-]*(\d{1,2})\s*-\s*(\d{1,2})\b`)
 
+	// Matches single worded season tokens, e.g. "Season 1", "Seasons.01".
+	reSeasonWord = regexp.MustCompile(`(?i)\bSeasons?\s*[\s._-]*(\d{1,2})\b`)
+
+	// Matches worded episode tokens, e.g. "Episode 1", "Episodes.010".
+	reEpisodeWord = regexp.MustCompile(`(?i)\bEpisodes?\s*[\s._-]*(\d{1,3})\b`)
+
 	// Removes bracketed tags like "[EZTVx.to]" or "[YTS]".
 	reBracketedTag = regexp.MustCompile(`\[[^\]]*\]`)
 

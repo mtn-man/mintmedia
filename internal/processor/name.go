@@ -44,6 +44,9 @@ func parseShowFromName(blacklist []*regexp.Regexp, baseName string, fileName str
 	if sn, sy, s, e, ok := parseShowOnce(blacklist, fileName); ok {
 		return sn, sy, s, e, nil
 	}
+	if sn, sy, s, e, ok := parseShowCrossSeasonEpisode(blacklist, baseName, fileName); ok {
+		return sn, sy, s, e, nil
+	}
 	return "", "", 0, 0, &ParseShowError{BaseName: baseName, FileName: fileName}
 }
 
@@ -85,24 +88,27 @@ func deriveShowHintFromFolder(blacklist []*regexp.Regexp, folderName string) (sh
 }
 
 func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear string, season, episode int, ok bool) {
-	// idxs layout: [fullStart, fullEnd, g1Start, g1End, g2Start, g2End]
-	idxs := reSeasonEpisode.FindStringSubmatchIndex(raw)
-	if idxs == nil || len(idxs) != 6 {
+	season, seasonIdx, seasonOK := parseSeasonComponent(raw)
+	episode, episodeIdx, episodeOK := parseEpisodeComponent(raw)
+	if !seasonOK || !episodeOK {
 		return "", "", 0, 0, false
 	}
 
-	seasonStr := raw[idxs[2]:idxs[3]]
-	episodeStr := raw[idxs[4]:idxs[5]]
-
-	season = atoiSafe(seasonStr)
-	episode = atoiSafe(episodeStr)
 	// Allow episode 00 (specials), but keep season > 0.
 	if season <= 0 || episode < 0 {
 		return "", "", 0, 0, false
 	}
 
-	// Everything before the SxxEyy token
-	titlePart := raw[:idxs[0]]
+	titleCut := seasonIdx
+	if episodeIdx < titleCut {
+		titleCut = episodeIdx
+	}
+	if titleCut <= 0 || titleCut > len(raw) {
+		return "", "", 0, 0, false
+	}
+
+	// Everything before the season/episode marker.
+	titlePart := raw[:titleCut]
 	titlePart = cleanReleaseName(blacklist, titlePart)
 	titlePart = strings.TrimSpace(titlePart)
 	if titlePart == "" {
@@ -126,22 +132,109 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 }
 
 func parseSeasonEpisode(raw string) (season, episode int, ok bool) {
-	// idxs layout: [fullStart, fullEnd, g1Start, g1End, g2Start, g2End]
-	idxs := reSeasonEpisode.FindStringSubmatchIndex(raw)
-	if idxs == nil || len(idxs) != 6 {
+	season, _, seasonOK := parseSeasonComponent(raw)
+	episode, _, episodeOK := parseEpisodeComponent(raw)
+	if !seasonOK || !episodeOK {
 		return 0, 0, false
 	}
 
-	seasonStr := raw[idxs[2]:idxs[3]]
-	episodeStr := raw[idxs[4]:idxs[5]]
-
-	season = atoiSafe(seasonStr)
-	episode = atoiSafe(episodeStr)
 	if season <= 0 || episode < 0 {
 		return 0, 0, false
 	}
 
 	return season, episode, true
+}
+
+func parseShowCrossSeasonEpisode(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear string, season, episode int, ok bool) {
+	episode, episodeIdx, episodeOK := parseEpisodeComponent(fileName)
+	if !episodeOK {
+		return "", "", 0, 0, false
+	}
+
+	season, _, seasonOK := parseSeasonComponent(baseName)
+	if !seasonOK {
+		season, _, seasonOK = parseSeasonComponent(fileName)
+	}
+	if !seasonOK {
+		return "", "", 0, 0, false
+	}
+
+	if episodeIdx <= 0 || episodeIdx > len(fileName) {
+		return "", "", 0, 0, false
+	}
+
+	titlePart := fileName[:episodeIdx]
+	titlePart = cleanReleaseName(blacklist, titlePart)
+	titlePart = strings.TrimSpace(titlePart)
+	if titlePart == "" {
+		return "", "", 0, 0, false
+	}
+
+	if y := findYear(titlePart); y != "" {
+		showYear = y
+		titlePart = removeYearToken(titlePart, y)
+		titlePart = strings.TrimSpace(titlePart)
+	}
+	if titlePart == "" {
+		return "", "", 0, 0, false
+	}
+
+	showName = titleCaseSimple(titlePart)
+	if showName == "" {
+		return "", "", 0, 0, false
+	}
+
+	return showName, showYear, season, episode, true
+}
+
+func parseSeasonComponent(raw string) (season int, idx int, ok bool) {
+	if idxs := reSeasonEpisode.FindStringSubmatchIndex(raw); len(idxs) == 6 {
+		season = atoiSafe(raw[idxs[2]:idxs[3]])
+		if season > 0 {
+			return season, idxs[0], true
+		}
+	}
+
+	if idxs := reSeasonWord.FindStringSubmatchIndex(raw); len(idxs) == 4 {
+		season = atoiSafe(raw[idxs[2]:idxs[3]])
+		if season > 0 {
+			return season, idxs[0], true
+		}
+	}
+
+	if idxs := reSeasonRange.FindStringSubmatchIndex(raw); len(idxs) == 6 {
+		season = atoiSafe(raw[idxs[2]:idxs[3]])
+		if season > 0 {
+			return season, idxs[0], true
+		}
+	}
+
+	if idxs := reSeasonWordRange.FindStringSubmatchIndex(raw); len(idxs) == 6 {
+		season = atoiSafe(raw[idxs[2]:idxs[3]])
+		if season > 0 {
+			return season, idxs[0], true
+		}
+	}
+
+	return 0, 0, false
+}
+
+func parseEpisodeComponent(raw string) (episode int, idx int, ok bool) {
+	if idxs := reSeasonEpisode.FindStringSubmatchIndex(raw); len(idxs) == 6 {
+		episode = atoiSafe(raw[idxs[4]:idxs[5]])
+		if episode >= 0 {
+			return episode, idxs[0], true
+		}
+	}
+
+	if idxs := reEpisodeWord.FindStringSubmatchIndex(raw); len(idxs) == 4 {
+		episode = atoiSafe(raw[idxs[2]:idxs[3]])
+		if episode >= 0 {
+			return episode, idxs[0], true
+		}
+	}
+
+	return 0, 0, false
 }
 
 func parseMovieFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (title string, year string, err error) {

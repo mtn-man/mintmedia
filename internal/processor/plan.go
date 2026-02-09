@@ -157,7 +157,35 @@ func normalizeCategory(c Category) Category {
 }
 
 func determineCategoryFromName(name string) Category {
-	if reSeasonEpisode.MatchString(name) {
+	if hasShowSeasonSignal(name) && hasShowEpisodeSignal(name) {
+		return CategoryShow
+	}
+	return CategoryMovie
+}
+
+func hasShowSeasonSignal(name string) bool {
+	return reSeasonEpisode.MatchString(name) ||
+		reSeasonRange.MatchString(name) ||
+		reSeasonWordRange.MatchString(name) ||
+		reSeasonWord.MatchString(name)
+}
+
+func hasShowEpisodeSignal(name string) bool {
+	return reSeasonEpisode.MatchString(name) ||
+		reEpisodeWord.MatchString(name)
+}
+
+func determineCategoryFromNames(inputName, mainName string) Category {
+	if determineCategoryFromName(inputName) == CategoryShow {
+		return CategoryShow
+	}
+	if determineCategoryFromName(mainName) == CategoryShow {
+		return CategoryShow
+	}
+	if hasShowSeasonSignal(inputName) && hasShowEpisodeSignal(mainName) {
+		return CategoryShow
+	}
+	if hasShowSeasonSignal(mainName) && hasShowEpisodeSignal(inputName) {
 		return CategoryShow
 	}
 	return CategoryMovie
@@ -255,12 +283,7 @@ func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath s
 		if hint.ok {
 			cat = CategoryShow
 		} else {
-			// Prefer the input item name, but fall back to the main file name if needed.
-			nameForCategory := filepath.Base(pl.InputPath)
-			if !reSeasonEpisode.MatchString(nameForCategory) {
-				nameForCategory = pl.MainBaseName
-			}
-			cat = determineCategoryFromName(nameForCategory)
+			cat = determineCategoryFromNames(filepath.Base(pl.InputPath), pl.MainBaseName)
 		}
 	}
 	pl.Category = cat

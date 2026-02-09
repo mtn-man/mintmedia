@@ -184,6 +184,47 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowFolder_SeasonWordWithEpisodeWord_CategorizesAndParsesAsShow",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(
+					p.cfg.DropFolder,
+					"Planet Earth II (2016) - Season 1 - (1080p DS4K BluRay x265 10-bit HDR AAC 5.1) [WeSLeY]",
+				)
+				mainName := "Planet Earth II (2016) - Episode 1 - Islands (1080p DS4K BluRay x265 10-bit HDR AAC 5.1) [WeSLeY].mkv"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+
+				pl := plans[0]
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Planet Earth II" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Planet Earth II")
+				}
+				if pl.ShowYear != "2016" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2016")
+				}
+				if pl.Season != 1 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 1/1", pl.Season, pl.Episode)
+				}
+				if pl.DestRadix != "Planet Earth II (2016) - S01E01" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Planet Earth II (2016) - S01E01")
+				}
+			},
+		},
+		{
 			name: "ShowFolder_SeasonPack_PartialSkip_UnparseableFile",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
@@ -764,6 +805,30 @@ func TestPlan_TableDriven(t *testing.T) {
 				}
 				if !strings.HasSuffix(pl.DestMainPath, "Movie Title (2024).mkv") {
 					t.Fatalf("DestMainPath = %q, want suffix %q", pl.DestMainPath, "Movie Title (2024).mkv")
+				}
+			},
+		},
+		{
+			name: "MovieFile_EpisodeWordOnly_RemainsMovie",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Star.Wars.Episode.IV.1977.1080p.BluRay.x265.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryMovie {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryMovie)
+				}
+				if pl.MovieTitle != "Star Wars Episode IV (1977)" {
+					t.Fatalf("MovieTitle = %q, want %q", pl.MovieTitle, "Star Wars Episode IV (1977)")
 				}
 			},
 		},
