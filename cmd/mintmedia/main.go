@@ -36,7 +36,7 @@ const (
 	defaultCleanupCooldown = 2 * time.Minute
 
 	defaultReportEvery   = 250 * time.Millisecond
-	defaultProgressEvery = 4 * time.Second
+	defaultProgressEvery = 1 * time.Second
 )
 
 func main() {
