@@ -53,7 +53,8 @@ poll_interval = "250ms"
 main_media_extensions = [".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm"]
 
 # Files that should follow the main media (subtitles, metadata, etc.)
-associated_file_extensions = [".srt", ".sub", ".ass", ".idx", ".vtt", ".nfo"]
+# Keep this list strict by default; add ".nfo" if you intentionally want metadata from release groups.
+associated_file_extensions = [".srt", ".sub", ".ass", ".idx", ".vtt"]
 
 
 [naming]
@@ -71,7 +72,7 @@ media_tag_blacklist = [
   "web[- ]?dl",
   "webrip",
   "bluray",
-  "ELiTE",
+  "elite",
 ]
 
 
