@@ -323,10 +323,9 @@ func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath s
 		if inputHadYear && resolvedYear != "" {
 			displayShowName = fmt.Sprintf("%s (%s)", showName, resolvedYear)
 		}
-		epFolder := fmt.Sprintf("%s S%02dE%s", displayShowName, season, padEpisode(episode))
 		pl.DestRadix = fmt.Sprintf("%s - S%02dE%s", displayShowName, season, padEpisode(episode))
 
-		pl.DestDir = filepath.Join(p.cfg.ShowsDir, showFolder, seasonFolder, epFolder)
+		pl.DestDir = filepath.Join(p.cfg.ShowsDir, showFolder, seasonFolder)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
 	case CategoryMovie:

@@ -88,6 +88,9 @@ func TestPlan_TableDriven(t *testing.T) {
 				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "Stranger Things")) {
 					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
 				}
+				if !strings.HasSuffix(pl.DestDir, filepath.Join("Season 05")) {
+					t.Fatalf("DestDir = %q, want suffix %q", pl.DestDir, filepath.Join("Season 05"))
+				}
 				if !strings.HasSuffix(pl.DestMainPath, wantRadix+".mkv") {
 					t.Fatalf("DestMainPath = %q, want suffix %q", pl.DestMainPath, wantRadix+".mkv")
 				}
@@ -221,6 +224,9 @@ func TestPlan_TableDriven(t *testing.T) {
 				}
 				if pl.DestRadix != "Planet Earth II (2016) - S01E01" {
 					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Planet Earth II (2016) - S01E01")
+				}
+				if !strings.HasSuffix(pl.DestDir, filepath.Join("Season 01")) {
+					t.Fatalf("DestDir = %q, want suffix %q", pl.DestDir, filepath.Join("Season 01"))
 				}
 			},
 		},
@@ -778,6 +784,9 @@ func TestPlan_TableDriven(t *testing.T) {
 				}
 				if pl.DestRadix != "One Piece - S21E100" {
 					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "One Piece - S21E100")
+				}
+				if !strings.HasSuffix(pl.DestDir, filepath.Join("Season 21")) {
+					t.Fatalf("DestDir = %q, want suffix %q", pl.DestDir, filepath.Join("Season 21"))
 				}
 			},
 		},
