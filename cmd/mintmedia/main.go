@@ -238,6 +238,10 @@ func main() {
 			Auth:       cfg.Torrent.Auth,
 		}
 	}
+	autoCleanupCompletedTorrents := true
+	if cfg.Torrent.AutoCleanupCompletedTorrents != nil {
+		autoCleanupCompletedTorrents = *cfg.Torrent.AutoCleanupCompletedTorrents
+	}
 
 	d := &daemon.Daemon{
 		Watcher: w,
@@ -262,7 +266,7 @@ func main() {
 		MagnetTimeout: defaultMagnetTimeout,
 
 		VerboseMagnets:               false,
-		AutoCleanupCompletedTorrents: true,
+		AutoCleanupCompletedTorrents: autoCleanupCompletedTorrents,
 		CleanupCooldown:              defaultCleanupCooldown,
 	}
 

@@ -42,6 +42,7 @@ Other flags:
 - `system.defer_destination_checks` can delay processing until destinations are ready.
 - `watch.drop_settle_duration` controls how long a path must be quiet before it is processed.
 - `clipboard` and `torrent` sections enable optional Transmission automation.
+- `torrent.auto_cleanup_completed_torrents` toggles removing completed Transmission entries after successful APPLIED processing (default: enabled).
 
 ## Optional macOS Integrations
 - `caffeinate` is used to prevent idle sleep while the daemon runs.

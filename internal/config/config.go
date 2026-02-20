@@ -93,6 +93,9 @@ type Torrent struct {
 
 	// Optional. If set, passed as "--auth user:pass" (or your chosen scheme later).
 	Auth string `toml:"auth"`
+
+	// Optional. If unset, defaults to true to preserve current daemon behavior.
+	AutoCleanupCompletedTorrents *bool `toml:"auto_cleanup_completed_torrents"`
 }
 
 // Processing is still present for things like history_file and optional legacy worker.
@@ -209,6 +212,12 @@ func applyDefaults(cfg *Config) {
 	// Processing defaults
 	if strings.TrimSpace(cfg.Processing.HistoryFile) == "" {
 		cfg.Processing.HistoryFile = defaultHistoryFile
+	}
+
+	// Torrent defaults
+	if cfg.Torrent.AutoCleanupCompletedTorrents == nil {
+		v := true
+		cfg.Torrent.AutoCleanupCompletedTorrents = &v
 	}
 }
 

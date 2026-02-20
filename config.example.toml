@@ -85,10 +85,14 @@ history_file = "history.log"
 # Keep the section present for discoverability, but default it OFF.
 enabled = false
 
+# If true, daemon removes completed Transmission entries after successful APPLIED processing.
+# Set false to keep completed entries in Transmission.
+auto_cleanup_completed_torrents = true
+
 # Transmission RPC host (host:port)
 host = "localhost:9091"
 
-# Path to transmission-remote binary (example for Homebrew on macOS)
+# Path to transmission-remote binary (example for Homebrew on macOS - Apple Silicon)
 transmission_remote_path = "/opt/homebrew/bin/transmission-remote"
 
 # Optional authentication (only if required)

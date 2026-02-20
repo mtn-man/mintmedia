@@ -197,6 +197,89 @@ host = "localhost:9091"
 	}
 }
 
+func TestLoad_TorrentAutoCleanupDefaultsTrueWhenOmitted(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = true
+
+[system]
+auto_create_missing_dirs = true
+
+[torrent]
+enabled = true
+host = "localhost:9091"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	cfg, _, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Torrent.AutoCleanupCompletedTorrents == nil {
+		t.Fatalf("AutoCleanupCompletedTorrents = nil, want non-nil default")
+	}
+	if !*cfg.Torrent.AutoCleanupCompletedTorrents {
+		t.Fatalf("AutoCleanupCompletedTorrents = %v, want true", *cfg.Torrent.AutoCleanupCompletedTorrents)
+	}
+}
+
+func TestLoad_TorrentAutoCleanupCanBeDisabled(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = true
+
+[system]
+auto_create_missing_dirs = true
+
+[torrent]
+enabled = true
+host = "localhost:9091"
+auto_cleanup_completed_torrents = false
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	cfg, _, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.Torrent.AutoCleanupCompletedTorrents == nil {
+		t.Fatalf("AutoCleanupCompletedTorrents = nil, want explicit false")
+	}
+	if *cfg.Torrent.AutoCleanupCompletedTorrents {
+		t.Fatalf("AutoCleanupCompletedTorrents = %v, want false", *cfg.Torrent.AutoCleanupCompletedTorrents)
+	}
+}
+
 func writeConfigFile(t *testing.T, dir string, contents string) string {
 	t.Helper()
 	path := filepath.Join(dir, "config.toml")
