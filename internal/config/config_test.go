@@ -197,7 +197,7 @@ host = "localhost:9091"
 	}
 }
 
-func TestLoad_TorrentAutoCleanupDefaultsTrueWhenOmitted(t *testing.T) {
+func TestLoad_TorrentAutoCleanupDefaultsFalseWhenOmitted(t *testing.T) {
 	root := t.TempDir()
 	drop := filepath.Join(root, "drop")
 	state := filepath.Join(root, "state")
@@ -233,8 +233,8 @@ host = "localhost:9091"
 	if cfg.Torrent.AutoCleanupCompletedTorrents == nil {
 		t.Fatalf("AutoCleanupCompletedTorrents = nil, want non-nil default")
 	}
-	if !*cfg.Torrent.AutoCleanupCompletedTorrents {
-		t.Fatalf("AutoCleanupCompletedTorrents = %v, want true", *cfg.Torrent.AutoCleanupCompletedTorrents)
+	if *cfg.Torrent.AutoCleanupCompletedTorrents {
+		t.Fatalf("AutoCleanupCompletedTorrents = %v, want false", *cfg.Torrent.AutoCleanupCompletedTorrents)
 	}
 }
 

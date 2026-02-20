@@ -87,7 +87,7 @@ enabled = false
 
 # If true, daemon removes completed Transmission entries after successful APPLIED processing.
 # Set false to keep completed entries in Transmission.
-auto_cleanup_completed_torrents = true
+auto_cleanup_completed_torrents = false
 
 # Transmission RPC host (host:port)
 host = "localhost:9091"

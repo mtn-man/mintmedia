@@ -94,7 +94,7 @@ type Torrent struct {
 	// Optional. If set, passed as "--auth user:pass" (or your chosen scheme later).
 	Auth string `toml:"auth"`
 
-	// Optional. If unset, defaults to true to preserve current daemon behavior.
+	// Optional. If unset, defaults to false.
 	AutoCleanupCompletedTorrents *bool `toml:"auto_cleanup_completed_torrents"`
 }
 
@@ -216,7 +216,7 @@ func applyDefaults(cfg *Config) {
 
 	// Torrent defaults
 	if cfg.Torrent.AutoCleanupCompletedTorrents == nil {
-		v := true
+		v := false
 		cfg.Torrent.AutoCleanupCompletedTorrents = &v
 	}
 }

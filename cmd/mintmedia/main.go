@@ -238,7 +238,7 @@ func main() {
 			Auth:       cfg.Torrent.Auth,
 		}
 	}
-	autoCleanupCompletedTorrents := true
+	autoCleanupCompletedTorrents := false
 	if cfg.Torrent.AutoCleanupCompletedTorrents != nil {
 		autoCleanupCompletedTorrents = *cfg.Torrent.AutoCleanupCompletedTorrents
 	}
