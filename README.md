@@ -40,6 +40,10 @@ Other flags:
 - `media.main_media_extensions` and `media.associated_file_extensions` drive file detection.
 - `naming.media_tag_blacklist` removes common release tags from names.
 - `system.defer_destination_checks` can delay processing until destinations are ready.
+- `system.done_notification_mode` controls done-sound behavior for both daemon and `--process-drop`:
+  - `per_file` (default): one sound per successfully applied main media file.
+  - `per_job`: one sound per processed path when at least one main media file is applied.
+  - `off`: disables done sounds.
 - `watch.drop_settle_duration` controls how long a path must be quiet before it is processed.
 - `clipboard` and `torrent` sections enable optional Transmission automation.
 - `torrent.auto_cleanup_completed_torrents` toggles removing completed Transmission entries after successful APPLIED processing (default: disabled).

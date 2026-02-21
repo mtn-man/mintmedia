@@ -190,7 +190,14 @@ func main() {
 	}
 
 	if processDropMode {
-		errCount := processDropFolder(ctx, proc, resolved.DropFolderAbs, defaultSoundDone, *verbose)
+		errCount := processDropFolder(
+			ctx,
+			proc,
+			resolved.DropFolderAbs,
+			defaultSoundDone,
+			resolved.DoneNotificationMode,
+			*verbose,
+		)
 		if errCount > 0 {
 			os.Exit(exitError)
 		}
@@ -260,8 +267,9 @@ func main() {
 		DeferDestinationChecks: cfg.System.DeferDestinationChecks,
 
 		// Sounds (best-effort; empty disables)
-		SoundInput: defaultSoundInput,
-		SoundDone:  defaultSoundDone,
+		SoundInput:           defaultSoundInput,
+		SoundDone:            defaultSoundDone,
+		DoneNotificationMode: resolved.DoneNotificationMode,
 
 		MagnetTimeout: defaultMagnetTimeout,
 
@@ -348,7 +356,14 @@ type dropCandidate struct {
 	modTime time.Time
 }
 
-func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot string, soundDone string, verbose bool) int {
+func processDropFolder(
+	ctx context.Context,
+	proc processor.Processor,
+	dropRoot string,
+	soundDone string,
+	doneNotificationMode string,
+	verbose bool,
+) int {
 	start := time.Now()
 
 	entries, err := os.ReadDir(dropRoot)
@@ -400,15 +415,18 @@ func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot s
 			errCount++
 		}
 		PrintProcessDropResults(res, verbose)
+		appliedMainCount := 0
 		for _, r := range res {
 			summary.Results++
 			if r.Applied {
 				summary.Applied++
+				appliedMainCount++
 				continue
 			}
 			summary.Skipped++
 		}
-		if anyApplied(res) && strings.TrimSpace(soundDone) != "" {
+		playCount := notify.DoneSoundCount(doneNotificationMode, appliedMainCount)
+		for i := 0; i < playCount; i++ {
 			_ = notify.PlaySound(context.WithoutCancel(ctx), soundDone)
 		}
 	}
@@ -419,13 +437,4 @@ func processDropFolder(ctx context.Context, proc processor.Processor, dropRoot s
 	PrintProcessDropSummary(summary)
 
 	return errCount
-}
-
-func anyApplied(results []processor.Result) bool {
-	for _, r := range results {
-		if r.Applied {
-			return true
-		}
-	}
-	return false
 }

@@ -30,6 +30,10 @@ auto_create_missing_dirs = true
 # If true, mintmedia will wait until destinations exist and are writable before processing.
 defer_destination_checks = true
 
+# Done notification policy after successful processing.
+# Allowed values: "per_file", "per_job", "off"
+done_notification_mode = "per_file"
+
 
 [features]
 # Enable media processing (rename/move/organize)

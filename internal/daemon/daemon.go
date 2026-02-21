@@ -48,7 +48,9 @@ type Daemon struct {
 
 	// Sounds (best-effort; empty disables)
 	SoundInput string // played on successful Transmission add
-	SoundDone  string // played on successful APPLIED processing
+	SoundDone  string // played after successful APPLIED processing based on DoneNotificationMode
+	// done notification policy: per_file | per_job | off
+	DoneNotificationMode string
 
 	// Transmission add timeout
 	MagnetTimeout time.Duration
@@ -72,6 +74,9 @@ type Daemon struct {
 	// internal: tracks in-flight paths to suppress duplicate processing
 	inFlightMu sync.Mutex
 	inFlight   map[string]struct{}
+
+	// internal test seam; defaults to notify.PlaySound when nil.
+	playSoundFn func(context.Context, string) error
 }
 
 // Run starts the daemon loop. The caller is responsible for creating and starting the Watcher and Poller.
@@ -111,6 +116,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	if d.CleanupCooldown <= 0 {
 		d.CleanupCooldown = 120 * time.Second
+	}
+	if strings.TrimSpace(d.DoneNotificationMode) == "" {
+		d.DoneNotificationMode = notify.DoneNotificationPerFile
 	}
 
 	d.inFlightMu.Lock()
@@ -324,10 +332,10 @@ func (d *Daemon) processPathAsync(ctx context.Context, sem chan struct{}, pth st
 		return
 	}
 
-	var anyApplied bool
+	appliedMainCount := 0
 	for _, r := range results {
 		if r.Applied {
-			anyApplied = true
+			appliedMainCount++
 			fmt.Printf("APPLIED:\n")
 			fmt.Printf("  Source:   %s\n", pth)
 			fmt.Printf("  Dest:     %s\n", r.Plan.DestMainPath)
@@ -342,9 +350,12 @@ func (d *Daemon) processPathAsync(ctx context.Context, sem chan struct{}, pth st
 		fmt.Printf("IGNORED (%s): %s (duration=%s)\n", pth, r.Reason, dur)
 	}
 
-	if anyApplied {
+	if appliedMainCount > 0 {
 		jobCtx := context.WithoutCancel(ctx)
-		d.playSoundAsync(jobCtx, d.SoundDone)
+		playCount := notify.DoneSoundCount(d.DoneNotificationMode, appliedMainCount)
+		for i := 0; i < playCount; i++ {
+			d.playSoundAsync(jobCtx, d.SoundDone)
+		}
 		d.cleanupCompletedTorrents(jobCtx)
 	}
 }
@@ -354,8 +365,12 @@ func (d *Daemon) playSoundAsync(ctx context.Context, soundPath string) {
 	if soundPath == "" {
 		return
 	}
+	play := d.playSoundFn
+	if play == nil {
+		play = notify.PlaySound
+	}
 	base := context.WithoutCancel(ctx)
-	go func() { _ = notify.PlaySound(base, soundPath) }()
+	go func() { _ = play(base, soundPath) }()
 }
 
 func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {

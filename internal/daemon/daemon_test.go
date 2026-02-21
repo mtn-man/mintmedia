@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mtn-Man/mintmedia/internal/notify"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 	"github.com/Mtn-Man/mintmedia/internal/transmission"
 	"github.com/Mtn-Man/mintmedia/internal/watch"
@@ -244,12 +245,76 @@ func TestDaemon_ProcessPathAsync_CleansCompletedWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestDaemon_ProcessPathAsync_DoneNotificationModes(t *testing.T) {
+	tests := []struct {
+		name    string
+		mode    string
+		results []processor.Result
+		want    int
+	}{
+		{
+			name: "PerFile_PlaysPerAppliedMain",
+			mode: notify.DoneNotificationPerFile,
+			results: []processor.Result{
+				{Applied: true},
+				{Applied: true},
+				{Applied: true},
+				{Applied: false, Reason: processor.ErrNotMedia.Error()},
+			},
+			want: 3,
+		},
+		{
+			name: "PerJob_PlaysOnceWhenAnyApplied",
+			mode: notify.DoneNotificationPerJob,
+			results: []processor.Result{
+				{Applied: true},
+				{Applied: true},
+				{Applied: true},
+			},
+			want: 1,
+		},
+		{
+			name: "Off_PlaysNone",
+			mode: notify.DoneNotificationOff,
+			results: []processor.Result{
+				{Applied: true},
+				{Applied: true},
+			},
+			want: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			soundCalls := make(chan struct{}, 16)
+
+			d := &Daemon{
+				Proc:                         &stubProcessor{results: tc.results},
+				SoundDone:                    "/tmp/done.aiff",
+				DoneNotificationMode:         tc.mode,
+				playSoundFn:                  func(context.Context, string) error { soundCalls <- struct{}{}; return nil },
+				CleanupCooldown:              time.Millisecond,
+				AutoCleanupCompletedTorrents: false,
+			}
+
+			sem := make(chan struct{}, 1)
+			d.jobsWg.Add(1)
+			d.processPathAsync(context.Background(), sem, "/tmp/input.mkv", "/tmp/input.mkv")
+
+			waitForSoundCount(t, soundCalls, tc.want, 2*time.Second)
+			assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
+		})
+	}
+}
+
 type stubProcessor struct {
 	mu      sync.Mutex
 	calls   []string
 	started chan string
 	block   <-chan struct{}
 	blocked chan struct{}
+	results []processor.Result
+	err     error
 }
 
 func (s *stubProcessor) Plan(context.Context, processor.Request) ([]processor.Plan, error) {
@@ -282,6 +347,15 @@ func (s *stubProcessor) Process(ctx context.Context, req processor.Request) ([]p
 		<-s.block
 	}
 
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.results != nil {
+		out := make([]processor.Result, len(s.results))
+		copy(out, s.results)
+		return out, nil
+	}
+
 	return []processor.Result{{
 		Applied: true,
 	}}, nil
@@ -296,6 +370,31 @@ func waitForPath(t *testing.T, ch <-chan string, timeout time.Duration) string {
 	case <-time.After(timeout):
 		t.Fatalf("timeout waiting for process call")
 		return ""
+	}
+}
+
+func waitForSoundCount(t *testing.T, ch <-chan struct{}, want int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.After(timeout)
+	got := 0
+	for got < want {
+		select {
+		case <-ch:
+			got++
+		case <-deadline:
+			t.Fatalf("timeout waiting for sound calls: got=%d want=%d", got, want)
+		}
+	}
+}
+
+func assertNoExtraSoundCalls(t *testing.T, ch <-chan struct{}, wait time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ch:
+		t.Fatalf("unexpected extra sound call")
+	case <-timer.C:
 	}
 }
 

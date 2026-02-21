@@ -322,6 +322,154 @@ auto_cleanup_completed_torrents = true
 	}
 }
 
+func TestLoad_DoneNotificationMode_DefaultsToPerFile(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	cfg, res, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.System.DoneNotificationMode != "per_file" {
+		t.Fatalf("DoneNotificationMode = %q, want %q", cfg.System.DoneNotificationMode, "per_file")
+	}
+	if res.DoneNotificationMode != "per_file" {
+		t.Fatalf("Resolved DoneNotificationMode = %q, want %q", res.DoneNotificationMode, "per_file")
+	}
+}
+
+func TestLoad_DoneNotificationMode_NormalizesPerJob(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+done_notification_mode = "PER_JOB"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	cfg, res, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.System.DoneNotificationMode != "per_job" {
+		t.Fatalf("DoneNotificationMode = %q, want %q", cfg.System.DoneNotificationMode, "per_job")
+	}
+	if res.DoneNotificationMode != "per_job" {
+		t.Fatalf("Resolved DoneNotificationMode = %q, want %q", res.DoneNotificationMode, "per_job")
+	}
+}
+
+func TestLoad_DoneNotificationMode_Off(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+done_notification_mode = "off"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	cfg, res, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.System.DoneNotificationMode != "off" {
+		t.Fatalf("DoneNotificationMode = %q, want %q", cfg.System.DoneNotificationMode, "off")
+	}
+	if res.DoneNotificationMode != "off" {
+		t.Fatalf("Resolved DoneNotificationMode = %q, want %q", res.DoneNotificationMode, "off")
+	}
+}
+
+func TestLoad_DoneNotificationMode_InvalidFails(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+done_notification_mode = "loud"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "system.done_notification_mode") {
+		t.Fatalf("expected done_notification_mode validation error, got: %v", err)
+	}
+}
+
 func writeConfigFile(t *testing.T, dir string, contents string) string {
 	t.Helper()
 	path := filepath.Join(dir, "config.toml")

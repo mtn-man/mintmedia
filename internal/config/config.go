@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/Mtn-Man/mintmedia/internal/notify"
 )
 
 const (
@@ -69,6 +70,7 @@ type System struct {
 	DeferDestinationChecks  bool   `toml:"defer_destination_checks"`
 	MaxConcurrentProcessors int    `toml:"max_concurrent_processors"`
 	LogLevel                string `toml:"log_level"`
+	DoneNotificationMode    string `toml:"done_notification_mode"`
 }
 
 type Watch struct {
@@ -98,12 +100,8 @@ type Torrent struct {
 	AutoCleanupCompletedTorrents *bool `toml:"auto_cleanup_completed_torrents"`
 }
 
-// Processing is still present for things like history_file and optional legacy worker.
-// In Go-primary mode, worker_script is optional.
+// Processing contains processing-specific configuration.
 type Processing struct {
-	// Optional (legacy). If provided, can be used for --smoke-worker, etc.
-	WorkerScript string `toml:"worker_script"`
-
 	// Optional. If empty defaults to "history.log" under state_dir.
 	HistoryFile string `toml:"history_file"`
 }
@@ -135,11 +133,9 @@ type Resolved struct {
 
 	DropSettleDuration    time.Duration
 	ClipboardPollInterval time.Duration
+	DoneNotificationMode  string
 
 	TransmissionRemoteAbs string
-
-	// Optional legacy worker (may be empty)
-	WorkerScriptAbs string
 
 	HistoryFileAbs string
 
@@ -198,6 +194,9 @@ func applyDefaults(cfg *Config) {
 	if strings.TrimSpace(cfg.System.LogLevel) == "" {
 		cfg.System.LogLevel = defaultLogLevel
 	}
+	if strings.TrimSpace(cfg.System.DoneNotificationMode) == "" {
+		cfg.System.DoneNotificationMode = notify.DoneNotificationPerFile
+	}
 
 	// Watch defaults
 	if strings.TrimSpace(cfg.Watch.DropSettleDuration) == "" {
@@ -223,6 +222,13 @@ func applyDefaults(cfg *Config) {
 
 func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	var errs []error
+
+	doneNotificationMode, err := notify.NormalizeDoneNotificationMode(cfg.System.DoneNotificationMode)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("system.done_notification_mode: %w", err))
+	} else {
+		cfg.System.DoneNotificationMode = doneNotificationMode
+	}
 
 	// Durations
 	settle, err := time.ParseDuration(strings.TrimSpace(cfg.Watch.DropSettleDuration))
@@ -301,17 +307,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		// Media extensions are required for Go processing.
 		if len(cfg.Media.MainMediaExtensions) == 0 {
 			errs = append(errs, errors.New("media.main_media_extensions is required and must be non-empty when processing is enabled"))
-		}
-	}
-
-	// Optional legacy worker: resolve & validate only if provided.
-	workerAbs := ""
-	if strings.TrimSpace(cfg.Processing.WorkerScript) != "" {
-		workerAbs, err = expandPath(cfg.Processing.WorkerScript)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("processing.worker_script: %w", err))
-		} else if workerAbs == "" {
-			errs = append(errs, errors.New("processing.worker_script is empty after expansion"))
 		}
 	}
 
@@ -396,17 +391,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		}
 	}
 
-	// Validate legacy worker script only if provided.
-	if workerAbs != "" {
-		st, err := os.Stat(workerAbs)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("processing.worker_script not found: %s", workerAbs))
-		} else if st.IsDir() {
-			errs = append(errs, fmt.Errorf("processing.worker_script is a directory, expected file: %s", workerAbs))
-		} else if st.Mode()&0o111 == 0 {
-			errs = append(errs, fmt.Errorf("processing.worker_script not executable: %s", workerAbs))
-		}
-	}
 	// Optional: validate transmission-remote path if explicitly provided
 	if torrentOn && strings.TrimSpace(cfg.Torrent.TransmissionRemotePath) != "" {
 		st, err := os.Stat(transRemoteAbs)
@@ -436,11 +420,11 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 		DropSettleDuration:    settle,
 		ClipboardPollInterval: poll,
+		DoneNotificationMode:  doneNotificationMode,
 
 		TransmissionRemoteAbs: transRemoteAbs,
 
-		WorkerScriptAbs: workerAbs,
-		HistoryFileAbs:  historyAbs,
+		HistoryFileAbs: historyAbs,
 
 		MainMediaExtensions:      append([]string(nil), cfg.Media.MainMediaExtensions...),
 		AssociatedFileExtensions: append([]string(nil), cfg.Media.AssociatedFileExtensions...),
