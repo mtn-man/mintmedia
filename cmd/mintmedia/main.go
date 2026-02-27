@@ -4,31 +4,28 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
 
 	pflag "github.com/spf13/pflag"
 
-	"github.com/Mtn-Man/mintmedia/internal/clipboard"
 	"github.com/Mtn-Man/mintmedia/internal/config"
 	"github.com/Mtn-Man/mintmedia/internal/daemon"
-	"github.com/Mtn-Man/mintmedia/internal/notify"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 	"github.com/Mtn-Man/mintmedia/internal/state"
 	"github.com/Mtn-Man/mintmedia/internal/transfer"
-	"github.com/Mtn-Man/mintmedia/internal/transmission"
-	"github.com/Mtn-Man/mintmedia/internal/watch"
 )
 
 const (
-	exitError = 1
-	exitUsage = 2
+	exitError       = 1
+	exitUsage       = 2
+	exitInterrupted = 130
 
 	defaultSoundInput      = "/System/Library/Sounds/Funk.aiff"
 	defaultSoundDone       = "/System/Library/Sounds/Glass.aiff"
@@ -190,97 +187,40 @@ func main() {
 	}
 
 	if processDropMode {
-		errCount := processDropFolder(
-			ctx,
+		runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+
+		outcome := processDropFolder(
+			runCtx,
 			proc,
 			resolved.DropFolderAbs,
 			defaultSoundDone,
 			resolved.DoneNotificationMode,
 			*verbose,
+			resolved.ShutdownGraceDuration,
+			resolved.ShutdownForceTimeout,
 		)
-		if errCount > 0 {
+		if outcome.Interrupted || outcome.TimedOut {
+			os.Exit(exitInterrupted)
+		}
+		if outcome.ErrorCount > 0 {
 			os.Exit(exitError)
 		}
 		return
 	}
 
 	// ---- Daemon mode ---------------------------------------------------------
-	lockPath := filepath.Join(resolved.StateDirAbs, "mintmedia.lock")
-	releaseLock, err := state.AcquireLock(lockPath)
+	interrupted, err := runDaemonMode(cfg, resolved, proc, hist)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(exitError)
-	}
-	defer func() { _ = releaseLock() }()
-
-	runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	// Watcher
-	w, err := watch.NewDropFolderWatcher(resolved.DropFolderAbs, resolved.DropSettleDuration)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(exitError)
-	}
-
-	torrentEnabled := cfg.Features.EnableTorrentAutomation && cfg.Torrent.Enabled
-
-	// Clipboard poller (disabled unless torrent automation is enabled)
-	var poller *clipboard.Poller
-	if torrentEnabled && cfg.Clipboard.Enabled {
-		poller, err = clipboard.NewPoller(resolved.ClipboardPollInterval)
-		if err != nil {
+		if errors.Is(err, daemon.ErrShutdownTimedOut) {
 			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitError)
+			os.Exit(exitInterrupted)
 		}
-	}
-	// poller has no Stop; it exits on ctx cancellation.
-
-	// Optional Transmission client
-	var tx *transmission.Client
-	if torrentEnabled {
-		tx = &transmission.Client{
-			RemotePath: resolved.TransmissionRemoteAbs,
-			Host:       cfg.Torrent.Host,
-			Auth:       cfg.Torrent.Auth,
-		}
-	}
-	autoCleanupCompletedTorrents := false
-	if cfg.Torrent.AutoCleanupCompletedTorrents != nil {
-		autoCleanupCompletedTorrents = *cfg.Torrent.AutoCleanupCompletedTorrents
-	}
-
-	d := &daemon.Daemon{
-		Watcher: w,
-		Poller:  poller,
-		Proc:    proc,
-		Tx:      tx,
-		History: hist,
-
-		TransmissionHost: cfg.Torrent.Host,
-
-		MaxConcurrent: cfg.System.MaxConcurrentProcessors,
-
-		MoviesDir: resolved.DestDirMoviesAbs,
-		ShowsDir:  resolved.DestDirShowsAbs,
-
-		DeferDestinationChecks: cfg.System.DeferDestinationChecks,
-
-		// Sounds (best-effort; empty disables)
-		SoundInput:           defaultSoundInput,
-		SoundDone:            defaultSoundDone,
-		DoneNotificationMode: resolved.DoneNotificationMode,
-
-		MagnetTimeout: defaultMagnetTimeout,
-
-		VerboseMagnets:               false,
-		AutoCleanupCompletedTorrents: autoCleanupCompletedTorrents,
-		CleanupCooldown:              defaultCleanupCooldown,
-	}
-
-	if err := d.Run(runCtx); err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(exitError)
+	}
+	if interrupted {
+		os.Exit(exitInterrupted)
 	}
 }
 
@@ -337,6 +277,8 @@ func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
 	fmt.Printf("  Max processors:     %d\n", cfg.System.MaxConcurrentProcessors)
 	fmt.Printf("  Drop settle:        %s\n", resolved.DropSettleDuration)
 	fmt.Printf("  Clipboard poll:     %s\n", resolved.ClipboardPollInterval)
+	fmt.Printf("  Shutdown grace:     %s\n", resolved.ShutdownGraceDuration)
+	fmt.Printf("  Shutdown force:     %s\n", resolved.ShutdownForceTimeout)
 	fmt.Println()
 
 	if cfg.Features.EnableProcessing {
@@ -349,92 +291,4 @@ func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
 		fmt.Println("Processing: disabled")
 	}
 	fmt.Println()
-}
-
-type dropCandidate struct {
-	path    string
-	modTime time.Time
-}
-
-func processDropFolder(
-	ctx context.Context,
-	proc processor.Processor,
-	dropRoot string,
-	soundDone string,
-	doneNotificationMode string,
-	verbose bool,
-) int {
-	start := time.Now()
-
-	entries, err := os.ReadDir(dropRoot)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		return 1
-	}
-
-	candidates := make([]dropCandidate, 0, len(entries))
-	errCount := 0
-
-	for _, ent := range entries {
-		name := ent.Name()
-		if watch.IsIgnorableDropEntry(name) {
-			continue
-		}
-		path := filepath.Join(dropRoot, name)
-
-		info, err := ent.Info()
-		if err != nil {
-			PrintProcessDropStatError(path, err)
-			errCount++
-			continue
-		}
-		if !info.IsDir() && !info.Mode().IsRegular() {
-			continue
-		}
-
-		candidates = append(candidates, dropCandidate{
-			path:    path,
-			modTime: info.ModTime(),
-		})
-	}
-
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].modTime.Before(candidates[j].modTime)
-	})
-
-	PrintProcessDropCandidates(len(candidates), verbose)
-
-	summary := ProcessDropSummary{
-		Candidates: len(candidates),
-	}
-
-	for _, item := range candidates {
-		res, err := proc.Process(ctx, processor.Request{InputPath: item.path})
-		if err != nil {
-			PrintProcessDropItemError(item.path, err)
-			errCount++
-		}
-		PrintProcessDropResults(res, verbose)
-		appliedMainCount := 0
-		for _, r := range res {
-			summary.Results++
-			if r.Applied {
-				summary.Applied++
-				appliedMainCount++
-				continue
-			}
-			summary.Skipped++
-		}
-		playCount := notify.DoneSoundCount(doneNotificationMode, appliedMainCount)
-		for i := 0; i < playCount; i++ {
-			_ = notify.PlaySound(context.WithoutCancel(ctx), soundDone)
-		}
-	}
-
-	summary.Errors = errCount
-	summary.Elapsed = time.Since(start)
-
-	PrintProcessDropSummary(summary)
-
-	return errCount
 }

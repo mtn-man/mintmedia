@@ -2,13 +2,16 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Mtn-Man/mintmedia/internal/clipboard"
@@ -18,6 +21,8 @@ import (
 	"github.com/Mtn-Man/mintmedia/internal/transmission"
 	"github.com/Mtn-Man/mintmedia/internal/watch"
 )
+
+var ErrShutdownTimedOut = errors.New("daemon shutdown timed out")
 
 // Daemon wires together the watcher + clipboard poller + processor + optional Transmission client.
 type Daemon struct {
@@ -52,6 +57,12 @@ type Daemon struct {
 	// done notification policy: per_file | per_job | off
 	DoneNotificationMode string
 
+	// Time to wait for in-flight processing jobs to finish after shutdown is requested.
+	ShutdownGraceDuration time.Duration
+
+	// Additional time to wait after force-canceling in-flight jobs.
+	ShutdownForceTimeout time.Duration
+
 	// Transmission add timeout
 	MagnetTimeout time.Duration
 
@@ -70,6 +81,8 @@ type Daemon struct {
 
 	// internal: tracks in-flight media processing jobs so we can drain on shutdown
 	jobsWg sync.WaitGroup
+	// internal: current number of in-flight media processing jobs
+	jobsInFlight int64
 
 	// internal: tracks in-flight paths to suppress duplicate processing
 	inFlightMu sync.Mutex
@@ -120,6 +133,17 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if strings.TrimSpace(d.DoneNotificationMode) == "" {
 		d.DoneNotificationMode = notify.DoneNotificationPerFile
 	}
+	if d.ShutdownGraceDuration <= 0 {
+		d.ShutdownGraceDuration = 10 * time.Minute
+	}
+	if d.ShutdownForceTimeout <= 0 {
+		d.ShutdownForceTimeout = 15 * time.Second
+	}
+
+	// jobsCtx is intentionally independent from the run context so shutdown can
+	// first attempt a graceful drain, then force-cancel only if grace expires.
+	jobsCtx, cancelJobs := context.WithCancel(context.Background())
+	defer cancelJobs()
 
 	d.inFlightMu.Lock()
 	d.inFlight = make(map[string]struct{})
@@ -189,7 +213,8 @@ runLoop:
 					continue
 				}
 				d.jobsWg.Add(1)
-				go d.processPathAsync(ctx, sem, pth, key)
+				atomic.AddInt64(&d.jobsInFlight, 1)
+				go d.processPathAsync(ctx, jobsCtx, sem, pth, key)
 			}
 
 		// --- Watcher errors ---
@@ -234,7 +259,8 @@ runLoop:
 				continue
 			}
 			d.jobsWg.Add(1)
-			go d.processPathAsync(ctx, sem, path, key)
+			atomic.AddInt64(&d.jobsInFlight, 1)
+			go d.processPathAsync(ctx, jobsCtx, sem, path, key)
 
 		// --- Clipboard errors ---
 		case err, ok := <-pollerErrors:
@@ -302,28 +328,57 @@ runLoop:
 		}
 	}
 
-	// Drain: wait for in-flight processing jobs to finish.
-	d.jobsWg.Wait()
-	fmt.Println()
-	fmt.Println("Shutdown complete.")
-	return nil
+	// Drain: wait for in-flight processing jobs with a bounded graceful shutdown.
+	inFlight := atomic.LoadInt64(&d.jobsInFlight) > 0
+	if inFlight {
+		fmt.Fprintf(
+			os.Stderr,
+			"\nShutdown requested; waiting up to %s for in-flight jobs\n",
+			formatDurationCompact(d.ShutdownGraceDuration),
+		)
+	}
+	if waitForJobs(&d.jobsWg, d.ShutdownGraceDuration) {
+		fmt.Println()
+		fmt.Println("Shutdown complete.")
+		return nil
+	}
+
+	fmt.Fprintf(
+		os.Stderr,
+		"Shutdown grace elapsed; canceling in-flight jobs (timeout=%s)\n",
+		formatDurationCompact(d.ShutdownForceTimeout),
+	)
+	cancelJobs()
+
+	if waitForJobs(&d.jobsWg, d.ShutdownForceTimeout) {
+		fmt.Println()
+		fmt.Println("Shutdown complete.")
+		return nil
+	}
+
+	return fmt.Errorf(
+		"%w (grace=%s force=%s)",
+		ErrShutdownTimedOut,
+		formatDurationCompact(d.ShutdownGraceDuration),
+		formatDurationCompact(d.ShutdownForceTimeout),
+	)
 }
 
-func (d *Daemon) processPathAsync(ctx context.Context, sem chan struct{}, pth string, inFlightKey string) {
+func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Context, sem chan struct{}, pth string, inFlightKey string) {
 	defer d.jobsWg.Done()
+	defer atomic.AddInt64(&d.jobsInFlight, -1)
 	defer d.clearInFlight(inFlightKey)
 
 	// Acquire a processing slot without blocking the main event loop.
 	select {
 	case sem <- struct{}{}:
 		defer func() { <-sem }()
-	case <-ctx.Done():
+	case <-runCtx.Done():
 		return
 	}
 
 	start := time.Now()
-	// Use a background context so in-flight transfers finish even after shutdown is requested.
-	results, err := d.Proc.Process(context.Background(), processor.Request{InputPath: pth})
+	results, err := d.Proc.Process(procCtx, processor.Request{InputPath: pth})
 
 	dur := time.Since(start).Round(time.Second)
 
@@ -351,13 +406,66 @@ func (d *Daemon) processPathAsync(ctx context.Context, sem chan struct{}, pth st
 	}
 
 	if appliedMainCount > 0 {
-		jobCtx := context.WithoutCancel(ctx)
+		jobCtx := context.WithoutCancel(runCtx)
 		playCount := notify.DoneSoundCount(d.DoneNotificationMode, appliedMainCount)
 		for i := 0; i < playCount; i++ {
 			d.playSoundAsync(jobCtx, d.SoundDone)
 		}
 		d.cleanupCompletedTorrents(jobCtx)
 	}
+}
+
+func waitForJobs(wg *sync.WaitGroup, timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		wg.Wait()
+	}()
+	if timeout <= 0 {
+		<-done
+		return true
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
+func formatDurationCompact(d time.Duration) string {
+	if d < 0 {
+		return "-" + formatDurationCompact(-d)
+	}
+	if d < time.Second {
+		return d.String()
+	}
+
+	d = d.Round(time.Second)
+	hours := d / time.Hour
+	d -= hours * time.Hour
+	minutes := d / time.Minute
+	d -= minutes * time.Minute
+	seconds := d / time.Second
+
+	var b strings.Builder
+	if hours > 0 {
+		b.WriteString(strconv.FormatInt(int64(hours), 10))
+		b.WriteByte('h')
+	}
+	if minutes > 0 {
+		b.WriteString(strconv.FormatInt(int64(minutes), 10))
+		b.WriteByte('m')
+	}
+	if seconds > 0 || (hours == 0 && minutes == 0) {
+		b.WriteString(strconv.FormatInt(int64(seconds), 10))
+		b.WriteByte('s')
+	}
+	return b.String()
 }
 
 func (d *Daemon) playSoundAsync(ctx context.Context, soundPath string) {

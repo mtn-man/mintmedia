@@ -94,8 +94,12 @@ func PrintProcessDropStartup(configPath string, verbose bool) {
 	if verbose {
 		return
 	}
-	fmt.Println("Mintmedia starting (process-drop)...")
-	fmt.Printf("Config file: %s\n\n", configPath)
+	fmt.Printf("Config file: %s\n", configPath)
+}
+
+// PrintProcessDropNoFiles writes process-drop no-op output when no candidates are found.
+func PrintProcessDropNoFiles() {
+	fmt.Println("No files detected, exiting...")
 }
 
 // PrintProcessDropCandidates writes process-drop candidate discovery output.

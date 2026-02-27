@@ -34,6 +34,12 @@ defer_destination_checks = true
 # Allowed values: "per_file", "per_job", "off"
 done_notification_mode = "per_file"
 
+# Grace period to allow in-flight work to complete after shutdown is requested.
+shutdown_grace_duration = "10m"
+
+# Additional wait after forced cancellation before giving up shutdown.
+shutdown_force_timeout = "15s"
+
 
 [features]
 # Enable media processing (rename/move/organize)

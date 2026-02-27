@@ -2,6 +2,8 @@ package daemon
 
 import (
 	"context"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,6 +152,278 @@ func TestDaemon_RunWaitsForInFlightJobsOnShutdown(t *testing.T) {
 	}
 }
 
+func TestDaemon_RunForceCancelsInFlightAfterGrace(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	w, err := watch.NewDropFolderWatcher(drop, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	proc := &stubProcessor{
+		started:       make(chan string, 1),
+		blocked:       make(chan struct{}, 1),
+		blockUntilCtx: true,
+	}
+
+	d := &Daemon{
+		Watcher: w,
+		Proc:    proc,
+
+		MoviesDir: movies,
+		ShowsDir:  shows,
+
+		MaxConcurrent: 1,
+
+		SoundInput: "",
+		SoundDone:  "",
+
+		ShutdownGraceDuration: 60 * time.Millisecond,
+		ShutdownForceTimeout:  250 * time.Millisecond,
+
+		AutoCleanupCompletedTorrents: false,
+		DeferDestinationChecks:       false,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Start watcher error: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+
+	target := filepath.Join(drop, "block-on-proc-ctx.mkv")
+	writeFile(t, target, "data")
+
+	_ = waitForPath(t, proc.started, 3*time.Second)
+	waitForSignal(t, proc.blocked, 3*time.Second)
+
+	cancelAt := time.Now()
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run error: %v", err)
+		}
+		if waited := time.Since(cancelAt); waited < 50*time.Millisecond {
+			t.Fatalf("shutdown completed too quickly; waited=%s grace=%s", waited, d.ShutdownGraceDuration)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Run did not exit after force-cancel path")
+	}
+}
+
+func TestDaemon_RunReturnsShutdownTimeoutWhenJobsIgnoreCancel(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	w, err := watch.NewDropFolderWatcher(drop, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	block := make(chan struct{})
+	proc := &stubProcessor{
+		started: make(chan string, 1),
+		blocked: make(chan struct{}, 1),
+		block:   block, // ignores context cancellation
+	}
+
+	d := &Daemon{
+		Watcher: w,
+		Proc:    proc,
+
+		MoviesDir: movies,
+		ShowsDir:  shows,
+
+		MaxConcurrent: 1,
+
+		SoundInput: "",
+		SoundDone:  "",
+
+		ShutdownGraceDuration: 50 * time.Millisecond,
+		ShutdownForceTimeout:  60 * time.Millisecond,
+
+		AutoCleanupCompletedTorrents: false,
+		DeferDestinationChecks:       false,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Start watcher error: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+
+	target := filepath.Join(drop, "ignore-cancel.mkv")
+	writeFile(t, target, "data")
+
+	_ = waitForPath(t, proc.started, 3*time.Second)
+	waitForSignal(t, proc.blocked, 3*time.Second)
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, ErrShutdownTimedOut) {
+			t.Fatalf("Run error = %v, want ErrShutdownTimedOut", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Run did not return timeout error")
+	}
+
+	// Allow blocked processing goroutine to unwind after timeout return.
+	close(block)
+}
+
+func TestDaemon_RunSkipsWaitingLogWhenNoInFlightJobs(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	w, err := watch.NewDropFolderWatcher(drop, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	d := &Daemon{
+		Watcher: w,
+		Proc:    &stubProcessor{},
+
+		MoviesDir: movies,
+		ShowsDir:  shows,
+
+		MaxConcurrent: 1,
+
+		SoundInput: "",
+		SoundDone:  "",
+
+		ShutdownGraceDuration: 10 * time.Minute,
+		ShutdownForceTimeout:  15 * time.Second,
+
+		AutoCleanupCompletedTorrents: false,
+		DeferDestinationChecks:       false,
+	}
+
+	stderr := captureStderr(t, func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		if err := w.Start(ctx); err != nil {
+			cancel()
+			t.Fatalf("Start watcher error: %v", err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- d.Run(ctx) }()
+
+		time.Sleep(150 * time.Millisecond)
+		cancel()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("Run error: %v", err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("Run did not exit after cancel")
+		}
+	})
+
+	if strings.Contains(stderr, "Shutdown requested; waiting up to") {
+		t.Fatalf("unexpected waiting log with no in-flight jobs: %q", stderr)
+	}
+}
+
+func TestDaemon_RunWaitingLogStartsOnNewLineForInFlightJobs(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	w, err := watch.NewDropFolderWatcher(drop, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	proc := &stubProcessor{
+		started:       make(chan string, 1),
+		blocked:       make(chan struct{}, 1),
+		blockUntilCtx: true,
+	}
+
+	d := &Daemon{
+		Watcher: w,
+		Proc:    proc,
+
+		MoviesDir: movies,
+		ShowsDir:  shows,
+
+		MaxConcurrent: 1,
+
+		SoundInput: "",
+		SoundDone:  "",
+
+		ShutdownGraceDuration: 50 * time.Millisecond,
+		ShutdownForceTimeout:  250 * time.Millisecond,
+
+		AutoCleanupCompletedTorrents: false,
+		DeferDestinationChecks:       false,
+	}
+
+	stderr := captureStderr(t, func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		if err := w.Start(ctx); err != nil {
+			cancel()
+			t.Fatalf("Start watcher error: %v", err)
+		}
+		done := make(chan error, 1)
+		go func() { done <- d.Run(ctx) }()
+
+		target := filepath.Join(drop, "inflight.mkv")
+		writeFile(t, target, "data")
+
+		_ = waitForPath(t, proc.started, 3*time.Second)
+		waitForSignal(t, proc.blocked, 3*time.Second)
+		cancel()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("Run error: %v", err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("Run did not exit after cancel")
+		}
+	})
+
+	if !strings.Contains(stderr, "\nShutdown requested; waiting up to 50ms for in-flight jobs\n") {
+		t.Fatalf("expected newline-prefixed waiting log, got: %q", stderr)
+	}
+}
+
 func TestDaemon_DeferDestinationChecks(t *testing.T) {
 	root := t.TempDir()
 	drop := filepath.Join(root, "drop")
@@ -233,7 +507,7 @@ func TestDaemon_ProcessPathAsync_CleansCompletedWhenEnabled(t *testing.T) {
 
 	sem := make(chan struct{}, 1)
 	d.jobsWg.Add(1)
-	d.processPathAsync(context.Background(), sem, "/tmp/input.mkv", "/tmp/input.mkv")
+	d.processPathAsync(context.Background(), context.Background(), sem, "/tmp/input.mkv", "/tmp/input.mkv")
 
 	b, err := os.ReadFile(removedFile)
 	if err != nil {
@@ -242,6 +516,30 @@ func TestDaemon_ProcessPathAsync_CleansCompletedWhenEnabled(t *testing.T) {
 	ids := strings.Fields(string(b))
 	if len(ids) != 1 || ids[0] != "7" {
 		t.Fatalf("unexpected removed ids: %v", ids)
+	}
+}
+
+func TestFormatDurationCompact(t *testing.T) {
+	tests := []struct {
+		name string
+		in   time.Duration
+		want string
+	}{
+		{name: "TenMinutes", in: 10 * time.Minute, want: "10m"},
+		{name: "FifteenSeconds", in: 15 * time.Second, want: "15s"},
+		{name: "OneHour", in: 1 * time.Hour, want: "1h"},
+		{name: "HourAndMinutes", in: 1*time.Hour + 30*time.Minute, want: "1h30m"},
+		{name: "HourMinuteSecond", in: 1*time.Hour + 30*time.Minute + 15*time.Second, want: "1h30m15s"},
+		{name: "SubSecondFallback", in: 500 * time.Millisecond, want: "500ms"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := formatDurationCompact(tc.in)
+			if got != tc.want {
+				t.Fatalf("formatDurationCompact(%s) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -299,7 +597,7 @@ func TestDaemon_ProcessPathAsync_DoneNotificationModes(t *testing.T) {
 
 			sem := make(chan struct{}, 1)
 			d.jobsWg.Add(1)
-			d.processPathAsync(context.Background(), sem, "/tmp/input.mkv", "/tmp/input.mkv")
+			d.processPathAsync(context.Background(), context.Background(), sem, "/tmp/input.mkv", "/tmp/input.mkv")
 
 			waitForSoundCount(t, soundCalls, tc.want, 2*time.Second)
 			assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
@@ -313,8 +611,10 @@ type stubProcessor struct {
 	started chan string
 	block   <-chan struct{}
 	blocked chan struct{}
-	results []processor.Result
-	err     error
+	// When true, Process blocks until ctx is canceled.
+	blockUntilCtx bool
+	results       []processor.Result
+	err           error
 }
 
 func (s *stubProcessor) Plan(context.Context, processor.Request) ([]processor.Plan, error) {
@@ -345,6 +645,16 @@ func (s *stubProcessor) Process(ctx context.Context, req processor.Request) ([]p
 			}
 		}
 		<-s.block
+	}
+	if s.blockUntilCtx {
+		if s.blocked != nil {
+			select {
+			case s.blocked <- struct{}{}:
+			default:
+			}
+		}
+		<-ctx.Done()
+		return nil, ctx.Err()
 	}
 
 	if s.err != nil {
@@ -432,6 +742,31 @@ exit 9
 		t.Fatalf("write tx cleanup script: %v", err)
 	}
 	return scriptPath
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+
+	fn()
+
+	_ = w.Close()
+	os.Stderr = old
+	out := <-done
+	_ = r.Close()
+	return out
 }
 
 func expectNoPath(t *testing.T, ch <-chan string, timeout time.Duration) {

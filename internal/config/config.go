@@ -28,6 +28,8 @@ const (
 	defaultLogLevel                = "INFO"
 	defaultClipboardPollInterval   = 1 * time.Second
 	defaultDropSettleDuration      = 3 * time.Second
+	defaultShutdownGraceDuration   = 10 * time.Minute
+	defaultShutdownForceTimeout    = 15 * time.Second
 
 	// State file defaults (relative to state_dir unless absolute).
 	defaultHistoryFile  = "history.log"
@@ -71,6 +73,8 @@ type System struct {
 	MaxConcurrentProcessors int    `toml:"max_concurrent_processors"`
 	LogLevel                string `toml:"log_level"`
 	DoneNotificationMode    string `toml:"done_notification_mode"`
+	ShutdownGraceDuration   string `toml:"shutdown_grace_duration"`
+	ShutdownForceTimeout    string `toml:"shutdown_force_timeout"`
 }
 
 type Watch struct {
@@ -134,6 +138,8 @@ type Resolved struct {
 	DropSettleDuration    time.Duration
 	ClipboardPollInterval time.Duration
 	DoneNotificationMode  string
+	ShutdownGraceDuration time.Duration
+	ShutdownForceTimeout  time.Duration
 
 	TransmissionRemoteAbs string
 
@@ -197,6 +203,12 @@ func applyDefaults(cfg *Config) {
 	if strings.TrimSpace(cfg.System.DoneNotificationMode) == "" {
 		cfg.System.DoneNotificationMode = notify.DoneNotificationPerFile
 	}
+	if strings.TrimSpace(cfg.System.ShutdownGraceDuration) == "" {
+		cfg.System.ShutdownGraceDuration = defaultShutdownGraceDuration.String()
+	}
+	if strings.TrimSpace(cfg.System.ShutdownForceTimeout) == "" {
+		cfg.System.ShutdownForceTimeout = defaultShutdownForceTimeout.String()
+	}
 
 	// Watch defaults
 	if strings.TrimSpace(cfg.Watch.DropSettleDuration) == "" {
@@ -243,6 +255,20 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		errs = append(errs, fmt.Errorf("clipboard.poll_interval invalid: %w", err))
 	} else if poll < 250*time.Millisecond {
 		errs = append(errs, fmt.Errorf("clipboard.poll_interval too small (%s)", poll))
+	}
+
+	shutdownGrace, err := time.ParseDuration(strings.TrimSpace(cfg.System.ShutdownGraceDuration))
+	if err != nil {
+		errs = append(errs, fmt.Errorf("system.shutdown_grace_duration invalid: %w", err))
+	} else if shutdownGrace <= 0 {
+		errs = append(errs, fmt.Errorf("system.shutdown_grace_duration must be > 0 (got %s)", shutdownGrace))
+	}
+
+	shutdownForce, err := time.ParseDuration(strings.TrimSpace(cfg.System.ShutdownForceTimeout))
+	if err != nil {
+		errs = append(errs, fmt.Errorf("system.shutdown_force_timeout invalid: %w", err))
+	} else if shutdownForce <= 0 {
+		errs = append(errs, fmt.Errorf("system.shutdown_force_timeout must be > 0 (got %s)", shutdownForce))
 	}
 
 	// Required base paths
@@ -421,6 +447,8 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		DropSettleDuration:    settle,
 		ClipboardPollInterval: poll,
 		DoneNotificationMode:  doneNotificationMode,
+		ShutdownGraceDuration: shutdownGrace,
+		ShutdownForceTimeout:  shutdownForce,
 
 		TransmissionRemoteAbs: transRemoteAbs,
 

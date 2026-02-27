@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoad_MinimalProcessingConfig(t *testing.T) {
@@ -467,6 +468,119 @@ done_notification_mode = "loud"
 	}
 	if !strings.Contains(err.Error(), "system.done_notification_mode") {
 		t.Fatalf("expected done_notification_mode validation error, got: %v", err)
+	}
+}
+
+func TestLoad_ShutdownDurations_Defaults(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	cfg, res, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if cfg.System.ShutdownGraceDuration != "10m0s" {
+		t.Fatalf("ShutdownGraceDuration = %q, want %q", cfg.System.ShutdownGraceDuration, "10m0s")
+	}
+	if cfg.System.ShutdownForceTimeout != "15s" {
+		t.Fatalf("ShutdownForceTimeout = %q, want %q", cfg.System.ShutdownForceTimeout, "15s")
+	}
+	if res.ShutdownGraceDuration != 10*time.Minute {
+		t.Fatalf("Resolved ShutdownGraceDuration = %s, want %s", res.ShutdownGraceDuration, 10*time.Minute)
+	}
+	if res.ShutdownForceTimeout != 15*time.Second {
+		t.Fatalf("Resolved ShutdownForceTimeout = %s, want %s", res.ShutdownForceTimeout, 15*time.Second)
+	}
+}
+
+func TestLoad_ShutdownGraceDuration_InvalidFails(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+shutdown_grace_duration = "0s"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "system.shutdown_grace_duration") {
+		t.Fatalf("expected shutdown_grace_duration validation error, got: %v", err)
+	}
+}
+
+func TestLoad_ShutdownForceTimeout_InvalidFails(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+shutdown_force_timeout = "nope"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "system.shutdown_force_timeout") {
+		t.Fatalf("expected shutdown_force_timeout validation error, got: %v", err)
 	}
 }
 

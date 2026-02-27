@@ -44,6 +44,8 @@ Other flags:
   - `per_file` (default): one sound per successfully applied main media file.
   - `per_job`: one sound per processed path when at least one main media file is applied.
   - `off`: disables done sounds.
+- `system.shutdown_grace_duration` configures how long shutdown waits for in-flight work before forced cancellation.
+- `system.shutdown_force_timeout` configures how long shutdown waits after cancellation before giving up.
 - `watch.drop_settle_duration` controls how long a path must be quiet before it is processed.
 - `clipboard` and `torrent` sections enable optional Transmission automation.
 - `torrent.auto_cleanup_completed_torrents` toggles removing completed Transmission entries after successful APPLIED processing (default: disabled).
