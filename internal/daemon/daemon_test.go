@@ -519,30 +519,6 @@ func TestDaemon_ProcessPathAsync_CleansCompletedWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestFormatDurationCompact(t *testing.T) {
-	tests := []struct {
-		name string
-		in   time.Duration
-		want string
-	}{
-		{name: "TenMinutes", in: 10 * time.Minute, want: "10m"},
-		{name: "FifteenSeconds", in: 15 * time.Second, want: "15s"},
-		{name: "OneHour", in: 1 * time.Hour, want: "1h"},
-		{name: "HourAndMinutes", in: 1*time.Hour + 30*time.Minute, want: "1h30m"},
-		{name: "HourMinuteSecond", in: 1*time.Hour + 30*time.Minute + 15*time.Second, want: "1h30m15s"},
-		{name: "SubSecondFallback", in: 500 * time.Millisecond, want: "500ms"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := formatDurationCompact(tc.in)
-			if got != tc.want {
-				t.Fatalf("formatDurationCompact(%s) = %q, want %q", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestDaemon_ProcessPathAsync_DoneNotificationModes(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -89,14 +89,6 @@ func printResultBody(res processor.Result) {
 	}
 }
 
-// PrintProcessDropStartup writes process-drop startup output.
-func PrintProcessDropStartup(configPath string, verbose bool) {
-	if verbose {
-		return
-	}
-	fmt.Printf("Config file: %s\n", configPath)
-}
-
 // PrintProcessDropNoFiles writes process-drop no-op output when no candidates are found.
 func PrintProcessDropNoFiles() {
 	fmt.Println("No files detected, exiting...")

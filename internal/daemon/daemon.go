@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,6 +16,7 @@ import (
 	"github.com/Mtn-Man/mintmedia/internal/clipboard"
 	"github.com/Mtn-Man/mintmedia/internal/notify"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
+	"github.com/Mtn-Man/mintmedia/internal/shutdown"
 	"github.com/Mtn-Man/mintmedia/internal/state"
 	"github.com/Mtn-Man/mintmedia/internal/transmission"
 	"github.com/Mtn-Man/mintmedia/internal/watch"
@@ -133,12 +133,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 	if strings.TrimSpace(d.DoneNotificationMode) == "" {
 		d.DoneNotificationMode = notify.DoneNotificationPerFile
 	}
-	if d.ShutdownGraceDuration <= 0 {
-		d.ShutdownGraceDuration = 10 * time.Minute
-	}
-	if d.ShutdownForceTimeout <= 0 {
-		d.ShutdownForceTimeout = 15 * time.Second
-	}
+	policy := shutdown.ResolvePolicy(d.ShutdownGraceDuration, d.ShutdownForceTimeout)
+	d.ShutdownGraceDuration = policy.Grace
+	d.ShutdownForceTimeout = policy.Force
 
 	// jobsCtx is intentionally independent from the run context so shutdown can
 	// first attempt a graceful drain, then force-cancel only if grace expires.
@@ -329,28 +326,53 @@ runLoop:
 	}
 
 	// Drain: wait for in-flight processing jobs with a bounded graceful shutdown.
-	inFlight := atomic.LoadInt64(&d.jobsInFlight) > 0
-	if inFlight {
-		fmt.Fprintf(
-			os.Stderr,
-			"\nShutdown requested; waiting up to %s for in-flight jobs\n",
-			formatDurationCompact(d.ShutdownGraceDuration),
-		)
-	}
-	if waitForJobs(&d.jobsWg, d.ShutdownGraceDuration) {
-		fmt.Println()
-		fmt.Println("Shutdown complete.")
-		return nil
-	}
+	drain := shutdown.Drain(
+		shutdown.Policy{
+			Grace: d.ShutdownGraceDuration,
+			Force: d.ShutdownForceTimeout,
+		},
+		atomic.LoadInt64(&d.jobsInFlight) > 0,
+		func(timeout time.Duration) bool {
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				d.jobsWg.Wait()
+			}()
 
-	fmt.Fprintf(
-		os.Stderr,
-		"Shutdown grace elapsed; canceling in-flight jobs (timeout=%s)\n",
-		formatDurationCompact(d.ShutdownForceTimeout),
+			if timeout <= 0 {
+				<-done
+				return true
+			}
+
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+
+			select {
+			case <-done:
+				return true
+			case <-timer.C:
+				return false
+			}
+		},
+		cancelJobs,
+		shutdown.Hooks{
+			OnWaitStart: func(grace time.Duration) {
+				fmt.Fprintf(
+					os.Stderr,
+					"\nShutdown requested; waiting up to %s for in-flight jobs\n",
+					shutdown.FormatDurationCompact(grace),
+				)
+			},
+			OnGraceElapsed: func(force time.Duration) {
+				fmt.Fprintf(
+					os.Stderr,
+					"Shutdown grace elapsed; canceling in-flight jobs (timeout=%s)\n",
+					shutdown.FormatDurationCompact(force),
+				)
+			},
+		},
 	)
-	cancelJobs()
-
-	if waitForJobs(&d.jobsWg, d.ShutdownForceTimeout) {
+	if !drain.TimedOut {
 		fmt.Println()
 		fmt.Println("Shutdown complete.")
 		return nil
@@ -359,8 +381,8 @@ runLoop:
 	return fmt.Errorf(
 		"%w (grace=%s force=%s)",
 		ErrShutdownTimedOut,
-		formatDurationCompact(d.ShutdownGraceDuration),
-		formatDurationCompact(d.ShutdownForceTimeout),
+		shutdown.FormatDurationCompact(d.ShutdownGraceDuration),
+		shutdown.FormatDurationCompact(d.ShutdownForceTimeout),
 	)
 }
 
@@ -413,59 +435,6 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 		}
 		d.cleanupCompletedTorrents(jobCtx)
 	}
-}
-
-func waitForJobs(wg *sync.WaitGroup, timeout time.Duration) bool {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		wg.Wait()
-	}()
-	if timeout <= 0 {
-		<-done
-		return true
-	}
-
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
-	select {
-	case <-done:
-		return true
-	case <-timer.C:
-		return false
-	}
-}
-
-func formatDurationCompact(d time.Duration) string {
-	if d < 0 {
-		return "-" + formatDurationCompact(-d)
-	}
-	if d < time.Second {
-		return d.String()
-	}
-
-	d = d.Round(time.Second)
-	hours := d / time.Hour
-	d -= hours * time.Hour
-	minutes := d / time.Minute
-	d -= minutes * time.Minute
-	seconds := d / time.Second
-
-	var b strings.Builder
-	if hours > 0 {
-		b.WriteString(strconv.FormatInt(int64(hours), 10))
-		b.WriteByte('h')
-	}
-	if minutes > 0 {
-		b.WriteString(strconv.FormatInt(int64(minutes), 10))
-		b.WriteByte('m')
-	}
-	if seconds > 0 || (hours == 0 && minutes == 0) {
-		b.WriteString(strconv.FormatInt(int64(seconds), 10))
-		b.WriteByte('s')
-	}
-	return b.String()
 }
 
 func (d *Daemon) playSoundAsync(ctx context.Context, soundPath string) {

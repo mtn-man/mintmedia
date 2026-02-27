@@ -10,6 +10,7 @@ import (
 
 	"github.com/Mtn-Man/mintmedia/internal/notify"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
+	"github.com/Mtn-Man/mintmedia/internal/shutdown"
 	"github.com/Mtn-Man/mintmedia/internal/watch"
 )
 
@@ -35,12 +36,7 @@ func processDropFolder(
 	shutdownForce time.Duration,
 ) ProcessDropOutcome {
 	start := time.Now()
-	if shutdownGrace <= 0 {
-		shutdownGrace = 10 * time.Minute
-	}
-	if shutdownForce <= 0 {
-		shutdownForce = 15 * time.Second
-	}
+	policy := shutdown.ResolvePolicy(shutdownGrace, shutdownForce)
 
 	entries, err := os.ReadDir(dropRoot)
 	if err != nil {
@@ -116,57 +112,67 @@ func processDropFolder(
 		}(item.path)
 
 		var (
-			res            []processor.Result
-			runErr         error
-			graceTimer     *time.Timer
-			graceCh        <-chan time.Time
-			forceTimer     *time.Timer
-			forceCh        <-chan time.Time
-			forceTriggered bool
+			res      []processor.Result
+			runErr   error
+			gotFinal bool
 		)
 
-	waitItem:
-		for {
+		waitForResult := func(timeout time.Duration) bool {
+			if gotFinal {
+				return true
+			}
+
+			if timeout <= 0 {
+				out := <-done
+				res = out.res
+				runErr = out.err
+				gotFinal = true
+				return true
+			}
+
+			timer := time.NewTimer(timeout)
+			defer timer.Stop()
+
 			select {
 			case out := <-done:
 				res = out.res
 				runErr = out.err
-				break waitItem
-
-			case <-ctx.Done():
-				if !interrupted {
-					fmt.Fprintf(os.Stderr, "process-drop: shutdown requested; waiting up to %s for in-flight item\n", shutdownGrace)
-					interrupted = true
-				}
-				if graceTimer == nil {
-					graceTimer = time.NewTimer(shutdownGrace)
-					graceCh = graceTimer.C
-				}
-
-			case <-graceCh:
-				graceCh = nil
-				if forceTriggered {
-					continue
-				}
-				forceTriggered = true
-				fmt.Fprintf(os.Stderr, "process-drop: grace elapsed; canceling in-flight item and waiting up to %s\n", shutdownForce)
-				cancelItem()
-				forceTimer = time.NewTimer(shutdownForce)
-				forceCh = forceTimer.C
-
-			case <-forceCh:
-				timedOut = true
-				errCount++
-				fmt.Fprintln(os.Stderr, "process-drop: forced shutdown timeout exceeded while waiting for in-flight item")
-				break waitItem
+				gotFinal = true
+				return true
+			case <-timer.C:
+				return false
 			}
 		}
 
-		if graceTimer != nil {
-			graceTimer.Stop()
-		}
-		if forceTimer != nil {
-			forceTimer.Stop()
+		select {
+		case out := <-done:
+			res = out.res
+			runErr = out.err
+			gotFinal = true
+		case <-ctx.Done():
+			if !interrupted {
+				interrupted = true
+			}
+
+			drain := shutdown.Drain(
+				policy,
+				true,
+				waitForResult,
+				cancelItem,
+				shutdown.Hooks{
+					OnWaitStart: func(grace time.Duration) {
+						fmt.Fprintf(os.Stderr, "process-drop: shutdown requested; waiting up to %s for in-flight item\n", grace)
+					},
+					OnGraceElapsed: func(force time.Duration) {
+						fmt.Fprintf(os.Stderr, "process-drop: grace elapsed; canceling in-flight item and waiting up to %s\n", force)
+					},
+				},
+			)
+			if drain.TimedOut {
+				timedOut = true
+				errCount++
+				fmt.Fprintln(os.Stderr, "process-drop: forced shutdown timeout exceeded while waiting for in-flight item")
+			}
 		}
 		cancelItem()
 

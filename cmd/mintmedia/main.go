@@ -119,9 +119,6 @@ func main() {
 	if *verbose {
 		printConfigSummary(cfg, resolved)
 	}
-	if processDropMode {
-		PrintProcessDropStartup(resolved.ConfigPathAbs, *verbose)
-	}
 
 	if !cfg.Features.EnableProcessing {
 		if ops > 0 {

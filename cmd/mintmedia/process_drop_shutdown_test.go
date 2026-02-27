@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -121,6 +123,39 @@ func TestProcessDropFolder_ForceTimeoutWhenItemIgnoresCancel(t *testing.T) {
 	close(block)
 }
 
+func TestProcessDropFolder_NoCandidates_PrintsNoFilesWithoutConfigPath(t *testing.T) {
+	drop := t.TempDir()
+
+	out := captureStdout(t, func() {
+		result := processDropFolder(
+			context.Background(),
+			&processDropStubProcessor{},
+			drop,
+			"",
+			"off",
+			false,
+			10*time.Second,
+			10*time.Second,
+		)
+		if result.ErrorCount != 0 {
+			t.Fatalf("ErrorCount = %d, want 0", result.ErrorCount)
+		}
+		if result.Interrupted {
+			t.Fatalf("Interrupted = true, want false")
+		}
+		if result.TimedOut {
+			t.Fatalf("TimedOut = true, want false")
+		}
+	})
+
+	if !strings.Contains(out, "No files detected, exiting...") {
+		t.Fatalf("expected no-files message, got: %q", out)
+	}
+	if strings.Contains(out, "Config file:") {
+		t.Fatalf("unexpected config path output, got: %q", out)
+	}
+}
+
 type processDropStubProcessor struct {
 	mu        sync.Mutex
 	calls     []string
@@ -159,4 +194,29 @@ func writeProcessDropFile(t *testing.T, path string) {
 	if err := os.WriteFile(path, []byte("data"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+
+	fn()
+
+	_ = w.Close()
+	os.Stdout = old
+	out := <-done
+	_ = r.Close()
+	return out
 }
