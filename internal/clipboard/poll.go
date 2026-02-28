@@ -3,10 +3,13 @@ package clipboard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"time"
 )
+
+var ErrUnsupportedPlatform = errors.New("clipboard backend unsupported on this platform")
 
 // Poller polls macOS clipboard content using native pasteboard functions.
 // It emits magnet URIs when clipboard content changes.
@@ -24,6 +27,14 @@ type Poller struct {
 // NewPoller creates a clipboard poller that runs at the given interval.
 // interval must be > 0.
 func NewPoller(interval time.Duration) (*Poller, error) {
+	if !clipboardBackendSupported() {
+		req := clipboardBackendRequirement()
+		if strings.TrimSpace(req) == "" {
+			return nil, ErrUnsupportedPlatform
+		}
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedPlatform, req)
+	}
+
 	if interval <= 0 {
 		return nil, errors.New("clipboard poll interval must be > 0")
 	}

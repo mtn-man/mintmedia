@@ -52,6 +52,7 @@ enable_torrent_automation = false
 
 [clipboard]
 # Monitor clipboard for magnet links (optional / opinionated)
+# Requires a darwin build with cgo enabled (AppKit pasteboard backend).
 enabled = false
 
 # How often to poll the clipboard when enabled

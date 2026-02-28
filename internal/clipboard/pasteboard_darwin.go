@@ -50,3 +50,11 @@ func pasteboardReadString(_ context.Context) string {
 	defer C.free(unsafe.Pointer(ptr))
 	return strings.TrimSpace(C.GoString(ptr))
 }
+
+func clipboardBackendSupported() bool {
+	return true
+}
+
+func clipboardBackendRequirement() string {
+	return ""
+}

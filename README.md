@@ -11,6 +11,11 @@ Mintmedia is a macOS drop-folder daemon and CLI for organizing media into Movies
 3. Run as a daemon:
    - `mintmedia --daemon`
 
+## Platform Support
+- Primary target: macOS.
+- Linux/non-cgo builds are supported on a best-effort basis for non-clipboard workflows.
+- Clipboard magnet polling requires a `darwin` build with `cgo` enabled.
+
 ## CLI Usage
 ```
 mintmedia [flags]

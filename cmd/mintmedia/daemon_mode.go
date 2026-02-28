@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -38,6 +40,12 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 	if torrentEnabled && cfg.Clipboard.Enabled {
 		poller, err = clipboard.NewPoller(resolved.ClipboardPollInterval)
 		if err != nil {
+			if errors.Is(err, clipboard.ErrUnsupportedPlatform) {
+				return false, fmt.Errorf(
+					"clipboard polling is enabled but unsupported: %w; disable [clipboard].enabled or build for darwin with cgo enabled",
+					err,
+				)
+			}
 			return false, err
 		}
 	}
