@@ -5,7 +5,6 @@
 # Folder watched for incoming media (drop zone).
 # Use an absolute path or "~" if mintmedia expands it.
 drop_folder = "~/Downloads/MintDrop"
-state_dir   = "~/.local/state/mintmedia"
 error_dir = "~/.local/state/mintmedia/error"
 
 
