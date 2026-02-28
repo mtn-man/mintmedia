@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -61,7 +60,7 @@ func main() {
 			_, _ = fmt.Fprintln(out, args...)
 		}
 		write("Usage: %s [flags]\n\n", filepath.Base(os.Args[0]))
-		writeln("Modes (choose one; default is -p/--process-drop):")
+		writeln("Modes (choose one; default is -p/--process-drop when features.enable_processing=true):")
 		writeln("  --plan <path>        Compute and print the processing plan (no changes)")
 		writeln("  --apply <path>       Plan and apply changes for a path (filesystem writes)")
 		writeln("  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
@@ -85,35 +84,17 @@ func main() {
 		os.Exit(exitError)
 	}
 
-	// Determine which mode we're in.
-	ops := 0
-	plan := strings.TrimSpace(*planPath)
-	apply := strings.TrimSpace(*applyPath)
-	process := strings.TrimSpace(*processPath)
-	processDropMode := *processDrop
-	daemonMode := *daemonFlag
-	if plan != "" {
-		ops++
-	}
-	if apply != "" {
-		ops++
-	}
-	if process != "" {
-		ops++
-	}
-	if processDropMode {
-		ops++
-	}
-	if daemonMode {
-		ops++
-	}
-	if ops > 1 {
-		fmt.Fprintln(os.Stderr, "Use only one of --plan, --apply, --process, --process-drop, or --daemon at a time.")
+	mode, err := resolveModePolicy(
+		*planPath,
+		*applyPath,
+		*processPath,
+		*processDrop,
+		*daemonFlag,
+		cfg.Features.EnableProcessing,
+	)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(exitUsage)
-	}
-	if ops == 0 {
-		processDropMode = true
-		ops = 1
 	}
 
 	if *verbose {
@@ -121,10 +102,6 @@ func main() {
 	}
 
 	if !cfg.Features.EnableProcessing {
-		if ops > 0 {
-			fmt.Fprintln(os.Stderr, "Go-native processor requested but features.enable_processing=false in TOML.")
-			os.Exit(exitUsage)
-		}
 		fmt.Println("Config smoke test complete.")
 		return
 	}
@@ -135,7 +112,7 @@ func main() {
 		os.Exit(exitError)
 	}
 
-	suppressReporterDone := processDropMode && !*verbose
+	suppressReporterDone := mode.ProcessDrop && !*verbose
 
 	proc, err := newGoProcessor(resolved, hist, suppressReporterDone)
 	if err != nil {
@@ -145,8 +122,8 @@ func main() {
 
 	// One-shot modes short-circuit daemon.
 	ctx := context.Background()
-	if plan != "" {
-		plans, err := proc.Plan(ctx, processor.Request{InputPath: plan})
+	if mode.PlanPath != "" {
+		plans, err := proc.Plan(ctx, processor.Request{InputPath: mode.PlanPath})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(exitError)
@@ -155,8 +132,8 @@ func main() {
 		return
 	}
 
-	if apply != "" {
-		plans, err := proc.Plan(ctx, processor.Request{InputPath: apply})
+	if mode.ApplyPath != "" {
+		plans, err := proc.Plan(ctx, processor.Request{InputPath: mode.ApplyPath})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(exitError)
@@ -173,8 +150,8 @@ func main() {
 		return
 	}
 
-	if process != "" {
-		res, err := proc.Process(ctx, processor.Request{InputPath: process})
+	if mode.ProcessPath != "" {
+		res, err := proc.Process(ctx, processor.Request{InputPath: mode.ProcessPath})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(exitError)
@@ -183,7 +160,7 @@ func main() {
 		return
 	}
 
-	if processDropMode {
+	if mode.ProcessDrop {
 		runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 

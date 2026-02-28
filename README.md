@@ -7,7 +7,7 @@ Mintmedia is a macOS drop-folder daemon and CLI for organizing media into Movies
    - Copy `config.example.toml` to `~/.config/mintmedia/config.toml` (or pass `--config`).
    - Update `paths.drop_folder`, `paths.state_dir`, and destination paths in `[destinations]`.
 2. Run in one-shot mode:
-   - `mintmedia --process-drop` (default if no mode is specified)
+   - `mintmedia --process-drop` (default when `features.enable_processing=true`)
 3. Run as a daemon:
    - `mintmedia --daemon`
 
@@ -21,7 +21,7 @@ Mintmedia is a macOS drop-folder daemon and CLI for organizing media into Movies
 mintmedia [flags]
 ```
 
-Modes (choose one; default is `-p/--process-drop`):
+Modes (choose one; default is `-p/--process-drop` when `features.enable_processing=true`):
 - `--plan <path>`: compute and print the processing plan (no changes)
 - `--apply <path>`: plan and apply changes for a path (filesystem writes)
 - `--process <path>`: process a path with policy (ignore non-media/no-media dirs)
@@ -42,6 +42,7 @@ Other flags:
 
 ## Configuration Notes
 - `features.enable_processing` controls the Go-native processor.
+- If `features.enable_processing=false`, running with no mode flag performs a config-only smoke test.
 - `media.main_media_extensions` and `media.associated_file_extensions` drive file detection.
 - `naming.media_tag_blacklist` removes common release tags from names.
 - `system.defer_destination_checks` can delay processing until destinations are ready.
