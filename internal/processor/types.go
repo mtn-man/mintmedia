@@ -71,7 +71,7 @@ type Result struct {
 	Applied bool
 
 	// Handled indicates the processor intentionally handled the item without producing a library move
-	// (e.g., quarantined non-media inputs, ignored unsupported items, etc.).
+	// (e.g., ignored unsupported items, inputs with no main media, etc.).
 	Handled bool
 	Reason  string
 }
@@ -113,7 +113,7 @@ func (e *ParseMovieError) Error() string {
 
 // Processor is the core media decision+execution engine.
 // Plan should be deterministic and side-effect free except for filesystem reads (stat/list).
-// Apply performs the actual filesystem modifications (moves, quarantine, history writes).
+// Apply performs the actual filesystem modifications (moves, history writes).
 type Processor interface {
 	Plan(ctx context.Context, req Request) ([]Plan, error)
 	Apply(ctx context.Context, plans []Plan) ([]Result, error)
@@ -126,12 +126,7 @@ type Transferer interface {
 	Move(ctx context.Context, src, dst string) error
 }
 
-// Quarantiner moves a file or directory into the configured error/quarantine location.
-type Quarantiner interface {
-	Quarantine(ctx context.Context, src string, reason string) (dest string, err error)
-}
-
-// HistoryWriter records events (moves/quarantine/etc.) for later auditing/debugging.
+// HistoryWriter records events (moves/etc.) for later auditing/debugging.
 type HistoryWriter interface {
 	Append(ctx context.Context, entry string) error
 }
@@ -144,7 +139,6 @@ type Config struct {
 	MoviesDir string
 	ShowsDir  string
 
-	ErrorDir    string
 	HistoryFile string
 
 	MainMediaExtensions      []string // includes leading dots

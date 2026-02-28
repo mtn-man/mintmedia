@@ -53,16 +53,12 @@ associated_file_extensions = [".srt"]
 	if res.StateDirAbs != state {
 		t.Fatalf("StateDirAbs = %q, want %q", res.StateDirAbs, state)
 	}
-	wantErrorDir := filepath.Join(state, "error")
-	if res.ErrorDirAbs != wantErrorDir {
-		t.Fatalf("ErrorDirAbs = %q, want %q", res.ErrorDirAbs, wantErrorDir)
-	}
 	wantHistory := filepath.Join(state, "history.log")
 	if res.HistoryFileAbs != wantHistory {
 		t.Fatalf("HistoryFileAbs = %q, want %q", res.HistoryFileAbs, wantHistory)
 	}
 
-	for _, dir := range []string{drop, state, movies, shows, wantErrorDir} {
+	for _, dir := range []string{drop, state, movies, shows} {
 		st, err := os.Stat(dir)
 		if err != nil {
 			t.Fatalf("expected dir to exist (%s): %v", dir, err)

@@ -350,19 +350,16 @@ func newTestProcessorWithExecDeps(t *testing.T) *processorImpl {
 	drop := filepath.Join(root, "drop")
 	movies := filepath.Join(root, "Movies")
 	shows := filepath.Join(root, "Shows")
-	errDir := filepath.Join(root, "_error")
 	histFile := filepath.Join(root, "history.log")
 
 	mkdirAll(t, drop)
 	mkdirAll(t, movies)
 	mkdirAll(t, shows)
-	mkdirAll(t, errDir)
 
 	cfg := Config{
 		DropFolder:  drop,
 		MoviesDir:   movies,
 		ShowsDir:    shows,
-		ErrorDir:    errDir,
 		HistoryFile: histFile,
 
 		MainMediaExtensions:      []string{".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm"},
@@ -378,7 +375,7 @@ func newTestProcessorWithExecDeps(t *testing.T) *processorImpl {
 	xfer := &osRenameTransferer{}
 	hist := &memoryHistory{}
 
-	pr, err := New(cfg, xfer, nil, hist)
+	pr, err := New(cfg, xfer, hist)
 	if err != nil {
 		t.Fatalf("New() error: %v", err)
 	}

@@ -18,16 +18,15 @@ import (
 
 // New constructs a Processor with the provided dependencies.
 // cfg should already contain absolute, resolved paths.
-func New(cfg Config, xfer Transferer, q Quarantiner, hist HistoryWriter) (Processor, error) {
+func New(cfg Config, xfer Transferer, hist HistoryWriter) (Processor, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
 
 	p := &processorImpl{
-		cfg:         cfg,
-		xfer:        xfer,
-		quarantiner: q,
-		history:     hist,
+		cfg:     cfg,
+		xfer:    xfer,
+		history: hist,
 	}
 
 	// Normalize extension lists for predictable comparisons.
@@ -73,10 +72,9 @@ func New(cfg Config, xfer Transferer, q Quarantiner, hist HistoryWriter) (Proces
 }
 
 type processorImpl struct {
-	cfg         Config
-	xfer        Transferer
-	quarantiner Quarantiner
-	history     HistoryWriter
+	cfg     Config
+	xfer    Transferer
+	history HistoryWriter
 
 	// Prepared helpers
 	mainExtSet  map[string]struct{}
@@ -90,7 +88,7 @@ func (p *processorImpl) Plan(ctx context.Context, req Request) ([]Plan, error) {
 	return plan(ctx, p, req)
 }
 
-// Apply executes the plan(s) (moves/quarantine/history).
+// Apply executes the plan(s) (moves/history).
 // Implementation lives in apply.go.
 func (p *processorImpl) Apply(ctx context.Context, plans []Plan) ([]Result, error) {
 	return apply(ctx, p, plans)
@@ -179,9 +177,6 @@ func validateConfig(cfg Config) error {
 	}
 	if strings.TrimSpace(cfg.ShowsDir) == "" {
 		missing = append(missing, "ShowsDir")
-	}
-	if strings.TrimSpace(cfg.ErrorDir) == "" {
-		missing = append(missing, "ErrorDir")
 	}
 	if strings.TrimSpace(cfg.HistoryFile) == "" {
 		missing = append(missing, "HistoryFile")

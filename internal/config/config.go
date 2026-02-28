@@ -32,8 +32,7 @@ const (
 	defaultShutdownForceTimeout    = 15 * time.Second
 
 	// State file defaults (relative to state_dir unless absolute).
-	defaultHistoryFile  = "history.log"
-	defaultErrorDirName = "error"
+	defaultHistoryFile = "history.log"
 )
 
 // Config is the decoded TOML configuration (pre-normalization).
@@ -53,8 +52,6 @@ type Config struct {
 type Paths struct {
 	DropFolder string `toml:"drop_folder"`
 	StateDir   string `toml:"state_dir"`
-	// Optional; if empty defaults to state_dir + "/error"
-	ErrorDir string `toml:"error_dir"`
 }
 
 type Destinations struct {
@@ -130,7 +127,6 @@ type Resolved struct {
 
 	DropFolderAbs string
 	StateDirAbs   string
-	ErrorDirAbs   string
 
 	DestDirMoviesAbs string
 	DestDirShowsAbs  string
@@ -286,18 +282,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		errs = append(errs, errors.New("paths.state_dir is required"))
 	}
 
-	// Error dir (optional)
-	errorDir := strings.TrimSpace(cfg.Paths.ErrorDir)
-	if errorDir == "" {
-		errorDir = filepath.Join(stateAbs, defaultErrorDirName)
-	}
-	errorAbs, err := expandPath(errorDir)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("paths.error_dir: %w", err))
-	} else if errorAbs == "" {
-		errs = append(errs, errors.New("paths.error_dir is empty after expansion"))
-	}
-
 	// Destinations (required)
 	moviesAbs, err := expandPath(cfg.Destinations.DestDirMovies)
 	if err != nil {
@@ -385,7 +369,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 	// Directory creation / existence checks
 	if cfg.System.AutoCreateMissingDirs {
-		dirs := []string{dropAbs, stateAbs, errorAbs}
+		dirs := []string{dropAbs, stateAbs}
 		if !cfg.System.DeferDestinationChecks {
 			dirs = append(dirs, moviesAbs, showsAbs)
 		}
@@ -410,7 +394,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		}
 		checkDir("paths.drop_folder", dropAbs)
 		checkDir("paths.state_dir", stateAbs)
-		checkDir("paths.error_dir", errorAbs)
 		if !cfg.System.DeferDestinationChecks {
 			checkDir("destinations.dest_dir_movies", moviesAbs)
 			checkDir("destinations.dest_dir_shows", showsAbs)
@@ -427,9 +410,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		}
 	}
 
-	// Persist derived error_dir back into cfg for transparency
-	cfg.Paths.ErrorDir = errorAbs
-
 	if len(errs) > 0 {
 		return nil, joinErrors(errs)
 	}
@@ -439,7 +419,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 		DropFolderAbs: dropAbs,
 		StateDirAbs:   stateAbs,
-		ErrorDirAbs:   errorAbs,
 
 		DestDirMoviesAbs: moviesAbs,
 		DestDirShowsAbs:  showsAbs,

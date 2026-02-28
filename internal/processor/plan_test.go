@@ -1239,19 +1239,16 @@ func newTestProcessor(t *testing.T) *processorImpl {
 	drop := filepath.Join(root, "drop")
 	movies := filepath.Join(root, "Movies")
 	shows := filepath.Join(root, "Shows")
-	errDir := filepath.Join(root, "_error")
 	hist := filepath.Join(root, "history.log")
 
 	mkdirAll(t, drop)
 	mkdirAll(t, movies)
 	mkdirAll(t, shows)
-	mkdirAll(t, errDir)
 
 	cfg := Config{
 		DropFolder:  drop,
 		MoviesDir:   movies,
 		ShowsDir:    shows,
-		ErrorDir:    errDir,
 		HistoryFile: hist,
 
 		MainMediaExtensions:      []string{".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm"},
@@ -1275,7 +1272,7 @@ func newTestProcessor(t *testing.T) *processorImpl {
 		},
 	}
 
-	pr, err := New(cfg, nil, nil, nil)
+	pr, err := New(cfg, nil, nil)
 	if err != nil {
 		t.Fatalf("New() error: %v", err)
 	}

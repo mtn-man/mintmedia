@@ -205,7 +205,6 @@ func newGoProcessor(res *config.Resolved, hist state.HistoryWriter, suppressRepo
 		DropFolder:  res.DropFolderAbs,
 		MoviesDir:   res.DestDirMoviesAbs,
 		ShowsDir:    res.DestDirShowsAbs,
-		ErrorDir:    res.ErrorDirAbs,
 		HistoryFile: res.HistoryFileAbs,
 
 		MainMediaExtensions:      res.MainMediaExtensions,
@@ -232,7 +231,7 @@ func newGoProcessor(res *config.Resolved, hist state.HistoryWriter, suppressRepo
 		ProgressEvery: defaultProgressEvery,
 	})
 
-	return processor.New(pcfg, xfer, nil, hist)
+	return processor.New(pcfg, xfer, hist)
 }
 
 func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
@@ -242,7 +241,6 @@ func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
 	fmt.Println("Resolved paths:")
 	fmt.Printf("  Drop folder:        %s\n", resolved.DropFolderAbs)
 	fmt.Printf("  State dir:          %s\n", resolved.StateDirAbs)
-	fmt.Printf("  Error dir:          %s\n", resolved.ErrorDirAbs)
 	fmt.Printf("  Movies dir:         %s\n", resolved.DestDirMoviesAbs)
 	fmt.Printf("  Shows dir:          %s\n", resolved.DestDirShowsAbs)
 	fmt.Println()
