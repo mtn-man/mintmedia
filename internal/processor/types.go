@@ -21,6 +21,11 @@ const (
 type Request struct {
 	InputPath    string
 	CategoryHint Category
+	// OnResult receives each processing result as soon as it is available.
+	// It is optional and is ignored when nil.
+	// Contract: callbacks are invoked synchronously by Process, in result order,
+	// and complete before Process returns.
+	OnResult func(Result)
 }
 
 // Move describes an intended file move.

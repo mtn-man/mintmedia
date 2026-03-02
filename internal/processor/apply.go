@@ -21,6 +21,10 @@ import (
 //   - If the original input was a directory, move it to Trash after successful main move,
 //     with strong safety checks (treat leftover non-media junk as disposable).
 func apply(ctx context.Context, p *processorImpl, plans []Plan) ([]Result, error) {
+	return applyWithEmitter(ctx, p, plans, nil)
+}
+
+func applyWithEmitter(ctx context.Context, p *processorImpl, plans []Plan, emit func(Result)) ([]Result, error) {
 	if len(plans) == 0 {
 		return nil, nil
 	}
@@ -31,6 +35,9 @@ func apply(ctx context.Context, p *processorImpl, plans []Plan) ([]Result, error
 	for _, pl := range plans {
 		res, err := applyOne(ctx, p, pl, assocFailedByInput)
 		results = append(results, res)
+		if emit != nil {
+			emit(res)
+		}
 		if err != nil {
 			return results, err
 		}

@@ -24,6 +24,15 @@ import (
 
 var ErrShutdownTimedOut = errors.New("daemon shutdown timed out")
 
+type caffeinateController interface {
+	Start(context.Context) error
+	Stop() error
+}
+
+var newDaemonCaffeinate = func() caffeinateController {
+	return notify.NewCaffeinate()
+}
+
 // Daemon wires together the watcher + clipboard poller + processor + optional Transmission client.
 type Daemon struct {
 	Watcher *watch.DropFolderWatcher
@@ -110,11 +119,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 
 	// Prevent macOS idle sleep for the lifetime of the daemon (best-effort).
-	caff := notify.NewCaffeinate()
-	if err := caff.Start(ctx); err != nil {
+	caffCtx, cancelCaff := context.WithCancel(context.Background())
+	caff := newDaemonCaffeinate()
+	if err := caff.Start(caffCtx); err != nil {
 		fmt.Fprintf(os.Stderr, "caffeinate warning: %v\n", err)
 	}
 	defer func() {
+		cancelCaff()
 		if err := caff.Stop(); err != nil {
 			fmt.Fprintf(os.Stderr, "caffeinate stop warning: %v\n", err)
 		}
@@ -400,7 +411,36 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 	}
 
 	start := time.Now()
-	results, err := d.Proc.Process(procCtx, processor.Request{InputPath: pth})
+	jobCtx := context.WithoutCancel(runCtx)
+	planner := notify.NewDoneSoundPlanner(d.DoneNotificationMode)
+	streamed := false
+	emit := func(r processor.Result, dur time.Duration) {
+		if r.Applied {
+			fmt.Printf("APPLIED:\n")
+			fmt.Printf("  Source:   %s\n", pth)
+			fmt.Printf("  Dest:     %s\n", r.Plan.DestMainPath)
+			fmt.Printf("  Duration: %s\n", dur)
+			playCount := planner.OnAppliedMain()
+			for i := 0; i < playCount; i++ {
+				d.playSoundAsync(jobCtx, d.SoundDone)
+			}
+			return
+		}
+		if r.Reason == processor.ErrNotMedia.Error() ||
+			r.Reason == processor.ErrNoMainMediaFound.Error() ||
+			r.Reason == processor.ErrInputMissing.Error() {
+			return
+		}
+		fmt.Printf("IGNORED (%s): %s (duration=%s)\n", pth, r.Reason, dur)
+	}
+	req := processor.Request{
+		InputPath: pth,
+		OnResult: func(r processor.Result) {
+			streamed = true
+			emit(r, time.Since(start).Round(time.Second))
+		},
+	}
+	results, err := d.Proc.Process(procCtx, req)
 
 	dur := time.Since(start).Round(time.Second)
 
@@ -409,30 +449,18 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 		return
 	}
 
-	appliedMainCount := 0
-	for _, r := range results {
-		if r.Applied {
-			appliedMainCount++
-			fmt.Printf("APPLIED:\n")
-			fmt.Printf("  Source:   %s\n", pth)
-			fmt.Printf("  Dest:     %s\n", r.Plan.DestMainPath)
-			fmt.Printf("  Duration: %s\n", dur)
-			continue
+	if !streamed {
+		for _, r := range results {
+			emit(r, dur)
 		}
-		if r.Reason == processor.ErrNotMedia.Error() ||
-			r.Reason == processor.ErrNoMainMediaFound.Error() ||
-			r.Reason == processor.ErrInputMissing.Error() {
-			continue
-		}
-		fmt.Printf("IGNORED (%s): %s (duration=%s)\n", pth, r.Reason, dur)
 	}
 
-	if appliedMainCount > 0 {
-		jobCtx := context.WithoutCancel(runCtx)
-		playCount := notify.DoneSoundCount(d.DoneNotificationMode, appliedMainCount)
-		for i := 0; i < playCount; i++ {
-			d.playSoundAsync(jobCtx, d.SoundDone)
-		}
+	playCount := planner.OnJobComplete()
+	for i := 0; i < playCount; i++ {
+		d.playSoundAsync(jobCtx, d.SoundDone)
+	}
+
+	if planner.HasAppliedMain() {
 		d.cleanupCompletedTorrents(jobCtx)
 	}
 }

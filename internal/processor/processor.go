@@ -99,6 +99,13 @@ func (p *processorImpl) Apply(ctx context.Context, plans []Plan) ([]Result, erro
 // - Non-media files and directories with no main media are treated as handled and ignored.
 // - All other errors are returned to the caller.
 func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, error) {
+	emit := func(res Result) {
+		if req.OnResult == nil {
+			return
+		}
+		req.OnResult(res)
+	}
+
 	plans, err := p.Plan(ctx, req)
 	var partial *PartialPlanError
 	if err != nil && !errors.As(err, &partial) {
@@ -111,32 +118,38 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 			))
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			return []Result{{
+			out := Result{
 				Handled: true,
 				Applied: false,
 				Reason:  ErrInputMissing.Error(),
-			}}, nil
+			}
+			emit(out)
+			return []Result{out}, nil
 		}
 		var pse *ParseShowError
 		var pme *ParseMovieError
 		if errors.As(err, &pse) || errors.As(err, &pme) {
-			return []Result{{
+			out := Result{
 				Handled: true,
 				Applied: false,
 				Reason:  err.Error(),
-			}}, nil
+			}
+			emit(out)
+			return []Result{out}, nil
 		}
 		if errors.Is(err, ErrNotMedia) || errors.Is(err, ErrNoMainMediaFound) || errors.Is(err, ErrAmbiguousShow) {
-			return []Result{{
+			out := Result{
 				Handled: true,
 				Applied: false,
 				Reason:  err.Error(),
-			}}, nil
+			}
+			emit(out)
+			return []Result{out}, nil
 		}
 		return nil, err
 	}
 
-	res, err := p.Apply(ctx, plans)
+	res, err := applyWithEmitter(ctx, p, plans, emit)
 	if err != nil {
 		return res, err
 	}
@@ -153,12 +166,14 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 	if partial != nil && len(partial.Issues) > 0 {
 		for _, issue := range partial.Issues {
 			reason := fmt.Sprintf("skipped: %s: %v", issue.Path, issue.Err)
-			res = append(res, Result{
+			out := Result{
 				Plan:    Plan{InputPath: issue.Path},
 				Handled: true,
 				Applied: false,
 				Reason:  reason,
-			})
+			}
+			res = append(res, out)
+			emit(out)
 		}
 	}
 	return res, nil

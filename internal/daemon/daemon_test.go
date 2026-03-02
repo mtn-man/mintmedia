@@ -152,6 +152,99 @@ func TestDaemon_RunWaitsForInFlightJobsOnShutdown(t *testing.T) {
 	}
 }
 
+func TestDaemon_RunCaffeinateStaysActiveDuringShutdownDrain(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	w, err := watch.NewDropFolderWatcher(drop, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	block := make(chan struct{})
+	proc := &stubProcessor{
+		started: make(chan string, 1),
+		block:   block,
+		blocked: make(chan struct{}, 1),
+	}
+
+	fakeCaff := &fakeDaemonCaffeinate{
+		startCalled: make(chan struct{}),
+	}
+	oldNewDaemonCaffeinate := newDaemonCaffeinate
+	newDaemonCaffeinate = func() caffeinateController {
+		return fakeCaff
+	}
+	defer func() { newDaemonCaffeinate = oldNewDaemonCaffeinate }()
+
+	d := &Daemon{
+		Watcher: w,
+		Proc:    proc,
+
+		MoviesDir: movies,
+		ShowsDir:  shows,
+
+		MaxConcurrent: 1,
+
+		SoundInput: "",
+		SoundDone:  "",
+
+		AutoCleanupCompletedTorrents: false,
+		DeferDestinationChecks:       false,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Start watcher error: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+
+	select {
+	case <-fakeCaff.startCalled:
+	case <-time.After(500 * time.Millisecond):
+		cancel()
+		close(block)
+		t.Fatalf("timeout waiting for caffeinate start")
+	}
+
+	target := filepath.Join(drop, "block.mkv")
+	writeFile(t, target, "data")
+
+	_ = waitForPath(t, proc.started, 3*time.Second)
+	waitForSignal(t, proc.blocked, 3*time.Second)
+
+	cancel()
+	time.Sleep(30 * time.Millisecond)
+
+	if fakeCaff.startContextCanceled() {
+		close(block)
+		t.Fatalf("caffeinate context canceled during shutdown drain")
+	}
+
+	close(block)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Run did not exit after unblocking")
+	}
+
+	if got := fakeCaff.stopCallsCount(); got != 1 {
+		t.Fatalf("Stop calls = %d, want 1", got)
+	}
+}
+
 func TestDaemon_RunForceCancelsInFlightAfterGrace(t *testing.T) {
 	root := t.TempDir()
 	drop := filepath.Join(root, "drop")
@@ -581,6 +674,71 @@ func TestDaemon_ProcessPathAsync_DoneNotificationModes(t *testing.T) {
 	}
 }
 
+func TestDaemon_ProcessPathAsync_DoneNotificationModes_StreamedResults(t *testing.T) {
+	tests := []struct {
+		name    string
+		mode    string
+		results []processor.Result
+		want    int
+	}{
+		{
+			name: "PerFile_PlaysPerAppliedMain",
+			mode: notify.DoneNotificationPerFile,
+			results: []processor.Result{
+				{Applied: true},
+				{Applied: true},
+				{Applied: true},
+				{Applied: false, Reason: processor.ErrNotMedia.Error()},
+			},
+			want: 3,
+		},
+		{
+			name: "PerJob_PlaysOnceWhenAnyApplied",
+			mode: notify.DoneNotificationPerJob,
+			results: []processor.Result{
+				{Applied: true},
+				{Applied: true},
+				{Applied: true},
+			},
+			want: 1,
+		},
+		{
+			name: "Off_PlaysNone",
+			mode: notify.DoneNotificationOff,
+			results: []processor.Result{
+				{Applied: true},
+				{Applied: true},
+			},
+			want: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			soundCalls := make(chan struct{}, 16)
+
+			d := &Daemon{
+				Proc: &stubProcessor{
+					results:       tc.results,
+					streamResults: true,
+				},
+				SoundDone:                    "/tmp/done.aiff",
+				DoneNotificationMode:         tc.mode,
+				playSoundFn:                  func(context.Context, string) error { soundCalls <- struct{}{}; return nil },
+				CleanupCooldown:              time.Millisecond,
+				AutoCleanupCompletedTorrents: false,
+			}
+
+			sem := make(chan struct{}, 1)
+			d.jobsWg.Add(1)
+			d.processPathAsync(context.Background(), context.Background(), sem, "/tmp/input.mkv", "/tmp/input.mkv")
+
+			waitForSoundCount(t, soundCalls, tc.want, 2*time.Second)
+			assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
+		})
+	}
+}
+
 type stubProcessor struct {
 	mu      sync.Mutex
 	calls   []string
@@ -591,6 +749,51 @@ type stubProcessor struct {
 	blockUntilCtx bool
 	results       []processor.Result
 	err           error
+	streamResults bool
+}
+
+type fakeDaemonCaffeinate struct {
+	mu          sync.Mutex
+	startCtx    context.Context
+	stopCalls   int
+	startCalled chan struct{}
+}
+
+func (f *fakeDaemonCaffeinate) Start(ctx context.Context) error {
+	f.mu.Lock()
+	f.startCtx = ctx
+	startCalled := f.startCalled
+	f.mu.Unlock()
+	close(startCalled)
+	return nil
+}
+
+func (f *fakeDaemonCaffeinate) Stop() error {
+	f.mu.Lock()
+	f.stopCalls++
+	f.mu.Unlock()
+	return nil
+}
+
+func (f *fakeDaemonCaffeinate) startContextCanceled() bool {
+	f.mu.Lock()
+	ctx := f.startCtx
+	f.mu.Unlock()
+	if ctx == nil {
+		return false
+	}
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+func (f *fakeDaemonCaffeinate) stopCallsCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stopCalls
 }
 
 func (s *stubProcessor) Plan(context.Context, processor.Request) ([]processor.Plan, error) {
@@ -637,6 +840,11 @@ func (s *stubProcessor) Process(ctx context.Context, req processor.Request) ([]p
 		return nil, s.err
 	}
 	if s.results != nil {
+		if s.streamResults && req.OnResult != nil {
+			for _, r := range s.results {
+				req.OnResult(r)
+			}
+		}
 		out := make([]processor.Result, len(s.results))
 		copy(out, s.results)
 		return out, nil

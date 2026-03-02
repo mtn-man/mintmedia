@@ -41,17 +41,11 @@ func DoneSoundCount(mode string, appliedMainCount int) int {
 		return 0
 	}
 
-	normalized, err := NormalizeDoneNotificationMode(mode)
-	if err != nil {
-		normalized = DoneNotificationPerFile
+	planner := NewDoneSoundPlanner(mode)
+	total := 0
+	for i := 0; i < appliedMainCount; i++ {
+		total += planner.OnAppliedMain()
 	}
-
-	switch normalized {
-	case DoneNotificationOff:
-		return 0
-	case DoneNotificationPerJob:
-		return 1
-	default:
-		return appliedMainCount
-	}
+	total += planner.OnJobComplete()
+	return total
 }

@@ -141,7 +141,12 @@ func main() {
 		PrintPlans(plans)
 
 		fmt.Println("\n--- APPLY ---")
-		res, err := proc.Apply(ctx, plans)
+		var res []processor.Result
+		err = withCaffeinate(func() error {
+			var runErr error
+			res, runErr = proc.Apply(ctx, plans)
+			return runErr
+		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(exitError)
@@ -151,7 +156,12 @@ func main() {
 	}
 
 	if mode.ProcessPath != "" {
-		res, err := proc.Process(ctx, processor.Request{InputPath: mode.ProcessPath})
+		var res []processor.Result
+		err := withCaffeinate(func() error {
+			var runErr error
+			res, runErr = proc.Process(ctx, processor.Request{InputPath: mode.ProcessPath})
+			return runErr
+		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(exitError)
