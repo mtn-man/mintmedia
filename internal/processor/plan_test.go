@@ -996,6 +996,73 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowFile_ExistingFolder_TheLastOfUs_UsesFolderCasingInDestRadix",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "The Last of Us"))
+
+				name := "The.Last.of.US.S02E01.1080p.HEVC.x265.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Last of Us")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Last of Us"))
+				}
+				if pl.DestRadix != "The Last of Us - S02E01" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Last of Us - S02E01")
+				}
+				if !strings.HasSuffix(pl.DestMainPath, "The Last of Us - S02E01.mkv") {
+					t.Fatalf("DestMainPath = %q, want suffix %q", pl.DestMainPath, "The Last of Us - S02E01.mkv")
+				}
+			},
+		},
+		{
+			name: "ShowFile_ExistingYearFolder_TheLastOfUs_UsesFolderCasingInDestRadix",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "The Last of Us (2023)"))
+
+				name := "The.Last.of.US.2023.S02E01.1080p.HEVC.x265.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowYear != "2023" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2023")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Last of Us (2023)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Last of Us (2023)"))
+				}
+				if pl.DestRadix != "The Last of Us (2023) - S02E01" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Last of Us (2023) - S02E01")
+				}
+				if !strings.HasSuffix(pl.DestMainPath, "The Last of Us (2023) - S02E01.mkv") {
+					t.Fatalf("DestMainPath = %q, want suffix %q", pl.DestMainPath, "The Last of Us (2023) - S02E01.mkv")
+				}
+			},
+		},
+		{
 			name: "MovieFile_RomanNumeral_PreservedUppercase",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()

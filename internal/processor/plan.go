@@ -216,6 +216,22 @@ func isSkippablePlanError(err error) bool {
 	return false
 }
 
+func canonicalShowNameFromFolder(showFolder string, fallback string) string {
+	showFolder = strings.TrimSpace(showFolder)
+	if showFolder == "" {
+		return fallback
+	}
+
+	if base, _, ok := parseShowFolderYear(showFolder); ok {
+		base = strings.TrimSpace(base)
+		if base != "" {
+			return base
+		}
+	}
+
+	return showFolder
+}
+
 // --- associated files planning ---------------------------------------------
 
 func planAssociatedMoves(ctx context.Context, p *processorImpl, pl Plan) ([]Move, error) {
@@ -331,9 +347,10 @@ func planForMain(
 		pl.Episode = episode
 
 		seasonFolder := fmt.Sprintf("Season %02d", season)
-		displayShowName := showName
+		canonicalShowName := canonicalShowNameFromFolder(showFolder, showName)
+		displayShowName := canonicalShowName
 		if inputHadYear && resolvedYear != "" {
-			displayShowName = fmt.Sprintf("%s (%s)", showName, resolvedYear)
+			displayShowName = fmt.Sprintf("%s (%s)", canonicalShowName, resolvedYear)
 		}
 		pl.DestRadix = fmt.Sprintf("%s - S%02dE%s", displayShowName, season, padEpisode(episode))
 
