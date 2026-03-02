@@ -238,6 +238,31 @@ func parseEpisodeComponent(raw string) (episode int, idx int, ok bool) {
 }
 
 func parseMovieFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (title string, year string, err error) {
+	return parseMovieFromNameWithMode(blacklist, baseName, fileName, movieParseFolderFirst)
+}
+
+type movieParseMode int
+
+const (
+	// folder-first parsing preserves existing behavior for single-movie inputs.
+	movieParseFolderFirst movieParseMode = iota
+	// file-only parsing is used for multi-movie packs to avoid folder-name bleed.
+	movieParseFileOnly
+)
+
+func parseMovieFromNameWithMode(
+	blacklist []*regexp.Regexp,
+	baseName string,
+	fileName string,
+	mode movieParseMode,
+) (title string, year string, err error) {
+	if mode == movieParseFileOnly {
+		if t, y, ok := parseMovieOnce(blacklist, fileName); ok {
+			return t, y, nil
+		}
+		return "", "", &ParseMovieError{BaseName: baseName, FileName: fileName}
+	}
+
 	if t, y, ok := parseMovieOnce(blacklist, baseName); ok {
 		return t, y, nil
 	}

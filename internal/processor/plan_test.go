@@ -1085,6 +1085,95 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "MovieFolder_BourneCollection_MultiMoviePack_PrefersFilenameParsing",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "The Jason Bourne Collection 2004-2016 1080p BluRay HEVC x265 5.1 BONE")
+				writeFile(t, filepath.Join(root, "Jason Bourne 2016 1080p BluRay HEVC x265 5.1 BONE.mkv"), "dummy")
+				writeFile(t, filepath.Join(root, "The Bourne Identity 2002 1080p BluRay HEVC x265 5.1 BONE.mkv"), "dummy")
+				writeFile(t, filepath.Join(root, "The Bourne Supremacy 2004 1080p BluRay HEVC x265 5.1 BONE.mkv"), "dummy")
+				writeFile(t, filepath.Join(root, "The Bourne Ultimatum 2007 1080p BluRay HEVC x265 5.1 BONE.mkv"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 4 {
+					t.Fatalf("expected 4 plans, got %d", len(plans))
+				}
+
+				wantTitles := map[string]struct{}{
+					"Jason Bourne (2016)":         {},
+					"The Bourne Identity (2002)":  {},
+					"The Bourne Supremacy (2004)": {},
+					"The Bourne Ultimatum (2007)": {},
+				}
+
+				for _, pl := range plans {
+					if pl.Category != CategoryMovie {
+						t.Fatalf("Category = %q, want %q", pl.Category, CategoryMovie)
+					}
+					if pl.MovieTitle == "The Jason Bourne Collection (2004)" {
+						t.Fatalf("MovieTitle used folder parse fallback: %q", pl.MovieTitle)
+					}
+					if _, ok := wantTitles[pl.MovieTitle]; !ok {
+						t.Fatalf("unexpected MovieTitle = %q", pl.MovieTitle)
+					}
+					delete(wantTitles, pl.MovieTitle)
+					if !strings.HasSuffix(pl.DestMainPath, pl.MovieTitle+pl.MainExt) {
+						t.Fatalf("DestMainPath = %q, want suffix %q", pl.DestMainPath, pl.MovieTitle+pl.MainExt)
+					}
+				}
+				if len(wantTitles) != 0 {
+					t.Fatalf("missing expected movie titles: %v", wantTitles)
+				}
+			},
+		},
+		{
+			name: "MovieFolder_MultiMoviePack_UnparseableFilename_SkippedNoFolderFallback",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "The Jason Bourne Collection 2004-2016 1080p BluRay HEVC x265 5.1 BONE")
+				writeFile(t, filepath.Join(root, "The Bourne Identity 2002 1080p BluRay HEVC x265 5.1 BONE.mkv"), "dummy")
+				writeFile(t, filepath.Join(root, "1080p.x265.hevc.bluray.mkv"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				var partial *PartialPlanError
+				if !errors.As(err, &partial) {
+					t.Fatalf("expected PartialPlanError, got %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+				if plans[0].Category != CategoryMovie {
+					t.Fatalf("Category = %q, want %q", plans[0].Category, CategoryMovie)
+				}
+				if plans[0].MovieTitle != "The Bourne Identity (2002)" {
+					t.Fatalf("MovieTitle = %q, want %q", plans[0].MovieTitle, "The Bourne Identity (2002)")
+				}
+				if partial == nil || len(partial.Issues) != 1 {
+					t.Fatalf("expected 1 issue, got %v", partial)
+				}
+
+				wantPath := filepath.Join(inputPath, "1080p.x265.hevc.bluray.mkv")
+				if partial.Issues[0].Path != wantPath {
+					t.Fatalf("issue path = %q, want %q", partial.Issues[0].Path, wantPath)
+				}
+				var pme *ParseMovieError
+				if !errors.As(partial.Issues[0].Err, &pme) {
+					t.Fatalf("issue err type = %T, want *ParseMovieError", partial.Issues[0].Err)
+				}
+			},
+		},
+		{
 			name: "DirSelectsAllMediaWithinDepth2",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()

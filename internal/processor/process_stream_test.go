@@ -2,6 +2,8 @@ package processor
 
 import (
 	"context"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -95,4 +97,89 @@ func TestProcess_OnResult_StreamedForPartialPackSkip(t *testing.T) {
 	if !strings.HasPrefix(streamed[1].Reason, "skipped: ") {
 		t.Fatalf("streamed[1].Reason = %q, want prefix %q", streamed[1].Reason, "skipped: ")
 	}
+}
+
+func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T) {
+	p := newTestProcessorWithExecDeps(t)
+
+	inputDir := filepath.Join(p.cfg.DropFolder, "The Jason Bourne Collection 2004-2016 1080p BluRay HEVC x265 5.1 BONE")
+	mkdirAll(t, inputDir)
+	unparseable := filepath.Join(inputDir, "1080p.x265.hevc.bluray.mkv")
+	writeFile(t, unparseable, "dummy")
+	writeFile(t, filepath.Join(inputDir, "The Bourne Identity 2002 1080p BluRay HEVC x265 5.1 BONE.mkv"), "dummy")
+
+	var streamed []Result
+	var res []Result
+	var err error
+	stderr := captureStderr(t, func() {
+		res, err = p.Process(context.Background(), Request{
+			InputPath: inputDir,
+			OnResult: func(r Result) {
+				streamed = append(streamed, r)
+			},
+		})
+	})
+	if err != nil {
+		t.Fatalf("Process() error: %v", err)
+	}
+	if len(res) != 2 || len(streamed) != 2 {
+		t.Fatalf("expected 2 results (returned=%d streamed=%d)", len(res), len(streamed))
+	}
+
+	var appliedCount int
+	var skippedCount int
+	var sawSkipPath bool
+	for i := range streamed {
+		if streamed[i].Applied {
+			appliedCount++
+			continue
+		}
+		skippedCount++
+		if strings.HasPrefix(streamed[i].Reason, "skipped: "+unparseable+": ") {
+			sawSkipPath = true
+		}
+	}
+	if appliedCount != 1 || skippedCount != 1 {
+		t.Fatalf("applied/skipped = %d/%d, want 1/1", appliedCount, skippedCount)
+	}
+	if !sawSkipPath {
+		t.Fatalf("missing skipped reason for unparseable path %q (reasons: %#v)", unparseable, streamed)
+	}
+
+	wantWarn := "WARN: movie pack skip (unparseable filename): " + unparseable + ":"
+	if !strings.Contains(stderr, wantWarn) {
+		t.Fatalf("stderr missing warning %q; got: %q", wantWarn, stderr)
+	}
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe(): %v", err)
+	}
+	os.Stderr = w
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
+	outCh := make(chan string, 1)
+	go func() {
+		defer func() { _ = r.Close() }()
+		data, readErr := io.ReadAll(r)
+		if readErr != nil {
+			outCh <- ""
+			return
+		}
+		outCh <- string(data)
+	}()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
+	return <-outCh
 }

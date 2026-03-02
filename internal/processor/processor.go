@@ -165,6 +165,11 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 
 	if partial != nil && len(partial.Issues) > 0 {
 		for _, issue := range partial.Issues {
+			var pme *ParseMovieError
+			if errors.As(issue.Err, &pme) {
+				fmt.Fprintf(os.Stderr, "WARN: movie pack skip (unparseable filename): %s: %v\n", issue.Path, issue.Err)
+				appendHistory(p, ctx, fmt.Sprintf("WARN\tmovie_pack_skip_unparseable\t%s\t%v", issue.Path, issue.Err))
+			}
 			reason := fmt.Sprintf("skipped: %s: %v", issue.Path, issue.Err)
 			out := Result{
 				Plan:    Plan{InputPath: issue.Path},

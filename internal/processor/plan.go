@@ -37,7 +37,7 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 		if !isExtInSet(ext, p.mainExtSet) {
 			return nil, ErrNotMedia
 		}
-		pl, err := planForMain(ctx, p, req, abs, abs, showHint{})
+		pl, err := planForMain(ctx, p, req, abs, abs, showHint{}, movieParseFolderFirst)
 		if err != nil {
 			return nil, err
 		}
@@ -56,10 +56,14 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 			}
 			return nil, err
 		}
+		movieMode := movieParseFolderFirst
+		if len(mainPaths) >= 2 {
+			movieMode = movieParseFileOnly
+		}
 		plans := make([]Plan, 0, len(mainPaths))
 		issues := make([]PlanIssue, 0)
 		for _, main := range mainPaths {
-			pl, err := planForMain(ctx, p, req, abs, main, hint)
+			pl, err := planForMain(ctx, p, req, abs, main, hint, movieMode)
 			if err != nil {
 				if isSkippablePlanError(err) {
 					issues = append(issues, PlanIssue{Path: main, Err: err})
@@ -267,7 +271,15 @@ func planAssociatedMoves(ctx context.Context, p *processorImpl, pl Plan) ([]Move
 
 // --- plan construction ------------------------------------------------------
 
-func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath string, mainPath string, hint showHint) (Plan, error) {
+func planForMain(
+	ctx context.Context,
+	p *processorImpl,
+	req Request,
+	inputPath string,
+	mainPath string,
+	hint showHint,
+	movieMode movieParseMode,
+) (Plan, error) {
 	pl := Plan{
 		InputPath:    inputPath,
 		CategoryHint: req.CategoryHint,
@@ -329,7 +341,21 @@ func planForMain(ctx context.Context, p *processorImpl, req Request, inputPath s
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
 	case CategoryMovie:
-		title, year, err := parseMovieFromName(p.blacklist, filepath.Base(pl.InputPath), pl.MainBaseName)
+		var (
+			title string
+			year  string
+			err   error
+		)
+		if movieMode == movieParseFolderFirst {
+			title, year, err = parseMovieFromName(p.blacklist, filepath.Base(pl.InputPath), pl.MainBaseName)
+		} else {
+			title, year, err = parseMovieFromNameWithMode(
+				p.blacklist,
+				filepath.Base(pl.InputPath),
+				pl.MainBaseName,
+				movieMode,
+			)
+		}
 		if err != nil {
 			return Plan{}, err
 		}
