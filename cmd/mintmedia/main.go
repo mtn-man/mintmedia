@@ -31,8 +31,7 @@ const (
 	defaultMagnetTimeout   = 10 * time.Second
 	defaultCleanupCooldown = 2 * time.Minute
 
-	defaultReportEvery   = 250 * time.Millisecond
-	defaultProgressEvery = 1 * time.Second
+	defaultReportEvery = 250 * time.Millisecond
 )
 
 func main() {
@@ -229,22 +228,13 @@ func newGoProcessor(res *config.Resolved, logger logging.Logger, suppressReporte
 	}
 
 	xfer := transfer.NewRenameOrCopy(transfer.Options{
-		// Legacy string progress is disabled in favor of the structured reporter.
-		Progress: nil,
-
-		// Keep PrintDone enabled so we get a completion line.
-		PrintDone: true,
-
 		// Structured reporter enables the progress bar for large/slow copies.
 		Reporter: transfer.NewTerminalReporter(os.Stdout, transfer.ReportOptions{
 			EnableBar:        true,
 			EnableETA:        true,
 			SuppressDoneLine: suppressReporterDone,
 		}),
-		ReportEvery: defaultReportEvery,
-
-		// Retain the legacy interval value for any remaining string progress paths.
-		ProgressEvery: defaultProgressEvery,
+		UpdateEvery: defaultReportEvery,
 	})
 
 	return processor.New(pcfg, xfer, logger)

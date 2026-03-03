@@ -7,35 +7,21 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 )
 
-// ProgressSink receives human-readable progress lines.
-// If nil, no progress output is produced.
-type ProgressSink func(line string)
-
 // Options configures transfer behavior.
 type Options struct {
-	// ProgressEvery controls how often progress is sampled.
-	// If <= 0, defaults to 5 seconds.
-	ProgressEvery time.Duration
-
-	// Progress receives progress updates (best-effort).
-	Progress ProgressSink
-
 	// Reporter receives structured progress snapshots (preferred for progress bars).
 	// If nil, structured reporting is disabled.
 	Reporter Reporter
 
-	// ReportEvery controls how often structured progress is sampled.
+	// UpdateEvery controls how often structured progress is sampled.
 	// If <= 0, defaults to 250 milliseconds.
-	ReportEvery time.Duration
-
-	// PrintDone controls whether a final "COPY DONE" line is emitted via Progress.
-	// If Progress is nil, this has no effect.
-	PrintDone bool
+	UpdateEvery time.Duration
 }
 
 // CleanupError indicates the destination is finalized but source cleanup failed.
@@ -76,11 +62,8 @@ type RenameOrCopy struct {
 
 // NewRenameOrCopy creates a transferer that attempts os.Rename, and falls back to copy+atomic finalize.
 func NewRenameOrCopy(opts Options) *RenameOrCopy {
-	if opts.ProgressEvery <= 0 {
-		opts.ProgressEvery = 5 * time.Second
-	}
-	if opts.ReportEvery <= 0 {
-		opts.ReportEvery = 250 * time.Millisecond
+	if opts.UpdateEvery <= 0 {
+		opts.UpdateEvery = 250 * time.Millisecond
 	}
 	return &RenameOrCopy{opts: opts}
 }
@@ -189,75 +172,29 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 	var copied int64
 	start := time.Now()
 
-	var stopProgress chan struct{}
 	var stopReport chan struct{}
+	var reportWG sync.WaitGroup
+	var stopReportOnce sync.Once
 
-	// Progress ticker (only emits when progress advances)
-	if t.opts.Progress != nil {
-		stopProgress = make(chan struct{})
-		go func() {
-			tick := t.opts.ProgressEvery
-			if tick <= 0 {
-				tick = 5 * time.Second
-			}
-			ticker := time.NewTicker(tick)
-			defer ticker.Stop()
-
-			var lastBytes int64
-			lastTime := start
-			baseName := filepath.Base(dst)
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-stopProgress:
-					return
-				case now := <-ticker.C:
-					c := atomic.LoadInt64(&copied)
-					if c == lastBytes {
-						continue
-					}
-
-					dBytes := c - lastBytes
-					dt := now.Sub(lastTime).Seconds()
-					mbps := 0.0
-					if dt > 0 {
-						mbps = (float64(dBytes) / (1024 * 1024)) / dt
-					}
-
-					if total > 0 {
-						pct := (float64(c) / float64(total)) * 100
-						t.opts.Progress(fmt.Sprintf(
-							"COPYING: %s %.1f%% (%s / %s) %.1f MB/s",
-							baseName,
-							pct,
-							humanBytes(c),
-							humanBytes(total),
-							mbps,
-						))
-					} else {
-						t.opts.Progress(fmt.Sprintf(
-							"COPYING: %s (%s copied) %.1f MB/s",
-							baseName,
-							humanBytes(c),
-							mbps,
-						))
-					}
-
-					lastBytes = c
-					lastTime = now
-				}
-			}
-		}()
-		defer close(stopProgress)
+	stopReporter := func() {
+		if stopReport == nil {
+			return
+		}
+		stopReportOnce.Do(func() {
+			close(stopReport)
+			reportWG.Wait()
+		})
 	}
+	defer stopReporter()
 
 	// Structured reporter ticker (intended for progress bars).
 	if t.opts.Reporter != nil {
 		stopReport = make(chan struct{})
+		reportWG.Add(1)
 		go func() {
-			tick := t.opts.ReportEvery
+			defer reportWG.Done()
+
+			tick := t.opts.UpdateEvery
 			if tick <= 0 {
 				tick = 250 * time.Millisecond
 			}
@@ -300,7 +237,6 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 				}
 			}
 		}()
-		defer close(stopReport)
 	}
 
 	// Counting reader updates "copied" atomically
@@ -348,26 +284,18 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 	// Success: disable deferred temp cleanup.
 	cleanupTmp = false
 
+	// Ensure no further updates can be emitted before the final callback.
+	stopReporter()
+
 	// Structured completion callback
-	if t.opts.Reporter != nil && t.opts.PrintDone {
+	if t.opts.Reporter != nil {
 		t.opts.Reporter.Done(Snapshot{
 			Name:     filepath.Base(dst),
-			Copied:   total,
+			Copied:   atomic.LoadInt64(&copied),
 			Total:    total,
 			RateMBps: 0,
 			Elapsed:  time.Since(start),
 		})
-	}
-
-	// Optional final completion line
-	if t.opts.Progress != nil && t.opts.PrintDone {
-		base := filepath.Base(dst)
-		elapsed := time.Since(start).Round(time.Second)
-		if total > 0 {
-			t.opts.Progress(fmt.Sprintf("COPY DONE: %s (%s) in %s", base, humanBytes(total), elapsed))
-		} else {
-			t.opts.Progress(fmt.Sprintf("COPY DONE: %s in %s", base, elapsed))
-		}
 	}
 
 	return nil

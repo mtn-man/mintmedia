@@ -376,51 +376,6 @@ func (r *terminalReporter) etaToken(s Snapshot) (string, bool) {
 	return "ETA " + eta.String(), true
 }
 
-// NewTerminalAwareProgressSink returns a ProgressSink that:
-// - If stdout is a terminal: prints COPYING lines in-place (same line), and prints COPY DONE as a final line.
-// - If stdout is not a terminal: prints all lines as normal newline-delimited logs.
-//
-// This keeps daemon logs clean while still providing a nice UX for interactive runs.
-func NewTerminalAwareProgressSink(out *os.File) ProgressSink {
-	inPlace := IsTerminal(out)
-
-	var mu sync.Mutex
-
-	return func(line string) {
-		line = strings.TrimSpace(line)
-		if line == "" || out == nil {
-			return
-		}
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		rendered := line
-		if inPlace {
-			if strings.HasPrefix(line, "COPYING:") {
-				rendered = colorizeCopyingLine(line)
-			} else if strings.HasPrefix(line, "COPY DONE:") {
-				rendered = colorizeCopyDoneLine(line)
-			}
-		}
-
-		// In-place progress only for COPYING lines, and only on terminal output.
-		if inPlace && strings.HasPrefix(line, "COPYING:") {
-			// \r = carriage return, \033[2K = ANSI clear entire line
-			_, _ = fmt.Fprintf(out, "\r\033[2K%s", rendered)
-			return
-		}
-
-		// For non-COPYING lines, ensure we end any in-place line cleanly.
-		if inPlace {
-			_, _ = fmt.Fprint(out, "\r\033[2K")
-		}
-
-		// Print as a normal line.
-		_, _ = fmt.Fprintln(out, rendered)
-	}
-}
-
 func terminalWidth(out *os.File) (int, bool) {
 	if out == nil {
 		return 0, false
