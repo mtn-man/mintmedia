@@ -1395,17 +1395,14 @@ func newTestProcessor(t *testing.T) *processorImpl {
 	drop := filepath.Join(root, "drop")
 	movies := filepath.Join(root, "Movies")
 	shows := filepath.Join(root, "Shows")
-	hist := filepath.Join(root, "history.log")
-
 	mkdirAll(t, drop)
 	mkdirAll(t, movies)
 	mkdirAll(t, shows)
 
 	cfg := Config{
-		DropFolder:  drop,
-		MoviesDir:   movies,
-		ShowsDir:    shows,
-		HistoryFile: hist,
+		DropFolder: drop,
+		MoviesDir:  movies,
+		ShowsDir:   shows,
 
 		MainMediaExtensions:      []string{".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm"},
 		AssociatedFileExtensions: []string{".srt", ".sub", ".ass", ".idx", ".vtt", ".nfo"},

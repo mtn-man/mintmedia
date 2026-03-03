@@ -53,9 +53,15 @@ associated_file_extensions = [".srt"]
 	if res.StateDirAbs != state {
 		t.Fatalf("StateDirAbs = %q, want %q", res.StateDirAbs, state)
 	}
-	wantHistory := filepath.Join(state, "history.log")
+	wantHistory := filepath.Join(state, "history.jsonl")
 	if res.HistoryFileAbs != wantHistory {
 		t.Fatalf("HistoryFileAbs = %q, want %q", res.HistoryFileAbs, wantHistory)
+	}
+	if res.ConsoleLogLevel != "INFO" {
+		t.Fatalf("ConsoleLogLevel = %q, want %q", res.ConsoleLogLevel, "INFO")
+	}
+	if res.HistoryLogLevel != "WARN" {
+		t.Fatalf("HistoryLogLevel = %q, want %q", res.HistoryLogLevel, "WARN")
 	}
 
 	for _, dir := range []string{drop, state, movies, shows} {
@@ -66,6 +72,55 @@ associated_file_extensions = [".srt"]
 		if !st.IsDir() {
 			t.Fatalf("expected dir (%s), got file", dir)
 		}
+	}
+}
+
+func TestLoad_LoggingConfigOverridesDefaults(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+
+[logging]
+console_level = "error"
+history_level = "info"
+history_file = "ops/history.jsonl"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, res, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if res.ConsoleLogLevel != "ERROR" {
+		t.Fatalf("ConsoleLogLevel = %q, want %q", res.ConsoleLogLevel, "ERROR")
+	}
+	if res.HistoryLogLevel != "INFO" {
+		t.Fatalf("HistoryLogLevel = %q, want %q", res.HistoryLogLevel, "INFO")
+	}
+	wantHistory := filepath.Join(state, "ops", "history.jsonl")
+	if res.HistoryFileAbs != wantHistory {
+		t.Fatalf("HistoryFileAbs = %q, want %q", res.HistoryFileAbs, wantHistory)
 	}
 }
 
@@ -104,6 +159,85 @@ host = ""
 	}
 	if !strings.Contains(err.Error(), "torrent.host is required") {
 		t.Fatalf("expected host error, got: %v", err)
+	}
+}
+
+func TestLoad_RejectsLegacyProcessingHistoryFile(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+
+[processing]
+history_file = "history.log"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "processing.history_file has been removed") {
+		t.Fatalf("expected processing.history_file removal error, got: %v", err)
+	}
+}
+
+func TestLoad_RejectsLegacyProcessingSection(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+
+[processing]
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "[processing] section has been removed") {
+		t.Fatalf("expected processing section removal error, got: %v", err)
 	}
 }
 

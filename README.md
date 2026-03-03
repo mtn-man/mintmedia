@@ -53,6 +53,10 @@ Other flags:
 - `system.shutdown_grace_duration` configures how long shutdown waits for in-flight work before forced cancellation.
 - `system.shutdown_force_timeout` configures how long shutdown waits after cancellation before giving up.
 - `watch.drop_settle_duration` controls how long a path must be quiet before it is processed.
+- `logging.console_level` controls console operational log verbosity (`DEBUG|INFO|WARN|ERROR`).
+- `logging.history_level` controls what severity is persisted to history JSONL.
+- `logging.history_file` sets the persistent JSONL path (relative paths resolve under `paths.state_dir`).
+- `processing.history_file` is no longer supported.
 - `clipboard` and `torrent` sections enable optional Transmission automation.
 - `torrent.auto_cleanup_completed_torrents` toggles removing completed Transmission entries after successful APPLIED processing (default: disabled).
 

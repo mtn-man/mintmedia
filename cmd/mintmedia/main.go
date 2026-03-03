@@ -16,8 +16,8 @@ import (
 
 	"github.com/Mtn-Man/mintmedia/internal/config"
 	"github.com/Mtn-Man/mintmedia/internal/daemon"
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
-	"github.com/Mtn-Man/mintmedia/internal/state"
 	"github.com/Mtn-Man/mintmedia/internal/transfer"
 )
 
@@ -106,7 +106,14 @@ func main() {
 		return
 	}
 
-	hist, err := state.NewFileHistoryWriter(resolved.HistoryFileAbs, state.HistoryOptions{Fsync: false})
+	logger, err := logging.New(logging.Options{
+		Stdout:               os.Stdout,
+		Stderr:               os.Stderr,
+		ConsoleLevel:         resolved.ConsoleLogLevel,
+		HistoryLevel:         resolved.HistoryLogLevel,
+		HistoryFile:          resolved.HistoryFileAbs,
+		HistoryInfoAllowlist: logging.DefaultHistoryInfoAllowlist(),
+	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(exitError)
@@ -114,7 +121,7 @@ func main() {
 
 	suppressReporterDone := mode.ProcessDrop && !*verbose
 
-	proc, err := newGoProcessor(resolved, hist, suppressReporterDone)
+	proc, err := newGoProcessor(resolved, logger, suppressReporterDone)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(exitError)
@@ -194,7 +201,7 @@ func main() {
 	}
 
 	// ---- Daemon mode ---------------------------------------------------------
-	interrupted, err := runDaemonMode(cfg, resolved, proc, hist)
+	interrupted, err := runDaemonMode(cfg, resolved, proc, logger)
 	if err != nil {
 		if errors.Is(err, daemon.ErrShutdownTimedOut) {
 			fmt.Fprintln(os.Stderr, err.Error())
@@ -210,12 +217,11 @@ func main() {
 
 // --- Go-native processor wiring --------------------------------------------
 
-func newGoProcessor(res *config.Resolved, hist state.HistoryWriter, suppressReporterDone bool) (processor.Processor, error) {
+func newGoProcessor(res *config.Resolved, logger logging.Logger, suppressReporterDone bool) (processor.Processor, error) {
 	pcfg := processor.Config{
-		DropFolder:  res.DropFolderAbs,
-		MoviesDir:   res.DestDirMoviesAbs,
-		ShowsDir:    res.DestDirShowsAbs,
-		HistoryFile: res.HistoryFileAbs,
+		DropFolder: res.DropFolderAbs,
+		MoviesDir:  res.DestDirMoviesAbs,
+		ShowsDir:   res.DestDirShowsAbs,
 
 		MainMediaExtensions:      res.MainMediaExtensions,
 		AssociatedFileExtensions: res.AssociatedFileExtensions,
@@ -241,7 +247,7 @@ func newGoProcessor(res *config.Resolved, hist state.HistoryWriter, suppressRepo
 		ProgressEvery: defaultProgressEvery,
 	})
 
-	return processor.New(pcfg, xfer, hist)
+	return processor.New(pcfg, xfer, logger)
 }
 
 func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
@@ -261,6 +267,8 @@ func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
 	fmt.Printf("  Clipboard poll:     %s\n", resolved.ClipboardPollInterval)
 	fmt.Printf("  Shutdown grace:     %s\n", resolved.ShutdownGraceDuration)
 	fmt.Printf("  Shutdown force:     %s\n", resolved.ShutdownForceTimeout)
+	fmt.Printf("  Console log level:  %s\n", resolved.ConsoleLogLevel)
+	fmt.Printf("  History log level:  %s\n", resolved.HistoryLogLevel)
 	fmt.Println()
 
 	if cfg.Features.EnableProcessing {

@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 	"github.com/Mtn-Man/mintmedia/internal/transfer"
 )
 
@@ -66,11 +66,15 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 
 	// Move main media first
 	if err := p.xfer.Move(ctx, pl.MainSourcePath, pl.DestMainPath); err != nil {
-		if !handleCleanupError(p, ctx, err, "main", pl.MainSourcePath, pl.DestMainPath) {
+		if !handleCleanupError(p, err, "main", pl.MainSourcePath, pl.DestMainPath) {
 			return Result{Plan: pl}, fmt.Errorf("move main media: %w", err)
 		}
 	}
-	appendHistory(p, ctx, fmt.Sprintf("MOVE\tmain\t%s\t%s\t%s", pl.MainSourcePath, pl.DestMainPath, pl.Category))
+	logInfoHistoryOnly(p, logging.EventProcessorMoveMainApplied, logging.Fields{
+		"src":      pl.MainSourcePath,
+		"dst":      pl.DestMainPath,
+		"category": string(pl.Category),
+	})
 
 	// Move associated files best-effort
 	for _, mv := range pl.Associated {
@@ -84,24 +88,37 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			return Result{Plan: pl, Applied: true}, fmt.Errorf("create associated dest dir %q: %w", filepath.Dir(mv.Dest), err)
 		}
 		if err := p.xfer.Move(ctx, mv.Source, mv.Dest); err != nil {
-			if handleCleanupError(p, ctx, err, "associated", mv.Source, mv.Dest) {
-				appendHistory(p, ctx, fmt.Sprintf("MOVE\tassociated\t%s\t%s\t%s", mv.Source, mv.Dest, pl.Category))
+			if handleCleanupError(p, err, "associated", mv.Source, mv.Dest) {
+				logInfoHistoryOnly(p, logging.EventProcessorMoveAssociatedApplied, logging.Fields{
+					"src":      mv.Source,
+					"dst":      mv.Dest,
+					"category": string(pl.Category),
+				})
 				continue
 			}
 			if pl.InputPath != "" && assocFailedByInput != nil {
 				assocFailedByInput[pl.InputPath] = true
 			}
-			appendHistory(p, ctx, fmt.Sprintf("WARN\tassoc_move_failed\t%s\t%s\t%v", mv.Source, mv.Dest, err))
+			logWarnHistoryOnly(p, logging.EventProcessorMoveAssociatedFailed, err, logging.Fields{
+				"src":      mv.Source,
+				"dst":      mv.Dest,
+				"category": string(pl.Category),
+			})
 			continue
 		}
-		appendHistory(p, ctx, fmt.Sprintf("MOVE\tassociated\t%s\t%s\t%s", mv.Source, mv.Dest, pl.Category))
+		logInfoHistoryOnly(p, logging.EventProcessorMoveAssociatedApplied, logging.Fields{
+			"src":      mv.Source,
+			"dst":      mv.Dest,
+			"category": string(pl.Category),
+		})
 	}
 
 	// Cleanup: move source directory to Trash if safe (only for directory inputs)
 	if pl.DeleteEmptyInputDir {
 		if pl.InputPath != "" && assocFailedByInput[pl.InputPath] {
-			appendHistory(p, ctx, fmt.Sprintf("WARN\tcleanup_skipped_assoc_failed\t%s", pl.InputPath))
-			fmt.Fprintf(os.Stderr, "CLEANUP SKIPPED: %s (reason=associated move failed)\n", pl.InputPath)
+			logWarn(p, logging.EventProcessorCleanupSkippedAssociatedFailed, fmt.Sprintf("CLEANUP SKIPPED: %s (reason=associated move failed)", pl.InputPath), nil, logging.Fields{
+				"input_path": pl.InputPath,
+			})
 			return Result{
 				Plan:    pl,
 				Applied: true,
@@ -110,8 +127,9 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			}, nil
 		}
 		if err := cleanupSourceDirIfSafe(p, pl.InputPath); err != nil {
-			appendHistory(p, ctx, fmt.Sprintf("WARN\tcleanup_failed\t%s\t%v", pl.InputPath, err))
-			fmt.Fprintf(os.Stderr, "CLEANUP SKIPPED: %s (reason=%v)\n", pl.InputPath, err)
+			logWarn(p, logging.EventProcessorCleanupSkippedFailed, fmt.Sprintf("CLEANUP SKIPPED: %s (reason=%v)", pl.InputPath, err), err, logging.Fields{
+				"input_path": pl.InputPath,
+			})
 		}
 	}
 
@@ -250,14 +268,7 @@ func sameDevice(a, b string) (bool, error) {
 	return aSys.Dev == bSys.Dev, nil
 }
 
-func appendHistory(p *processorImpl, ctx context.Context, entry string) {
-	if p.history == nil {
-		return
-	}
-	_ = p.history.Append(ctx, fmt.Sprintf("%s\t%s", time.Now().Format(time.RFC3339), entry))
-}
-
-func handleCleanupError(p *processorImpl, ctx context.Context, err error, kind, src, dst string) bool {
+func handleCleanupError(p *processorImpl, err error, kind, src, dst string) bool {
 	var ce *transfer.CleanupError
 	if !errors.As(err, &ce) {
 		return false
@@ -278,13 +289,16 @@ func handleCleanupError(p *processorImpl, ctx context.Context, err error, kind, 
 		}
 	}
 
-	appendHistory(p, ctx, fmt.Sprintf(
-		"WARN\tcleanup_source_failed\t%s\t%s\t%s\t%v",
-		kind,
-		logSrc,
-		logDst,
+	logWarn(
+		p,
+		logging.EventProcessorCleanupSourceFailed,
+		fmt.Sprintf("CLEANUP WARN: %s source not removed: %s (err=%v)", kind, logSrc, logErr),
 		logErr,
-	))
-	fmt.Fprintf(os.Stderr, "CLEANUP WARN: %s source not removed: %s (err=%v)\n", kind, logSrc, logErr)
+		logging.Fields{
+			"cleanup_kind": kind,
+			"src":          logSrc,
+			"dst":          logDst,
+		},
+	)
 	return true
 }

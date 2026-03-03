@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/Mtn-Man/mintmedia/internal/clipboard"
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 	"github.com/Mtn-Man/mintmedia/internal/notify"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 	"github.com/Mtn-Man/mintmedia/internal/shutdown"
-	"github.com/Mtn-Man/mintmedia/internal/state"
 	"github.com/Mtn-Man/mintmedia/internal/transmission"
 	"github.com/Mtn-Man/mintmedia/internal/watch"
 )
@@ -43,8 +43,8 @@ type Daemon struct {
 	// Optional: if nil, magnets are logged only.
 	Tx *transmission.Client
 
-	// Optional: unified history log. If nil, daemon will not record magnet/tx cleanup events.
-	History state.History
+	// Optional: unified operational logger.
+	Logger logging.Logger
 
 	// Host used for "Track progress here" line (e.g., "localhost:9091").
 	TransmissionHost string
@@ -187,6 +187,9 @@ func (d *Daemon) Run(ctx context.Context) error {
 		fmt.Println("Polling clipboard for magnet links (logging only).")
 	}
 	fmt.Println("Press Ctrl+C to stop.")
+	d.logHistoryInfo(logging.EventSystemStartup, logging.Fields{
+		"mode": "daemon",
+	})
 
 	pending := make(map[string]time.Time)
 	var lastWaitLog time.Time
@@ -210,6 +213,9 @@ runLoop:
 			}
 
 			fmt.Fprintf(os.Stderr, "Destinations ready; processing %d pending item(s)\n", len(pending))
+			d.logHistoryInfo(logging.EventSystemDestinationsReady, logging.Fields{
+				"pending": len(pending),
+			})
 			for pth := range pending {
 				delete(pending, pth)
 				key := d.inFlightKey(pth)
@@ -218,6 +224,7 @@ runLoop:
 				}
 				if !d.tryMarkInFlight(key) {
 					fmt.Fprintf(os.Stderr, "WARN: suppressed duplicate path already in-flight: %s\n", pth)
+					d.logHistoryWarn(logging.EventDaemonPathDuplicate, nil, logging.Fields{"path": pth})
 					continue
 				}
 				d.jobsWg.Add(1)
@@ -232,6 +239,7 @@ runLoop:
 			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "watch error: %v\n", err)
+				d.logHistoryWarn(logging.EventDaemonWatchError, err, nil)
 			}
 
 		// --- Stable filesystem events ---
@@ -252,11 +260,15 @@ runLoop:
 			if d.DeferDestinationChecks && !d.destinationsReady() {
 				if d.isInFlight(key) {
 					fmt.Fprintf(os.Stderr, "WARN: suppressed duplicate path already in-flight: %s\n", path)
+					d.logHistoryWarn(logging.EventDaemonPathDuplicate, nil, logging.Fields{"path": path})
 					continue
 				}
 				pending[path] = time.Now()
 				if lastWaitLog.IsZero() || time.Since(lastWaitLog) > time.Minute {
 					fmt.Fprintf(os.Stderr, "Destinations not available/writable; waiting (pending=%d)\n", len(pending))
+					d.logHistoryInfo(logging.EventSystemDestinationsWaiting, logging.Fields{
+						"pending": len(pending),
+					})
 					lastWaitLog = time.Now()
 				}
 				continue
@@ -264,6 +276,7 @@ runLoop:
 
 			if !d.tryMarkInFlight(key) {
 				fmt.Fprintf(os.Stderr, "WARN: suppressed duplicate path already in-flight: %s\n", path)
+				d.logHistoryWarn(logging.EventDaemonPathDuplicate, nil, logging.Fields{"path": path})
 				continue
 			}
 			d.jobsWg.Add(1)
@@ -278,6 +291,7 @@ runLoop:
 			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "clipboard error: %v\n", err)
+				d.logHistoryWarn(logging.EventDaemonClipboardError, err, nil)
 			}
 
 		// --- Clipboard magnet events ---
@@ -317,6 +331,9 @@ runLoop:
 
 				if err := d.Tx.AddMagnet(tctx, m); err != nil {
 					fmt.Fprintf(os.Stderr, "TRANSMISSION ERROR: %v\n", err)
+					d.logHistoryWarn(logging.EventDaemonTxAddError, err, logging.Fields{
+						"btih": btihShort,
+					})
 					return
 				}
 
@@ -326,12 +343,10 @@ runLoop:
 				}
 				base := context.WithoutCancel(ctx)
 				_ = notify.PlaySound(base, d.SoundInput)
-				if d.History != nil {
-					ev := state.MagnetAdded(btihShort, dn)
-					if err := d.History.Record(context.WithoutCancel(ctx), ev); err != nil {
-						fmt.Fprintf(os.Stderr, "HISTORY ERROR: %v\n", err)
-					}
-				}
+				d.logHistoryInfo(logging.EventDaemonMagnetAdded, logging.Fields{
+					"btih": btihShort,
+					"dn":   dn,
+				})
 			}(magnet, btih, dn)
 		}
 	}
@@ -373,6 +388,9 @@ runLoop:
 					"\nShutdown requested; waiting up to %s for in-flight jobs\n",
 					shutdown.FormatDurationCompact(grace),
 				)
+				d.logHistoryInfo(logging.EventSystemShutdownRequested, logging.Fields{
+					"grace": shutdown.FormatDurationCompact(grace),
+				})
 			},
 			OnGraceElapsed: func(force time.Duration) {
 				fmt.Fprintf(
@@ -380,14 +398,22 @@ runLoop:
 					"Shutdown grace elapsed; canceling in-flight jobs (timeout=%s)\n",
 					shutdown.FormatDurationCompact(force),
 				)
+				d.logHistoryWarn(logging.EventSystemShutdownGraceElapsed, nil, logging.Fields{
+					"force": shutdown.FormatDurationCompact(force),
+				})
 			},
 		},
 	)
 	if !drain.TimedOut {
 		fmt.Println()
 		fmt.Println("Shutdown complete.")
+		d.logHistoryInfo(logging.EventSystemShutdownComplete, nil)
 		return nil
 	}
+	d.logHistoryError(logging.EventSystemShutdownTimeout, ErrShutdownTimedOut, logging.Fields{
+		"grace": shutdown.FormatDurationCompact(d.ShutdownGraceDuration),
+		"force": shutdown.FormatDurationCompact(d.ShutdownForceTimeout),
+	})
 
 	return fmt.Errorf(
 		"%w (grace=%s force=%s)",
@@ -446,6 +472,10 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "PROCESS ERROR (%s): %v (duration=%s)\n", pth, err, dur)
+		d.logHistoryError(logging.EventDaemonProcessError, err, logging.Fields{
+			"path":     pth,
+			"duration": dur.String(),
+		})
 		return
 	}
 
@@ -502,15 +532,14 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 	removed, err := d.Tx.RemoveCompleted(tctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "TRANSMISSION CLEANUP ERROR: %v\n", err)
+		d.logHistoryWarn(logging.EventDaemonTxCleanupError, err, nil)
 		return
 	}
 	if removed > 0 {
 		fmt.Printf("TRANSMISSION: removed %d completed torrent(s)\n", removed)
-		if d.History != nil {
-			if err := d.History.Record(context.WithoutCancel(ctx), state.TransmissionCleanup(removed)); err != nil {
-				fmt.Fprintf(os.Stderr, "HISTORY ERROR: %v\n", err)
-			}
-		}
+		d.logHistoryInfo(logging.EventDaemonTxCleanupRemoved, logging.Fields{
+			"removed": removed,
+		})
 	}
 }
 
@@ -647,4 +676,52 @@ func truncateForLog(s string, max int) string {
 		return string(rs[:max])
 	}
 	return string(rs[:max-3]) + "..."
+}
+
+func (d *Daemon) logHistoryInfo(event logging.Event, fields logging.Fields) {
+	if d == nil || d.Logger == nil {
+		return
+	}
+	d.Logger.Log(logging.Entry{
+		Level:     logging.LevelInfo,
+		Component: componentForEvent(event),
+		Event:     event,
+		Fields:    fields,
+		ToConsole: logging.BoolPtr(false),
+	})
+}
+
+func (d *Daemon) logHistoryWarn(event logging.Event, err error, fields logging.Fields) {
+	if d == nil || d.Logger == nil {
+		return
+	}
+	d.Logger.Log(logging.Entry{
+		Level:     logging.LevelWarn,
+		Component: componentForEvent(event),
+		Event:     event,
+		Fields:    fields,
+		Err:       logging.ErrorFieldFrom(err),
+		ToConsole: logging.BoolPtr(false),
+	})
+}
+
+func (d *Daemon) logHistoryError(event logging.Event, err error, fields logging.Fields) {
+	if d == nil || d.Logger == nil {
+		return
+	}
+	d.Logger.Log(logging.Entry{
+		Level:     logging.LevelError,
+		Component: componentForEvent(event),
+		Event:     event,
+		Fields:    fields,
+		Err:       logging.ErrorFieldFrom(err),
+		ToConsole: logging.BoolPtr(false),
+	})
+}
+
+func componentForEvent(event logging.Event) string {
+	if strings.HasPrefix(string(event), "system.") {
+		return "system"
+	}
+	return "daemon"
 }

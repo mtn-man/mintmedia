@@ -15,3 +15,7 @@
 .vscode/
 .idea/
 .staticcheckcache/
+.golangci-cache/
+.tmp-drop/
+.tmp-state/
+.gocache/

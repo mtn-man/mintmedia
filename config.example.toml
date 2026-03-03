@@ -47,6 +47,16 @@ enable_processing = true
 # Default off in the example config to avoid surprises.
 enable_torrent_automation = false
 
+[logging]
+# Console operational log filter (DEBUG | INFO | WARN | ERROR)
+console_level = "INFO"
+
+# History file filter (DEBUG | INFO | WARN | ERROR)
+history_level = "WARN"
+
+# Persistent JSONL history file (stored under state_dir when relative)
+history_file = "history.jsonl"
+
 
 [clipboard]
 # Monitor clipboard for magnet links (optional / opinionated)
@@ -86,12 +96,6 @@ media_tag_blacklist = [
   "bluray",
   "elite",
 ]
-
-
-[processing]
-# History filename (stored under state_dir)
-history_file = "history.log"
-
 
 [torrent]
 # Keep the section present for discoverability, but default it OFF.

@@ -12,13 +12,14 @@ import (
 	"github.com/Mtn-Man/mintmedia/internal/clipboard"
 	"github.com/Mtn-Man/mintmedia/internal/config"
 	"github.com/Mtn-Man/mintmedia/internal/daemon"
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 	"github.com/Mtn-Man/mintmedia/internal/state"
 	"github.com/Mtn-Man/mintmedia/internal/transmission"
 	"github.com/Mtn-Man/mintmedia/internal/watch"
 )
 
-func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor.Processor, hist state.History) (bool, error) {
+func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor.Processor, logger logging.Logger) (bool, error) {
 	lockPath := filepath.Join(resolved.StateDirAbs, "mintmedia.lock")
 	releaseLock, err := state.AcquireLock(lockPath)
 	if err != nil {
@@ -69,7 +70,7 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 		Poller:  poller,
 		Proc:    proc,
 		Tx:      tx,
-		History: hist,
+		Logger:  logger,
 
 		TransmissionHost: cfg.Torrent.Host,
 

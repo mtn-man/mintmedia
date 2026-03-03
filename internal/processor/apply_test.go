@@ -350,17 +350,15 @@ func newTestProcessorWithExecDeps(t *testing.T) *processorImpl {
 	drop := filepath.Join(root, "drop")
 	movies := filepath.Join(root, "Movies")
 	shows := filepath.Join(root, "Shows")
-	histFile := filepath.Join(root, "history.log")
 
 	mkdirAll(t, drop)
 	mkdirAll(t, movies)
 	mkdirAll(t, shows)
 
 	cfg := Config{
-		DropFolder:  drop,
-		MoviesDir:   movies,
-		ShowsDir:    shows,
-		HistoryFile: histFile,
+		DropFolder: drop,
+		MoviesDir:  movies,
+		ShowsDir:   shows,
 
 		MainMediaExtensions:      []string{".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm"},
 		AssociatedFileExtensions: []string{".srt", ".sub", ".ass", ".idx", ".vtt", ".nfo"},
@@ -373,9 +371,8 @@ func newTestProcessorWithExecDeps(t *testing.T) *processorImpl {
 	}
 
 	xfer := &osRenameTransferer{}
-	hist := &memoryHistory{}
 
-	pr, err := New(cfg, xfer, hist)
+	pr, err := New(cfg, xfer, nil)
 	if err != nil {
 		t.Fatalf("New() error: %v", err)
 	}
@@ -408,18 +405,6 @@ func (f *failOneTransferer) Move(ctx context.Context, src, dst string) error {
 		return errors.New("forced transfer failure for test")
 	}
 	return f.delegate.Move(ctx, src, dst)
-}
-
-type memoryHistory struct {
-	lines []string
-}
-
-func (m *memoryHistory) Append(ctx context.Context, entry string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	m.lines = append(m.lines, entry)
-	return nil
 }
 
 type cleanupErrorTransferer struct{}

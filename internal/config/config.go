@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 	"github.com/Mtn-Man/mintmedia/internal/notify"
 )
 
@@ -25,14 +26,16 @@ const (
 
 	// Defaults (opinionated for reliability).
 	defaultMaxConcurrentProcessors = 1
-	defaultLogLevel                = "INFO"
 	defaultClipboardPollInterval   = 1 * time.Second
 	defaultDropSettleDuration      = 3 * time.Second
 	defaultShutdownGraceDuration   = 10 * time.Minute
 	defaultShutdownForceTimeout    = 15 * time.Second
 
 	// State file defaults (relative to state_dir unless absolute).
-	defaultHistoryFile = "history.log"
+	defaultHistoryFile = "history.jsonl"
+
+	defaultConsoleLevel = "INFO"
+	defaultHistoryLevel = "WARN"
 )
 
 // Config is the decoded TOML configuration (pre-normalization).
@@ -40,11 +43,11 @@ type Config struct {
 	Paths        Paths        `toml:"paths"`
 	Destinations Destinations `toml:"destinations"`
 	Features     Features     `toml:"features"`
+	Logging      Logging      `toml:"logging"`
 	System       System       `toml:"system"`
 	Watch        Watch        `toml:"watch"`
 	Clipboard    Clipboard    `toml:"clipboard"`
 	Torrent      Torrent      `toml:"torrent"`
-	Processing   Processing   `toml:"processing"`
 	Media        Media        `toml:"media"`
 	Naming       Naming       `toml:"naming"`
 }
@@ -64,11 +67,19 @@ type Features struct {
 	EnableProcessing        bool `toml:"enable_processing"`
 }
 
+type Logging struct {
+	// Optional. Defaults to INFO.
+	ConsoleLevel string `toml:"console_level"`
+	// Optional. Defaults to WARN.
+	HistoryLevel string `toml:"history_level"`
+	// Optional. If relative, resolved under paths.state_dir.
+	HistoryFile string `toml:"history_file"`
+}
+
 type System struct {
 	AutoCreateMissingDirs   bool   `toml:"auto_create_missing_dirs"`
 	DeferDestinationChecks  bool   `toml:"defer_destination_checks"`
 	MaxConcurrentProcessors int    `toml:"max_concurrent_processors"`
-	LogLevel                string `toml:"log_level"`
 	DoneNotificationMode    string `toml:"done_notification_mode"`
 	ShutdownGraceDuration   string `toml:"shutdown_grace_duration"`
 	ShutdownForceTimeout    string `toml:"shutdown_force_timeout"`
@@ -99,12 +110,6 @@ type Torrent struct {
 
 	// Optional. If unset, defaults to false.
 	AutoCleanupCompletedTorrents *bool `toml:"auto_cleanup_completed_torrents"`
-}
-
-// Processing contains processing-specific configuration.
-type Processing struct {
-	// Optional. If empty defaults to "history.log" under state_dir.
-	HistoryFile string `toml:"history_file"`
 }
 
 type Media struct {
@@ -139,7 +144,9 @@ type Resolved struct {
 
 	TransmissionRemoteAbs string
 
-	HistoryFileAbs string
+	ConsoleLogLevel string
+	HistoryLogLevel string
+	HistoryFileAbs  string
 
 	// Copy of the TOML lists (normalized/validated).
 	MainMediaExtensions      []string
@@ -166,8 +173,15 @@ func Load(configPath string) (*Config, *Resolved, error) {
 	}
 
 	var cfg Config
-	if _, err := toml.DecodeFile(cfgPathAbs, &cfg); err != nil {
+	md, err := toml.DecodeFile(cfgPathAbs, &cfg)
+	if err != nil {
 		return nil, nil, fmt.Errorf("parse TOML (%s): %w", cfgPathAbs, err)
+	}
+	if md.IsDefined("processing", "history_file") {
+		return nil, nil, fmt.Errorf("config validation failed: processing.history_file has been removed; use logging.history_file")
+	}
+	if md.IsDefined("processing") {
+		return nil, nil, fmt.Errorf("config validation failed: [processing] section has been removed; use [logging]")
 	}
 
 	applyDefaults(&cfg)
@@ -193,9 +207,6 @@ func applyDefaults(cfg *Config) {
 	if cfg.System.MaxConcurrentProcessors <= 0 {
 		cfg.System.MaxConcurrentProcessors = defaultMaxConcurrentProcessors
 	}
-	if strings.TrimSpace(cfg.System.LogLevel) == "" {
-		cfg.System.LogLevel = defaultLogLevel
-	}
 	if strings.TrimSpace(cfg.System.DoneNotificationMode) == "" {
 		cfg.System.DoneNotificationMode = notify.DoneNotificationPerFile
 	}
@@ -216,9 +227,15 @@ func applyDefaults(cfg *Config) {
 		cfg.Clipboard.PollInterval = defaultClipboardPollInterval.String()
 	}
 
-	// Processing defaults
-	if strings.TrimSpace(cfg.Processing.HistoryFile) == "" {
-		cfg.Processing.HistoryFile = defaultHistoryFile
+	// Logging defaults
+	if strings.TrimSpace(cfg.Logging.ConsoleLevel) == "" {
+		cfg.Logging.ConsoleLevel = defaultConsoleLevel
+	}
+	if strings.TrimSpace(cfg.Logging.HistoryLevel) == "" {
+		cfg.Logging.HistoryLevel = defaultHistoryLevel
+	}
+	if strings.TrimSpace(cfg.Logging.HistoryFile) == "" {
+		cfg.Logging.HistoryFile = defaultHistoryFile
 	}
 
 	// Torrent defaults
@@ -230,6 +247,20 @@ func applyDefaults(cfg *Config) {
 
 func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	var errs []error
+
+	consoleLevel, err := logging.ParseLevel(cfg.Logging.ConsoleLevel)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("logging.console_level: %w", err))
+	} else {
+		cfg.Logging.ConsoleLevel = string(consoleLevel)
+	}
+
+	historyLevel, err := logging.ParseLevel(cfg.Logging.HistoryLevel)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("logging.history_level: %w", err))
+	} else {
+		cfg.Logging.HistoryLevel = string(historyLevel)
+	}
 
 	doneNotificationMode, err := notify.NormalizeDoneNotificationMode(cfg.System.DoneNotificationMode)
 	if err != nil {
@@ -296,24 +327,24 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		errs = append(errs, errors.New("destinations.dest_dir_shows is required"))
 	}
 
-	// History file (required if processing enabled)
+	// History file path (for logger persistence)
+	hf := strings.TrimSpace(cfg.Logging.HistoryFile)
+	if hf == "" {
+		hf = defaultHistoryFile
+	}
 	historyAbs := ""
-	if cfg.Features.EnableProcessing {
-		hf := strings.TrimSpace(cfg.Processing.HistoryFile)
-		if hf == "" {
-			hf = defaultHistoryFile
-		}
-		if filepath.IsAbs(hf) || strings.HasPrefix(hf, "~") || strings.Contains(hf, "$") {
-			historyAbs, err = expandPath(hf)
-		} else {
-			historyAbs, err = expandPath(filepath.Join(stateAbs, hf))
-		}
-		if err != nil {
-			errs = append(errs, fmt.Errorf("processing.history_file: %w", err))
-		} else if historyAbs == "" {
-			errs = append(errs, errors.New("processing.history_file is empty after expansion"))
-		}
+	if filepath.IsAbs(hf) || strings.HasPrefix(hf, "~") || strings.Contains(hf, "$") {
+		historyAbs, err = expandPath(hf)
+	} else {
+		historyAbs, err = expandPath(filepath.Join(stateAbs, hf))
+	}
+	if err != nil {
+		errs = append(errs, fmt.Errorf("logging.history_file: %w", err))
+	} else if historyAbs == "" {
+		errs = append(errs, errors.New("logging.history_file is empty after expansion"))
+	}
 
+	if cfg.Features.EnableProcessing {
 		// Media extensions are required for Go processing.
 		if len(cfg.Media.MainMediaExtensions) == 0 {
 			errs = append(errs, errors.New("media.main_media_extensions is required and must be non-empty when processing is enabled"))
@@ -431,7 +462,9 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 		TransmissionRemoteAbs: transRemoteAbs,
 
-		HistoryFileAbs: historyAbs,
+		ConsoleLogLevel: cfg.Logging.ConsoleLevel,
+		HistoryLogLevel: cfg.Logging.HistoryLevel,
+		HistoryFileAbs:  historyAbs,
 
 		MainMediaExtensions:      append([]string(nil), cfg.Media.MainMediaExtensions...),
 		AssociatedFileExtensions: append([]string(nil), cfg.Media.AssociatedFileExtensions...),

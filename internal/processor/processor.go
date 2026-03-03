@@ -8,6 +8,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 )
 
 // Processor implementation notes (v1):
@@ -18,15 +20,15 @@ import (
 
 // New constructs a Processor with the provided dependencies.
 // cfg should already contain absolute, resolved paths.
-func New(cfg Config, xfer Transferer, hist HistoryWriter) (Processor, error) {
+func New(cfg Config, xfer Transferer, logger logging.Logger) (Processor, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
 
 	p := &processorImpl{
-		cfg:     cfg,
-		xfer:    xfer,
-		history: hist,
+		cfg:    cfg,
+		xfer:   xfer,
+		logger: logger,
 	}
 
 	// Normalize extension lists for predictable comparisons.
@@ -72,9 +74,9 @@ func New(cfg Config, xfer Transferer, hist HistoryWriter) (Processor, error) {
 }
 
 type processorImpl struct {
-	cfg     Config
-	xfer    Transferer
-	history HistoryWriter
+	cfg    Config
+	xfer   Transferer
+	logger logging.Logger
 
 	// Prepared helpers
 	mainExtSet  map[string]struct{}
@@ -111,13 +113,15 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 	if err != nil && !errors.As(err, &partial) {
 		var noMediaErr *NoMainMediaFoundError
 		if errors.As(err, &noMediaErr) && noMediaErr.DepthHit {
-			appendHistory(p, ctx, fmt.Sprintf(
-				"WARN\tmax_depth_reached_no_media\t%s\tdepth=%d",
-				noMediaErr.Path,
-				noMediaErr.MaxDepth,
-			))
+			logWarnHistoryOnly(p, logging.EventProcessorInputMaxDepthNoMedia, nil, logging.Fields{
+				"input_path": noMediaErr.Path,
+				"depth":      noMediaErr.MaxDepth,
+			})
 		}
 		if errors.Is(err, os.ErrNotExist) {
+			logInfoHistoryOnly(p, logging.EventProcessorInputSkippedInputMissing, logging.Fields{
+				"input_path": req.InputPath,
+			})
 			out := Result{
 				Handled: true,
 				Applied: false,
@@ -129,6 +133,10 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 		var pse *ParseShowError
 		var pme *ParseMovieError
 		if errors.As(err, &pse) || errors.As(err, &pme) {
+			logInfoHistoryOnly(p, logging.EventProcessorInputSkippedParseError, logging.Fields{
+				"input_path": req.InputPath,
+				"reason":     err.Error(),
+			})
 			out := Result{
 				Handled: true,
 				Applied: false,
@@ -138,6 +146,21 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 			return []Result{out}, nil
 		}
 		if errors.Is(err, ErrNotMedia) || errors.Is(err, ErrNoMainMediaFound) || errors.Is(err, ErrAmbiguousShow) {
+			switch {
+			case errors.Is(err, ErrNotMedia):
+				logInfoHistoryOnly(p, logging.EventProcessorInputSkippedNotMedia, logging.Fields{
+					"input_path": req.InputPath,
+				})
+			case errors.Is(err, ErrNoMainMediaFound):
+				logInfoHistoryOnly(p, logging.EventProcessorInputSkippedNoMainMedia, logging.Fields{
+					"input_path": req.InputPath,
+				})
+			default:
+				logInfoHistoryOnly(p, logging.EventProcessorInputSkippedParseError, logging.Fields{
+					"input_path": req.InputPath,
+					"reason":     err.Error(),
+				})
+			}
 			out := Result{
 				Handled: true,
 				Applied: false,
@@ -167,9 +190,15 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 		for _, issue := range partial.Issues {
 			var pme *ParseMovieError
 			if errors.As(issue.Err, &pme) {
-				fmt.Fprintf(os.Stderr, "WARN: movie pack skip (unparseable filename): %s: %v\n", issue.Path, issue.Err)
-				appendHistory(p, ctx, fmt.Sprintf("WARN\tmovie_pack_skip_unparseable\t%s\t%v", issue.Path, issue.Err))
+				msg := fmt.Sprintf("WARN: movie pack skip (unparseable filename): %s: %v", issue.Path, issue.Err)
+				logWarn(p, logging.EventProcessorMoviePackSkipUnparseable, msg, issue.Err, logging.Fields{
+					"input_path": issue.Path,
+				})
 			}
+			logInfoHistoryOnly(p, logging.EventProcessorInputSkippedParseError, logging.Fields{
+				"input_path": issue.Path,
+				"reason":     issue.Err.Error(),
+			})
 			reason := fmt.Sprintf("skipped: %s: %v", issue.Path, issue.Err)
 			out := Result{
 				Plan:    Plan{InputPath: issue.Path},
@@ -197,9 +226,6 @@ func validateConfig(cfg Config) error {
 	}
 	if strings.TrimSpace(cfg.ShowsDir) == "" {
 		missing = append(missing, "ShowsDir")
-	}
-	if strings.TrimSpace(cfg.HistoryFile) == "" {
-		missing = append(missing, "HistoryFile")
 	}
 	if len(cfg.MainMediaExtensions) == 0 {
 		missing = append(missing, "MainMediaExtensions")

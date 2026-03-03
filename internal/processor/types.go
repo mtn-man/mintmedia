@@ -118,7 +118,7 @@ func (e *ParseMovieError) Error() string {
 
 // Processor is the core media decision+execution engine.
 // Plan should be deterministic and side-effect free except for filesystem reads (stat/list).
-// Apply performs the actual filesystem modifications (moves, history writes).
+// Apply performs the actual filesystem modifications (moves, logging events).
 type Processor interface {
 	Plan(ctx context.Context, req Request) ([]Plan, error)
 	Apply(ctx context.Context, plans []Plan) ([]Result, error)
@@ -131,11 +131,6 @@ type Transferer interface {
 	Move(ctx context.Context, src, dst string) error
 }
 
-// HistoryWriter records events (moves/etc.) for later auditing/debugging.
-type HistoryWriter interface {
-	Append(ctx context.Context, entry string) error
-}
-
 // Config contains the processor-relevant configuration.
 // This is a "resolved" config: paths should be absolute and validated.
 type Config struct {
@@ -143,8 +138,6 @@ type Config struct {
 
 	MoviesDir string
 	ShowsDir  string
-
-	HistoryFile string
 
 	MainMediaExtensions      []string // includes leading dots
 	AssociatedFileExtensions []string // includes leading dots
