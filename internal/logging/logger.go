@@ -125,33 +125,81 @@ func (l *RuntimeLogger) Error(component string, event Event, msg string, err err
 	})
 }
 
+func (l *RuntimeLogger) HistoryInfo(component string, event Event, fields Fields) {
+	l.logHistoryOnly(Entry{
+		Level:     LevelInfo,
+		Component: component,
+		Event:     event,
+		Fields:    fields,
+	})
+}
+
+func (l *RuntimeLogger) HistoryWarn(component string, event Event, err error, fields Fields) {
+	l.logHistoryOnly(Entry{
+		Level:     LevelWarn,
+		Component: component,
+		Event:     event,
+		Fields:    fields,
+		Err:       ErrorFieldFrom(err),
+	})
+}
+
+func (l *RuntimeLogger) HistoryError(component string, event Event, err error, fields Fields) {
+	l.logHistoryOnly(Entry{
+		Level:     LevelError,
+		Component: component,
+		Event:     event,
+		Fields:    fields,
+		Err:       ErrorFieldFrom(err),
+	})
+}
+
 func (l *RuntimeLogger) Log(entry Entry) {
 	if l == nil {
 		return
 	}
-	entry = l.normalizeEntry(entry)
-	if entry.Level == "" || !entry.Level.valid() {
-		l.fallbackError(fmt.Errorf("invalid level: %q", entry.Level))
+	entry, ok := l.normalizeAndValidate(entry)
+	if !ok {
 		return
 	}
-	if !validEventName(entry.Event) {
-		l.fallbackError(fmt.Errorf("invalid event name: %q", entry.Event))
-		return
-	}
-
-	writeConsole := boolValue(entry.ToConsole, true)
-	writeHistory := boolValue(entry.ToHistory, true)
-
-	if writeConsole && entry.Level.gte(l.consoleMin) {
+	if entry.Level.gte(l.consoleMin) {
 		if err := l.consoleSink.Write(entry); err != nil {
 			l.fallbackError(fmt.Errorf("console sink: %w", err))
 		}
 	}
-	if writeHistory && l.shouldWriteHistory(entry) {
+	if l.shouldWriteHistory(entry) {
 		if err := l.historySink.Write(entry); err != nil {
 			l.fallbackError(fmt.Errorf("history sink: %w", err))
 		}
 	}
+}
+
+func (l *RuntimeLogger) logHistoryOnly(entry Entry) {
+	if l == nil {
+		return
+	}
+	entry, ok := l.normalizeAndValidate(entry)
+	if !ok {
+		return
+	}
+	if l.shouldWriteHistory(entry) {
+		if err := l.historySink.Write(entry); err != nil {
+			l.fallbackError(fmt.Errorf("history sink: %w", err))
+		}
+	}
+}
+
+func (l *RuntimeLogger) normalizeAndValidate(entry Entry) (Entry, bool) {
+	entry = l.normalizeEntry(entry)
+	if entry.Level == "" || !entry.Level.valid() {
+		l.fallbackError(fmt.Errorf("invalid level: %q", entry.Level))
+		return Entry{}, false
+	}
+	if !validEventName(entry.Event) {
+		l.fallbackError(fmt.Errorf("invalid event name: %q", entry.Event))
+		return Entry{}, false
+	}
+	return entry, true
 }
 
 func (l *RuntimeLogger) normalizeEntry(entry Entry) Entry {

@@ -75,9 +75,6 @@ type Daemon struct {
 	// Transmission add timeout
 	MagnetTimeout time.Duration
 
-	// If true, prints full magnet lines; if false, prints summary.
-	VerboseMagnets bool
-
 	// If true, after any successful APPLIED processing, attempt to remove all completed torrents from Transmission.
 	AutoCleanupCompletedTorrents bool
 
@@ -313,11 +310,7 @@ runLoop:
 				dn = "(no dn)"
 			}
 
-			if d.VerboseMagnets {
-				fmt.Printf("MAGNET: %s\n", magnet)
-			} else {
-				fmt.Printf("MAGNET: btih=%s dn=%q tr=%d\n", btih, truncateForLog(dn, 80), tr)
-			}
+			fmt.Printf("MAGNET: btih=%s dn=%q tr=%d\n", btih, truncateForLog(dn, 80), tr)
 
 			// If Transmission not enabled, just log.
 			if d.Tx == nil {
@@ -682,41 +675,21 @@ func (d *Daemon) logHistoryInfo(event logging.Event, fields logging.Fields) {
 	if d == nil || d.Logger == nil {
 		return
 	}
-	d.Logger.Log(logging.Entry{
-		Level:     logging.LevelInfo,
-		Component: componentForEvent(event),
-		Event:     event,
-		Fields:    fields,
-		ToConsole: logging.BoolPtr(false),
-	})
+	d.Logger.HistoryInfo(componentForEvent(event), event, fields)
 }
 
 func (d *Daemon) logHistoryWarn(event logging.Event, err error, fields logging.Fields) {
 	if d == nil || d.Logger == nil {
 		return
 	}
-	d.Logger.Log(logging.Entry{
-		Level:     logging.LevelWarn,
-		Component: componentForEvent(event),
-		Event:     event,
-		Fields:    fields,
-		Err:       logging.ErrorFieldFrom(err),
-		ToConsole: logging.BoolPtr(false),
-	})
+	d.Logger.HistoryWarn(componentForEvent(event), event, err, fields)
 }
 
 func (d *Daemon) logHistoryError(event logging.Event, err error, fields logging.Fields) {
 	if d == nil || d.Logger == nil {
 		return
 	}
-	d.Logger.Log(logging.Entry{
-		Level:     logging.LevelError,
-		Component: componentForEvent(event),
-		Event:     event,
-		Fields:    fields,
-		Err:       logging.ErrorFieldFrom(err),
-		ToConsole: logging.BoolPtr(false),
-	})
+	d.Logger.HistoryError(componentForEvent(event), event, err, fields)
 }
 
 func componentForEvent(event logging.Event) string {

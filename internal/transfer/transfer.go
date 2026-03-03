@@ -57,15 +57,35 @@ type Transferer interface {
 
 // RenameOrCopy implements rename fast-path and copy fallback.
 type RenameOrCopy struct {
-	opts Options
+	opts      Options
+	newTicker func(time.Duration) ticker
+	copyFn    func(io.Writer, io.Reader) (int64, error)
 }
+
+type ticker interface {
+	C() <-chan time.Time
+	Stop()
+}
+
+type realTicker struct {
+	t *time.Ticker
+}
+
+func (rt *realTicker) C() <-chan time.Time { return rt.t.C }
+func (rt *realTicker) Stop()               { rt.t.Stop() }
 
 // NewRenameOrCopy creates a transferer that attempts os.Rename, and falls back to copy+atomic finalize.
 func NewRenameOrCopy(opts Options) *RenameOrCopy {
 	if opts.UpdateEvery <= 0 {
 		opts.UpdateEvery = 250 * time.Millisecond
 	}
-	return &RenameOrCopy{opts: opts}
+	return &RenameOrCopy{
+		opts: opts,
+		newTicker: func(d time.Duration) ticker {
+			return &realTicker{t: time.NewTicker(d)}
+		},
+		copyFn: io.Copy,
+	}
 }
 
 func sameDevice(srcPath, dstDir string) (bool, error) {
@@ -198,8 +218,14 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 			if tick <= 0 {
 				tick = 250 * time.Millisecond
 			}
-			ticker := time.NewTicker(tick)
-			defer ticker.Stop()
+			newTicker := t.newTicker
+			if newTicker == nil {
+				newTicker = func(d time.Duration) ticker {
+					return &realTicker{t: time.NewTicker(d)}
+				}
+			}
+			progressTicker := newTicker(tick)
+			defer progressTicker.Stop()
 
 			var lastBytes int64
 			lastTime := start
@@ -211,7 +237,7 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 					return
 				case <-stopReport:
 					return
-				case now := <-ticker.C:
+				case now := <-progressTicker.C():
 					c := atomic.LoadInt64(&copied)
 					if c == lastBytes {
 						continue
@@ -246,7 +272,11 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 		copied: &copied,
 	}
 
-	_, copyErr := io.Copy(out, cr)
+	copyFn := t.copyFn
+	if copyFn == nil {
+		copyFn = io.Copy
+	}
+	_, copyErr := copyFn(out, cr)
 	syncErr := out.Sync()
 	closeErr := out.Close()
 

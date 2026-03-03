@@ -11,27 +11,14 @@ func logInfoHistoryOnly(p *processorImpl, event logging.Event, fields logging.Fi
 	if p == nil || p.logger == nil {
 		return
 	}
-	p.logger.Log(logging.Entry{
-		Level:     logging.LevelInfo,
-		Component: "processor",
-		Event:     event,
-		Fields:    fields,
-		ToConsole: logging.BoolPtr(false),
-	})
+	p.logger.HistoryInfo("processor", event, fields)
 }
 
 func logWarnHistoryOnly(p *processorImpl, event logging.Event, err error, fields logging.Fields) {
 	if p == nil || p.logger == nil {
 		return
 	}
-	p.logger.Log(logging.Entry{
-		Level:     logging.LevelWarn,
-		Component: "processor",
-		Event:     event,
-		Fields:    fields,
-		Err:       logging.ErrorFieldFrom(err),
-		ToConsole: logging.BoolPtr(false),
-	})
+	p.logger.HistoryWarn("processor", event, err, fields)
 }
 
 func logWarn(p *processorImpl, event logging.Event, msg string, err error, fields logging.Fields) {

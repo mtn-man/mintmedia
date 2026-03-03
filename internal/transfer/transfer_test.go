@@ -2,6 +2,7 @@ package transfer
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -54,17 +55,66 @@ func TestCopyThenReplace_EmitsPeriodicUpdate(t *testing.T) {
 	root := t.TempDir()
 	src := filepath.Join(root, "src.mkv")
 	dst := filepath.Join(root, "dst.mkv")
-	writeSizedFile(t, src, 32*1024*1024)
+	writeFile(t, src, strings.Repeat("p", 64*1024))
 
-	reporter := &stubReporter{}
+	reporter := &stubReporter{updateNotify: make(chan struct{}, 1)}
+	firstChunkWritten := make(chan struct{}, 1)
+	allowFirstChunk := make(chan struct{}, 1)
+	allowRemainder := make(chan struct{}, 1)
+	fakeTick := newFakeTicker()
 
 	xfer := NewRenameOrCopy(Options{
 		Reporter:    reporter,
-		UpdateEvery: 1 * time.Millisecond,
+		UpdateEvery: 50 * time.Millisecond,
 	})
+	xfer.newTicker = func(time.Duration) ticker { return fakeTick }
+	xfer.copyFn = func(w io.Writer, r io.Reader) (int64, error) {
+		<-allowFirstChunk
 
-	if err := xfer.copyThenReplace(context.Background(), src, dst); err != nil {
-		t.Fatalf("copyThenReplace error: %v", err)
+		buf := make([]byte, 1024)
+		n, err := r.Read(buf)
+		if n > 0 {
+			written, writeErr := w.Write(buf[:n])
+			if writeErr != nil {
+				return int64(written), writeErr
+			}
+			if written != n {
+				return int64(written), io.ErrShortWrite
+			}
+		}
+		firstChunkWritten <- struct{}{}
+
+		if err != nil && err != io.EOF {
+			return int64(n), err
+		}
+		if err == io.EOF {
+			return int64(n), nil
+		}
+
+		<-allowRemainder
+		rest, restErr := io.Copy(w, r)
+		return int64(n) + rest, restErr
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- xfer.copyThenReplace(context.Background(), src, dst)
+	}()
+
+	allowFirstChunk <- struct{}{}
+	waitForSignal(t, firstChunkWritten, "first chunk to be written")
+
+	fakeTick.tick(time.Now())
+	waitForSignal(t, reporter.updateNotify, "reporter update callback")
+
+	allowRemainder <- struct{}{}
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("copyThenReplace error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for copyThenReplace to return")
 	}
 
 	if reporter.UpdateCount() == 0 {
@@ -225,6 +275,7 @@ type stubReporter struct {
 	doneCount       int
 	updateCount     int
 	lateUpdateCount int
+	updateNotify    chan struct{}
 }
 
 func (s *stubReporter) Update(Snapshot) {
@@ -234,6 +285,12 @@ func (s *stubReporter) Update(Snapshot) {
 		s.lateUpdateCount++
 	}
 	s.updateCount++
+	if s.updateNotify != nil {
+		select {
+		case s.updateNotify <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func (s *stubReporter) Done(sn Snapshot) {
@@ -283,37 +340,29 @@ func writeFile(t *testing.T, path string, contents string) {
 	}
 }
 
-func writeSizedFile(t *testing.T, path string, size int64) {
+type fakeTicker struct {
+	ch chan time.Time
+}
+
+func newFakeTicker() *fakeTicker {
+	return &fakeTicker{ch: make(chan time.Time, 16)}
+}
+
+func (ft *fakeTicker) C() <-chan time.Time {
+	return ft.ch
+}
+
+func (ft *fakeTicker) Stop() {}
+
+func (ft *fakeTicker) tick(now time.Time) {
+	ft.ch <- now
+}
+
+func waitForSignal(t *testing.T, ch <-chan struct{}, reason string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("create file: %v", err)
-	}
-	defer func() {
-		if err := f.Close(); err != nil {
-			t.Fatalf("close file: %v", err)
-		}
-	}()
-
-	chunk := make([]byte, 1024*1024)
-	for i := range chunk {
-		chunk[i] = 'x'
-	}
-
-	var written int64
-	for written < size {
-		remaining := size - written
-		toWrite := len(chunk)
-		if remaining < int64(toWrite) {
-			toWrite = int(remaining)
-		}
-		n, err := f.Write(chunk[:toWrite])
-		if err != nil {
-			t.Fatalf("write chunk: %v", err)
-		}
-		written += int64(n)
+	select {
+	case <-ch:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for %s", reason)
 	}
 }

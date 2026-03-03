@@ -72,10 +72,6 @@ type Entry struct {
 	PID       int         `json:"pid"`
 	Fields    Fields      `json:"fields,omitempty"`
 	Err       *ErrorField `json:"err,omitempty"`
-
-	// Optional per-entry routing overrides.
-	ToConsole *bool `json:"-"`
-	ToHistory *bool `json:"-"`
 }
 
 // Logger is the flat logging API used by callers.
@@ -85,6 +81,9 @@ type Logger interface {
 	Info(component string, event Event, msg string, fields Fields)
 	Warn(component string, event Event, msg string, err error, fields Fields)
 	Error(component string, event Event, msg string, err error, fields Fields)
+	HistoryInfo(component string, event Event, fields Fields)
+	HistoryWarn(component string, event Event, err error, fields Fields)
+	HistoryError(component string, event Event, err error, fields Fields)
 }
 
 func normalizeFields(fields Fields) Fields {
@@ -128,18 +127,6 @@ func normalizePathValue(v any) any {
 
 func validEventName(event Event) bool {
 	return dotCaseEventRe.MatchString(strings.TrimSpace(string(event)))
-}
-
-func boolValue(v *bool, fallback bool) bool {
-	if v == nil {
-		return fallback
-	}
-	return *v
-}
-
-// BoolPtr returns a pointer to v.
-func BoolPtr(v bool) *bool {
-	return &v
 }
 
 // ErrorFieldFrom converts a Go error into the canonical structured error field.

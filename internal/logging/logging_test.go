@@ -104,21 +104,8 @@ func TestRuntimeLogger_InfoAllowlistAtWarnHistoryLevel(t *testing.T) {
 		t.Fatalf("New() error: %v", err)
 	}
 
-	noConsole := false
-	l.Log(Entry{
-		Level:     LevelInfo,
-		Component: "processor",
-		Event:     EventProcessorMoveMainApplied,
-		Fields:    Fields{"src": "a.mkv", "dst": "b.mkv"},
-		ToConsole: &noConsole,
-	})
-	l.Log(Entry{
-		Level:     LevelInfo,
-		Component: "processor",
-		Event:     Event("processor.misc.detail"),
-		Fields:    Fields{"foo": "bar"},
-		ToConsole: &noConsole,
-	})
+	l.HistoryInfo("processor", EventProcessorMoveMainApplied, Fields{"src": "a.mkv", "dst": "b.mkv"})
+	l.HistoryInfo("processor", Event("processor.misc.detail"), Fields{"foo": "bar"})
 
 	data, err := os.ReadFile(history)
 	if err != nil {
@@ -127,6 +114,46 @@ func TestRuntimeLogger_InfoAllowlistAtWarnHistoryLevel(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 persisted info line, got %d", len(lines))
+	}
+}
+
+func TestRuntimeLogger_HistoryMethodsDoNotWriteConsole(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	history := filepath.Join(t.TempDir(), "history.jsonl")
+	l, err := New(Options{
+		Stdout:               &stdout,
+		Stderr:               &stderr,
+		ConsoleLevel:         "DEBUG",
+		HistoryLevel:         "INFO",
+		HistoryFile:          history,
+		HistoryInfoAllowlist: DefaultHistoryInfoAllowlist(),
+	})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	l.HistoryInfo("processor", EventProcessorMoveMainApplied, Fields{"src": "a.mkv", "dst": "b.mkv"})
+	l.HistoryWarn("daemon", EventDaemonWatchError, errors.New("watch failed"), Fields{"path": "/tmp/drop"})
+	l.HistoryError("daemon", EventDaemonProcessError, errors.New("process failed"), Fields{"input_path": "/tmp/drop/file.mkv"})
+
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q, want empty", got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("stderr = %q, want empty", got)
+	}
+
+	data, err := os.ReadFile(history)
+	if err != nil {
+		t.Fatalf("ReadFile error: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 persisted history lines, got %d", len(lines))
 	}
 }
 

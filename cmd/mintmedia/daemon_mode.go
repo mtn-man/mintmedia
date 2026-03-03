@@ -89,7 +89,6 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 
 		MagnetTimeout: defaultMagnetTimeout,
 
-		VerboseMagnets:               false,
 		AutoCleanupCompletedTorrents: autoCleanupCompletedTorrents,
 		CleanupCooldown:              defaultCleanupCooldown,
 	}
