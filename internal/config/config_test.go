@@ -241,6 +241,88 @@ main_media_extensions = [".mkv"]
 	}
 }
 
+func TestLoad_RejectsUnknownTopLevelSection(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+
+[legacy]
+error_dir = "/tmp/errors"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown config key(s): legacy.error_dir") {
+		t.Fatalf("expected unknown key error for legacy.error_dir, got: %v", err)
+	}
+}
+
+func TestLoad_RejectsUnknownNestedKey(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = false
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+
+[logging]
+console_level = "INFO"
+history_file = "history.jsonl"
+error_dir = "/tmp/errors"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown config key(s): logging.error_dir") {
+		t.Fatalf("expected unknown key error for logging.error_dir, got: %v", err)
+	}
+}
+
 func TestLoad_TorrentRemotePathExpands(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")

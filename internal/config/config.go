@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -182,6 +183,9 @@ func Load(configPath string) (*Config, *Resolved, error) {
 	}
 	if md.IsDefined("processing") {
 		return nil, nil, fmt.Errorf("config validation failed: [processing] section has been removed; use [logging]")
+	}
+	if unknown := formatUndecodedKeys(md.Undecoded()); len(unknown) > 0 {
+		return nil, nil, fmt.Errorf("config validation failed: unknown config key(s): %s", strings.Join(unknown, ", "))
 	}
 
 	applyDefaults(&cfg)
@@ -511,4 +515,48 @@ func joinErrors(errs []error) error {
 		return fmt.Errorf("config validation failed: %w", errs[0])
 	}
 	return fmt.Errorf("config validation failed: %w", errors.Join(errs...))
+}
+
+func formatUndecodedKeys(keys []toml.Key) []string {
+	if len(keys) == 0 {
+		return nil
+	}
+	candidates := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts := make([]string, 0, len(key))
+		for _, part := range key {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			parts = append(parts, part)
+		}
+		if len(parts) == 0 {
+			continue
+		}
+		candidates = append(candidates, strings.Join(parts, "."))
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.Strings(candidates)
+
+	// Keep only the most specific keys to avoid redundant parent paths such
+	// as both "legacy" and "legacy.error_dir".
+	out := make([]string, 0, len(candidates))
+	for i, key := range candidates {
+		prefix := key + "."
+		hasChild := false
+		for j := i + 1; j < len(candidates); j++ {
+			if strings.HasPrefix(candidates[j], prefix) {
+				hasChild = true
+				break
+			}
+		}
+		if hasChild {
+			continue
+		}
+		out = append(out, key)
+	}
+	return out
 }
