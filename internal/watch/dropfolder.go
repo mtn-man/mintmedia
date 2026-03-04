@@ -95,12 +95,11 @@ func (d *DropFolderWatcher) Errors() <-chan error { return d.errs }
 // The watcher loops exit on ctx cancellation; Close() must be called to release underlying fsnotify resources.
 func (d *DropFolderWatcher) Start(ctx context.Context) error {
 	d.startMu.Lock()
+	defer d.startMu.Unlock()
+
 	if d.started {
-		d.startMu.Unlock()
 		return nil
 	}
-	d.started = true
-	d.startMu.Unlock()
 
 	// Add watches for existing directories under root.
 	if err := d.addWatchesRecursively(d.root); err != nil {
@@ -118,6 +117,7 @@ func (d *DropFolderWatcher) Start(ctx context.Context) error {
 	// Goroutine 2: periodically check pending entries and emit stable ones.
 	go d.loopSettle(ctx)
 
+	d.started = true
 	return nil
 }
 

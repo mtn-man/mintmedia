@@ -91,6 +91,41 @@ func TestDropFolderWatcher_DropMissingBeforeEmit(t *testing.T) {
 	expectNoEvent(t, w.Events(), settle+400*time.Millisecond)
 }
 
+func TestDropFolderWatcher_StartRetryAfterInitFailure(t *testing.T) {
+	root := t.TempDir()
+
+	w, err := NewDropFolderWatcher(root, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		_ = w.Close()
+	})
+
+	// Force initialization failure on first Start by removing the watch root.
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatalf("remove root: %v", err)
+	}
+	if err := w.Start(ctx); err == nil {
+		t.Fatalf("expected first Start() to fail when root is missing")
+	}
+
+	// Recreate root and ensure a second Start actually starts loops and emits events.
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("recreate root: %v", err)
+	}
+	if err := w.Start(ctx); err != nil {
+		t.Fatalf("second Start() error: %v", err)
+	}
+
+	filePath := filepath.Join(root, "retry-ok.mkv")
+	writeFile(t, filePath, "data")
+	waitForEvents(t, w.Events(), []string{filePath}, 3*time.Second)
+}
+
 func TestDropFolderWatcher_ProcessingRoot(t *testing.T) {
 	root := t.TempDir()
 

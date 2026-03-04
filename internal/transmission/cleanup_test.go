@@ -2,11 +2,13 @@ package transmission
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRemoveCompleted_RemovesOnlyCompletedIDs(t *testing.T) {
@@ -20,7 +22,7 @@ ID     Done       Have  ETA           Up    Down  Ratio  Status       Name
    3   100%    2.00 GB  Done         0.0     0.0   0.0   Idle         done-two
 Sum:            2.88 GB               0.0     0.0
 `)
-	script := writeCleanupScript(t, tmp, callsFile, removedFile, listOutput)
+	script := writeCleanupScript(t, tmp, callsFile, removedFile, listOutput, 0)
 
 	c := Client{
 		RemotePath: script,
@@ -76,7 +78,7 @@ ID     Done       Have  ETA           Up    Down  Ratio  Status       Name
    9    72%  720.0 MB  20 min        0.0     0.0   0.0   Downloading  active
 Sum:          720.0 MB               0.0     0.0
 `)
-	script := writeCleanupScript(t, tmp, callsFile, removedFile, listOutput)
+	script := writeCleanupScript(t, tmp, callsFile, removedFile, listOutput, 0)
 
 	c := Client{
 		RemotePath: script,
@@ -96,7 +98,70 @@ Sum:          720.0 MB               0.0     0.0
 	}
 }
 
-func writeCleanupScript(t *testing.T, dir, callsFile, removedFile, listOutput string) string {
+func TestRemoveCompleted_HonorsDeadlineContext(t *testing.T) {
+	tmp := t.TempDir()
+	callsFile := filepath.Join(tmp, "calls.log")
+	removedFile := filepath.Join(tmp, "removed.log")
+	listOutput := strings.TrimSpace(`
+ID     Done       Have  ETA           Up    Down  Ratio  Status       Name
+   9    72%  720.0 MB  20 min        0.0     0.0   0.0   Downloading  active
+Sum:          720.0 MB               0.0     0.0
+`)
+	// Delay list output long enough that a short context timeout must win.
+	script := writeCleanupScript(t, tmp, callsFile, removedFile, listOutput, 2)
+
+	c := Client{
+		RemotePath: script,
+		Host:       "localhost:9091",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	removed, err := c.RemoveCompleted(ctx)
+	if err == nil {
+		t.Fatalf("expected timeout error, got nil")
+	}
+	if removed != 0 {
+		t.Fatalf("RemoveCompleted() = %d, want 0 when list call times out", removed)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) && !strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
+		t.Fatalf("expected deadline exceeded error, got: %v", err)
+	}
+}
+
+func TestRemoveCompleted_HonorsCanceledContext(t *testing.T) {
+	tmp := t.TempDir()
+	callsFile := filepath.Join(tmp, "calls.log")
+	removedFile := filepath.Join(tmp, "removed.log")
+	listOutput := strings.TrimSpace(`
+ID     Done       Have  ETA           Up    Down  Ratio  Status       Name
+   9    72%  720.0 MB  20 min        0.0     0.0   0.0   Downloading  active
+Sum:          720.0 MB               0.0     0.0
+`)
+	script := writeCleanupScript(t, tmp, callsFile, removedFile, listOutput, 0)
+
+	c := Client{
+		RemotePath: script,
+		Host:       "localhost:9091",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	removed, err := c.RemoveCompleted(ctx)
+	if err == nil {
+		t.Fatalf("expected canceled context error, got nil")
+	}
+	if removed != 0 {
+		t.Fatalf("RemoveCompleted() = %d, want 0 with canceled context", removed)
+	}
+	if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), context.Canceled.Error()) {
+		t.Fatalf("expected context canceled error, got: %v", err)
+	}
+}
+
+func writeCleanupScript(t *testing.T, dir, callsFile, removedFile, listOutput string, listDelaySeconds int) string {
 	t.Helper()
 
 	scriptPath := filepath.Join(dir, "tx-cleanup.sh")
@@ -107,6 +172,9 @@ printf "%%s\n" "$*" >> %q
 
 for ((i=1; i<=$#; i++)); do
   if [[ "${!i}" == "-l" ]]; then
+    if (( %d > 0 )); then
+      sleep %d
+    fi
 cat <<'EOF'
 %s
 EOF
@@ -124,7 +192,7 @@ done
 
 echo "unexpected invocation: $*" >&2
 exit 9
-`, callsFile, listOutput, removedFile)
+`, callsFile, listDelaySeconds, listDelaySeconds, listOutput, removedFile)
 
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write cleanup script: %v", err)

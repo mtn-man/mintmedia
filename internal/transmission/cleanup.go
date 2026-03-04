@@ -22,9 +22,8 @@ func (c Client) RemoveCompleted(ctx context.Context) (int, error) {
 		return 0, err
 	}
 
-	// Ensure cleanup can finish even if the parent context is canceled (e.g., during shutdown),
-	// while still respecting any deadline/timeout the caller configured.
-	ctx = context.WithoutCancel(ctx)
+	// Obey caller context exactly. The caller chooses whether to detach from parent
+	// cancellation and/or apply a timeout.
 
 	remote := strings.TrimSpace(c.RemotePath)
 	if remote == "" {
@@ -57,6 +56,9 @@ func (c Client) listCompletedIDs(ctx context.Context, remote string) ([]int, err
 	cmd := exec.CommandContext(ctx, remote, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("transmission-remote -l failed: %w", ctxErr)
+		}
 		return nil, fmt.Errorf("transmission-remote -l failed: %w; output: %s", err, strings.TrimSpace(string(out)))
 	}
 
@@ -107,6 +109,9 @@ func (c Client) removeTorrent(ctx context.Context, remote string, id int) error 
 	cmd := exec.CommandContext(ctx, remote, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf("transmission-remote remove failed (id=%d): %w", id, ctxErr)
+		}
 		return fmt.Errorf("transmission-remote remove failed (id=%d): %w; output: %s", id, err, strings.TrimSpace(string(out)))
 	}
 	return nil

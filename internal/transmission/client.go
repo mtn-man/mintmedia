@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os/exec"
 	"strings"
+
+	"github.com/Mtn-Man/mintmedia/internal/magnet"
 )
 
 // Client invokes transmission-remote to add magnets.
@@ -33,32 +34,30 @@ func (c Client) validate() error {
 // Equivalent CLI shape:
 //
 //	transmission-remote <host> [-n user:pass] -a <magnet>
-func (c Client) AddMagnet(ctx context.Context, magnet string) error {
+func (c Client) AddMagnet(ctx context.Context, magnetURI string) error {
 	if err := c.validate(); err != nil {
 		return err
 	}
 
-	magnet = strings.TrimSpace(magnet)
-	if magnet == "" {
-		return errors.New("magnet is empty")
+	info, err := magnet.Parse(magnetURI)
+	if err != nil {
+		magnetURI = strings.TrimSpace(magnetURI)
+		switch {
+		case errors.Is(err, magnet.ErrEmpty):
+			return errors.New("magnet is empty")
+		case errors.Is(err, magnet.ErrInvalidURI):
+			return err
+		case errors.Is(err, magnet.ErrNotMagnet):
+			return fmt.Errorf("not a magnet URI: %q", magnetURI)
+		case errors.Is(err, magnet.ErrMissingBTIH):
+			return fmt.Errorf("magnet missing btih: %q", magnetURI)
+		case errors.Is(err, magnet.ErrBTIHTooShort):
+			return fmt.Errorf("magnet btih too short: %q", magnetURI)
+		default:
+			return err
+		}
 	}
-
-	u, parseErr := url.Parse(magnet)
-	if parseErr != nil {
-		return fmt.Errorf("invalid magnet URI: %w", parseErr)
-	}
-	if strings.ToLower(u.Scheme) != "magnet" {
-		return fmt.Errorf("not a magnet URI: %q", magnet)
-	}
-	xt := u.Query().Get("xt")
-	const prefix = "urn:btih:"
-	if !strings.HasPrefix(xt, prefix) {
-		return fmt.Errorf("magnet missing btih: %q", magnet)
-	}
-	h := strings.TrimSpace(strings.TrimPrefix(xt, prefix))
-	if len(h) < 8 {
-		return fmt.Errorf("magnet btih too short: %q", magnet)
-	}
+	magnetURI = info.URI
 
 	remote := strings.TrimSpace(c.RemotePath)
 	if remote == "" {
@@ -67,7 +66,7 @@ func (c Client) AddMagnet(ctx context.Context, magnet string) error {
 
 	args := c.baseArgs()
 	// Add magnet: -a <url>
-	args = append(args, "-a", magnet)
+	args = append(args, "-a", magnetURI)
 
 	cmd := exec.CommandContext(ctx, remote, args...)
 	out, err := cmd.CombinedOutput()

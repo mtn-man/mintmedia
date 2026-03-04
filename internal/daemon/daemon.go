@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/Mtn-Man/mintmedia/internal/clipboard"
 	"github.com/Mtn-Man/mintmedia/internal/logging"
+	"github.com/Mtn-Man/mintmedia/internal/magnet"
 	"github.com/Mtn-Man/mintmedia/internal/notify"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 	"github.com/Mtn-Man/mintmedia/internal/shutdown"
@@ -517,7 +517,8 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 	d.lastCleanupAt = now
 	d.cleanupMu.Unlock()
 
-	// Bound cleanup time so it can't hang forever, but do not cancel on shutdown.
+	// RemoveCompleted obeys caller context. Detach from shutdown cancellation,
+	// but keep a hard timeout so cleanup cannot hang indefinitely.
 	base := context.WithoutCancel(ctx)
 	tctx, cancel := context.WithTimeout(base, 30*time.Second)
 	defer cancel()
@@ -618,42 +619,11 @@ func dirWritable(dir string) bool {
 // --- Magnet formatting helpers ---------------------------------------------
 
 func magnetSummary(m string) (btihShort string, dn string, trackers int, ok bool) {
-	m = strings.TrimSpace(m)
-	if m == "" {
-		return "", "", 0, false
-	}
-
-	u, err := url.Parse(m)
+	info, err := magnet.Parse(m)
 	if err != nil {
 		return "", "", 0, false
 	}
-	if strings.ToLower(u.Scheme) != "magnet" {
-		return "", "", 0, false
-	}
-
-	q := u.Query()
-
-	xt := q.Get("xt")
-	const prefix = "urn:btih:"
-	if !strings.HasPrefix(xt, prefix) {
-		return "", "", 0, false
-	}
-	h := strings.TrimSpace(strings.TrimPrefix(xt, prefix))
-	// Require at least a small hash fragment; full hashes are typically 40 (hex) or 32 (base32)
-	if len(h) < 8 {
-		return "", "", 0, false
-	}
-
-	dn = q.Get("dn")
-	trackers = len(q["tr"])
-
-	if len(h) > 12 {
-		btihShort = h[:12]
-	} else {
-		btihShort = h
-	}
-
-	return btihShort, dn, trackers, true
+	return magnet.ShortBTIH(info.BTIH, 12), info.DN, info.Trackers, true
 }
 
 func truncateForLog(s string, max int) string {

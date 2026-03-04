@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Mtn-Man/mintmedia/internal/magnet"
 )
 
 var ErrUnsupportedPlatform = errors.New("clipboard backend unsupported on this platform")
@@ -50,6 +51,8 @@ func (p *Poller) Errors() <-chan error  { return p.errs }
 
 // Start begins polling. It returns immediately; polling happens in a goroutine.
 // Stop is handled by ctx cancellation.
+// NOTE: Start is safe to call only once per Poller instance. Repeated calls can
+// spawn multiple loops that race to close shared channels on shutdown.
 func (p *Poller) Start(ctx context.Context) {
 	go p.loop(ctx)
 }
@@ -105,7 +108,7 @@ func (p *Poller) loop(ctx context.Context) {
 			magnets := extractMagnetURIs(txt)
 			for _, m := range magnets {
 				m = strings.TrimSpace(m)
-				if !isValidMagnetURI(m) {
+				if !magnet.IsValid(m) {
 					continue
 				}
 				p.trySendEvent(m)
@@ -149,19 +152,4 @@ func extractMagnetURIs(text string) []string {
 	}
 
 	return out
-}
-
-func isValidMagnetURI(s string) bool {
-	if s == "" {
-		return false
-	}
-	u, err := url.Parse(s)
-	if err != nil {
-		return false
-	}
-	if strings.ToLower(u.Scheme) != "magnet" {
-		return false
-	}
-	xt := u.Query().Get("xt")
-	return strings.HasPrefix(xt, "urn:btih:") && len(strings.TrimSpace(strings.TrimPrefix(xt, "urn:btih:"))) >= 8
 }
