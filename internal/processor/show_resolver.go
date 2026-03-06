@@ -5,6 +5,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 )
 
 var reShowFolderYear = regexp.MustCompile(`^(?i)(.+?)\s*\((19\d{2}|20\d{2})\)\s*$`)
@@ -17,7 +19,7 @@ type showFolderMatch struct {
 // resolveShowFolder decides the destination show folder based on the parsed show name/year
 // and existing folders in ShowsDir. It returns the folder name to use (relative to ShowsDir),
 // the resolved year (empty when organizing into a no-year folder), or an error.
-func resolveShowFolder(showsDir, showName, showYear string) (string, string, error) {
+func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (string, string, error) {
 	showKey := normalizeFolderKey(showName)
 	if showKey == "" {
 		return "", "", fmt.Errorf("show name is empty")
@@ -86,7 +88,11 @@ func resolveShowFolder(showsDir, showName, showYear string) (string, string, err
 		return yearFolders[0].name, yearFolders[0].year, nil
 	}
 	if len(yearFolders) > 1 {
-		fmt.Fprintf(os.Stderr, "WARN: multiple show folders match %q: %s; skipping\n", showName, strings.Join(matchedYearFolder, ", "))
+		msg := fmt.Sprintf("WARN: multiple show folders match %q: %s; skipping", showName, strings.Join(matchedYearFolder, ", "))
+		logConsoleWarn(p, logging.EventProcessorInputSkippedParseError, msg, ErrAmbiguousShow, logging.Fields{
+			"path":   showsDir,
+			"reason": ErrAmbiguousShow.Error(),
+		})
 		return "", "", ErrAmbiguousShow
 	}
 

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 	"github.com/Mtn-Man/mintmedia/internal/notify"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 	"github.com/Mtn-Man/mintmedia/internal/transmission"
@@ -419,30 +420,31 @@ func TestDaemon_RunSkipsWaitingLogWhenNoInFlightJobs(t *testing.T) {
 		DeferDestinationChecks:       false,
 	}
 
-	stderr := captureStderr(t, func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		if err := w.Start(ctx); err != nil {
-			cancel()
-			t.Fatalf("Start watcher error: %v", err)
-		}
-		done := make(chan error, 1)
-		go func() { done <- d.Run(ctx) }()
+	var stderr strings.Builder
+	d.Logger = newRuntimeLoggerForTest(t, io.Discard, &stderr)
 
-		time.Sleep(150 * time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
 		cancel()
+		t.Fatalf("Start watcher error: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
 
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Fatalf("Run error: %v", err)
-			}
-		case <-time.After(3 * time.Second):
-			t.Fatalf("Run did not exit after cancel")
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run error: %v", err)
 		}
-	})
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Run did not exit after cancel")
+	}
 
-	if strings.Contains(stderr, "Shutdown requested; waiting up to") {
-		t.Fatalf("unexpected waiting log with no in-flight jobs: %q", stderr)
+	if strings.Contains(stderr.String(), "Shutdown requested; waiting up to") {
+		t.Fatalf("unexpected waiting log with no in-flight jobs: %q", stderr.String())
 	}
 }
 
@@ -486,34 +488,35 @@ func TestDaemon_RunWaitingLogStartsOnNewLineForInFlightJobs(t *testing.T) {
 		DeferDestinationChecks:       false,
 	}
 
-	stderr := captureStderr(t, func() {
-		ctx, cancel := context.WithCancel(context.Background())
-		if err := w.Start(ctx); err != nil {
-			cancel()
-			t.Fatalf("Start watcher error: %v", err)
-		}
-		done := make(chan error, 1)
-		go func() { done <- d.Run(ctx) }()
+	var stderr strings.Builder
+	d.Logger = newRuntimeLoggerForTest(t, io.Discard, &stderr)
 
-		target := filepath.Join(drop, "inflight.mkv")
-		writeFile(t, target, "data")
-
-		_ = waitForPath(t, proc.started, 3*time.Second)
-		waitForSignal(t, proc.blocked, 3*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
 		cancel()
+		t.Fatalf("Start watcher error: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
 
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Fatalf("Run error: %v", err)
-			}
-		case <-time.After(3 * time.Second):
-			t.Fatalf("Run did not exit after cancel")
+	target := filepath.Join(drop, "inflight.mkv")
+	writeFile(t, target, "data")
+
+	_ = waitForPath(t, proc.started, 3*time.Second)
+	waitForSignal(t, proc.blocked, 3*time.Second)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run error: %v", err)
 		}
-	})
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Run did not exit after cancel")
+	}
 
-	if !strings.Contains(stderr, "\nShutdown requested; waiting up to 50ms for in-flight jobs\n") {
-		t.Fatalf("expected newline-prefixed waiting log, got: %q", stderr)
+	if !strings.Contains(stderr.String(), "\nShutdown requested; waiting up to 50ms for in-flight jobs\n") {
+		t.Fatalf("expected newline-prefixed waiting log, got: %q", stderr.String())
 	}
 }
 
@@ -928,29 +931,20 @@ exit 9
 	return scriptPath
 }
 
-func captureStderr(t *testing.T, fn func()) string {
+func newRuntimeLoggerForTest(t *testing.T, stdout, stderr io.Writer) logging.Logger {
 	t.Helper()
-
-	old := os.Stderr
-	r, w, err := os.Pipe()
+	l, err := logging.New(logging.Options{
+		Stdout:               stdout,
+		Stderr:               stderr,
+		ConsoleLevel:         "INFO",
+		HistoryLevel:         "WARN",
+		HistoryFile:          filepath.Join(t.TempDir(), "history.jsonl"),
+		HistoryInfoAllowlist: logging.DefaultHistoryInfoAllowlist(),
+	})
 	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
+		t.Fatalf("logging.New() error: %v", err)
 	}
-	os.Stderr = w
-
-	done := make(chan string, 1)
-	go func() {
-		b, _ := io.ReadAll(r)
-		done <- string(b)
-	}()
-
-	fn()
-
-	_ = w.Close()
-	os.Stderr = old
-	out := <-done
-	_ = r.Close()
-	return out
+	return l
 }
 
 func expectNoPath(t *testing.T, ch <-chan string, timeout time.Duration) {

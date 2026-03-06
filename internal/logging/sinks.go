@@ -22,7 +22,7 @@ func NewConsoleSink(stdout, stderr io.Writer) *ConsoleSink {
 }
 
 func (s *ConsoleSink) Write(entry Entry) error {
-	msg := strings.TrimSpace(entry.Message)
+	msg := entry.Message
 	if msg == "" {
 		return nil
 	}

@@ -157,6 +157,72 @@ func TestRuntimeLogger_HistoryMethodsDoNotWriteConsole(t *testing.T) {
 	}
 }
 
+func TestRuntimeLogger_ConsoleMethodsDoNotWriteHistory(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	history := filepath.Join(t.TempDir(), "history.jsonl")
+	l, err := New(Options{
+		Stdout:               &stdout,
+		Stderr:               &stderr,
+		ConsoleLevel:         "INFO",
+		HistoryLevel:         "DEBUG",
+		HistoryFile:          history,
+		HistoryInfoAllowlist: DefaultHistoryInfoAllowlist(),
+	})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	l.ConsoleInfo("daemon", EventSystemStartup, "Mintmedia daemon started.", nil)
+	l.ConsoleWarn("daemon", EventDaemonWatchError, "watch error: boom", errors.New("boom"), nil)
+	l.ConsoleError("daemon", EventDaemonProcessError, "PROCESS ERROR (/tmp/in.mkv): boom", errors.New("boom"), nil)
+
+	if got := stdout.String(); got != "Mintmedia daemon started.\n" {
+		t.Fatalf("stdout = %q", got)
+	}
+	if got := stderr.String(); got != "watch error: boom\nPROCESS ERROR (/tmp/in.mkv): boom\n" {
+		t.Fatalf("stderr = %q", got)
+	}
+	if _, err := os.Stat(history); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("history file should not exist, stat error=%v", err)
+	}
+}
+
+func TestRuntimeLogger_ConsoleMethodsRejectInvalidEvent(t *testing.T) {
+	t.Parallel()
+
+	var stdout strings.Builder
+	var stderr strings.Builder
+
+	history := filepath.Join(t.TempDir(), "history.jsonl")
+	l, err := New(Options{
+		Stdout:               &stdout,
+		Stderr:               &stderr,
+		ConsoleLevel:         "INFO",
+		HistoryLevel:         "DEBUG",
+		HistoryFile:          history,
+		HistoryInfoAllowlist: DefaultHistoryInfoAllowlist(),
+	})
+	if err != nil {
+		t.Fatalf("New() error: %v", err)
+	}
+
+	l.ConsoleWarn("daemon", Event("BAD_EVENT"), "watch error: boom", errors.New("boom"), nil)
+
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout = %q", got)
+	}
+	if got := stderr.String(); !strings.Contains(got, "LOGGING ERROR: invalid event name: \"BAD_EVENT\"") {
+		t.Fatalf("stderr = %q", got)
+	}
+	if _, err := os.Stat(history); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("history file should not exist, stat error=%v", err)
+	}
+}
+
 func TestRuntimeLogger_ConcurrentHistoryWritesAreValidJSONL(t *testing.T) {
 	t.Parallel()
 

@@ -125,6 +125,38 @@ func (l *RuntimeLogger) Error(component string, event Event, msg string, err err
 	})
 }
 
+func (l *RuntimeLogger) ConsoleInfo(component string, event Event, msg string, fields Fields) {
+	l.logConsoleOnly(Entry{
+		Level:     LevelInfo,
+		Component: component,
+		Event:     event,
+		Message:   msg,
+		Fields:    fields,
+	})
+}
+
+func (l *RuntimeLogger) ConsoleWarn(component string, event Event, msg string, err error, fields Fields) {
+	l.logConsoleOnly(Entry{
+		Level:     LevelWarn,
+		Component: component,
+		Event:     event,
+		Message:   msg,
+		Fields:    fields,
+		Err:       ErrorFieldFrom(err),
+	})
+}
+
+func (l *RuntimeLogger) ConsoleError(component string, event Event, msg string, err error, fields Fields) {
+	l.logConsoleOnly(Entry{
+		Level:     LevelError,
+		Component: component,
+		Event:     event,
+		Message:   msg,
+		Fields:    fields,
+		Err:       ErrorFieldFrom(err),
+	})
+}
+
 func (l *RuntimeLogger) HistoryInfo(component string, event Event, fields Fields) {
 	l.logHistoryOnly(Entry{
 		Level:     LevelInfo,
@@ -189,17 +221,43 @@ func (l *RuntimeLogger) logHistoryOnly(entry Entry) {
 	}
 }
 
+func (l *RuntimeLogger) logConsoleOnly(entry Entry) {
+	if l == nil {
+		return
+	}
+	rawMessage := entry.Message
+	entry = l.normalizeEntry(entry)
+	// Console-only calls preserve caller formatting exactly (for compatibility
+	// with existing user-facing lines), while still using shared normalization.
+	entry.Message = rawMessage
+	if !l.validateEntry(entry) {
+		return
+	}
+	if entry.Level.gte(l.consoleMin) {
+		if err := l.consoleSink.Write(entry); err != nil {
+			l.fallbackError(fmt.Errorf("console sink: %w", err))
+		}
+	}
+}
+
 func (l *RuntimeLogger) normalizeAndValidate(entry Entry) (Entry, bool) {
 	entry = l.normalizeEntry(entry)
-	if entry.Level == "" || !entry.Level.valid() {
-		l.fallbackError(fmt.Errorf("invalid level: %q", entry.Level))
-		return Entry{}, false
-	}
-	if !validEventName(entry.Event) {
-		l.fallbackError(fmt.Errorf("invalid event name: %q", entry.Event))
+	if !l.validateEntry(entry) {
 		return Entry{}, false
 	}
 	return entry, true
+}
+
+func (l *RuntimeLogger) validateEntry(entry Entry) bool {
+	if entry.Level == "" || !entry.Level.valid() {
+		l.fallbackError(fmt.Errorf("invalid level: %q", entry.Level))
+		return false
+	}
+	if !validEventName(entry.Event) {
+		l.fallbackError(fmt.Errorf("invalid event name: %q", entry.Event))
+		return false
+	}
+	return true
 }
 
 func (l *RuntimeLogger) normalizeEntry(entry Entry) Entry {

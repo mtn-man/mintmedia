@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 	"github.com/Mtn-Man/mintmedia/internal/paths"
 )
 
@@ -52,7 +53,11 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 		mainPaths, hitMaxDepth, err := listMainMediaFromDir(ctx, p, abs)
 		if err != nil {
 			if errors.Is(err, ErrNoMainMediaFound) && hitMaxDepth {
-				fmt.Fprintf(os.Stderr, "WARN: max depth %d reached while scanning %s; no main media found\n", paths.MaxDepth, abs)
+				msg := fmt.Sprintf("WARN: max depth %d reached while scanning %s; no main media found", paths.MaxDepth, abs)
+				logConsoleWarn(p, logging.EventProcessorInputMaxDepthNoMedia, msg, nil, logging.Fields{
+					"input_path": abs,
+					"depth":      paths.MaxDepth,
+				})
 			}
 			return nil, err
 		}
@@ -336,7 +341,7 @@ func planForMain(
 		if showYear == "" && hint.ok && hint.year != "" {
 			showYear = hint.year
 		}
-		showFolder, resolvedYear, err := resolveShowFolder(p.cfg.ShowsDir, showName, showYear)
+		showFolder, resolvedYear, err := resolveShowFolder(p, p.cfg.ShowsDir, showName, showYear)
 		if err != nil {
 			return Plan{}, err
 		}

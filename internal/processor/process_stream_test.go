@@ -3,10 +3,11 @@ package processor
 import (
 	"context"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 )
 
 func TestProcess_OnResult_StreamedForAppliedPackFiles(t *testing.T) {
@@ -111,13 +112,13 @@ func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T)
 	var streamed []Result
 	var res []Result
 	var err error
-	stderr := captureStderr(t, func() {
-		res, err = p.Process(context.Background(), Request{
-			InputPath: inputDir,
-			OnResult: func(r Result) {
-				streamed = append(streamed, r)
-			},
-		})
+	var stderr strings.Builder
+	p.logger = newRuntimeLoggerForProcessorTest(t, io.Discard, &stderr)
+	res, err = p.Process(context.Background(), Request{
+		InputPath: inputDir,
+		OnResult: func(r Result) {
+			streamed = append(streamed, r)
+		},
 	})
 	if err != nil {
 		t.Fatalf("Process() error: %v", err)
@@ -147,39 +148,23 @@ func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T)
 	}
 
 	wantWarn := "WARN: movie pack skip (unparseable filename): " + unparseable + ":"
-	if !strings.Contains(stderr, wantWarn) {
-		t.Fatalf("stderr missing warning %q; got: %q", wantWarn, stderr)
+	if !strings.Contains(stderr.String(), wantWarn) {
+		t.Fatalf("stderr missing warning %q; got: %q", wantWarn, stderr.String())
 	}
 }
 
-func captureStderr(t *testing.T, fn func()) string {
+func newRuntimeLoggerForProcessorTest(t *testing.T, stdout, stderr io.Writer) logging.Logger {
 	t.Helper()
-
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
+	l, err := logging.New(logging.Options{
+		Stdout:               stdout,
+		Stderr:               stderr,
+		ConsoleLevel:         "INFO",
+		HistoryLevel:         "WARN",
+		HistoryFile:          filepath.Join(t.TempDir(), "history.jsonl"),
+		HistoryInfoAllowlist: logging.DefaultHistoryInfoAllowlist(),
+	})
 	if err != nil {
-		t.Fatalf("os.Pipe(): %v", err)
+		t.Fatalf("logging.New() error: %v", err)
 	}
-	os.Stderr = w
-	defer func() {
-		os.Stderr = oldStderr
-	}()
-
-	outCh := make(chan string, 1)
-	go func() {
-		defer func() { _ = r.Close() }()
-		data, readErr := io.ReadAll(r)
-		if readErr != nil {
-			outCh <- ""
-			return
-		}
-		outCh <- string(data)
-	}()
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("close writer: %v", err)
-	}
-	return <-outCh
+	return l
 }
