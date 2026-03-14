@@ -2,6 +2,7 @@
 .gocache/
 .gomodcache/
 # Go build artifacts
+mintmedia
 *.exe
 *.dll
 *.so
