@@ -1,44 +1,44 @@
 # mintmedia
 
-Mintmedia is a macOS drop-folder daemon and CLI that automatically organizes media files into your Movies and Shows libraries. Drop a file or folder into the watch folder, and mintmedia figures out what it is, renames it cleanly, and moves it to the right place — with optional Transmission integration for torrent automation.
+**Mintmedia** is a lightweight macOS automation tool for organizing downloaded media — a simpler, local alternative to heavier media automation tools for setups that don't need a full media server stack. Drop a file or folder into the watch folder and mintmedia figures out what it is, renames it cleanly, and moves it to your Movies or Shows library. No web UI, no database, no infrastructure — just a binary that runs on your Mac.
+
+With the daemon running and Transmission integration enabled, the full workflow is hands-free: copy a magnet link, and mintmedia handles the rest — queuing the download, organizing the files when it finishes, and dropping them into a library structure ready for Plex, Infuse, Jellyfin, or any other player.
+
+## Installation
+
+```
+brew install mtn-man/tools/mintmedia
+```
 
 ## Quick Start
 
-1. Run `mintmedia` once. If no config file exists, one is created automatically at `~/.config/mintmedia/config.toml` with sensible macOS defaults:
+1. Run `mintmedia` to get started — a config is created automatically on first run at `~/.config/mintmedia/config.toml` with sensible defaults:
    - **Drop folder**: `~/Downloads/MintDrop`
    - **Movies**: `~/Movies/Movies`
    - **Shows**: `~/Movies/Shows`
-   - **State/history**: `~/Library/Application Support/mintmedia`
 
-2. Review and adjust the config if needed — in particular, update the destination paths if your media library lives somewhere else.
+2. Drop some media into `~/Downloads/MintDrop` and run `mintmedia` to process it.
 
-3. Process your drop folder once:
-   ```
-   mintmedia --process-drop
-   ```
-
-4. Or run as a background daemon that watches for new files automatically:
+3. To run continuously in the background, watching for new files as they arrive:
    ```
    mintmedia --daemon
    ```
 
-That's it. The drop folder and state directories are created automatically on first run. Destination directories are created on first use.
+That's it. Edit the config file if you want to use different paths.
 
-> Use `--config <path>` to point mintmedia at a different config file if you don't want to use the default location.
+## How It Works
 
-## How Processing Works
+When mintmedia processes a file or folder, it:
 
-When mintmedia processes a path, it:
+1. Finds the main media file (by extension — `.mkv`, `.mp4`, etc.)
+2. Figures out whether it's a movie or a TV show from the filename
+3. Parses the title, year, and season/episode information
+4. Moves everything — main file and any subtitles — to the right destination with a clean name
+5. If the input was a folder and everything moved successfully, sends it to Trash
 
-1. **Scans for main media** — looks for files matching `media.main_media_extensions` (`.mkv`, `.mp4`, etc.)
-2. **Classifies** — determines movie vs. show from the filename using pattern matching and release tag parsing
-3. **Plans the move** — computes clean destination paths using parsed title, year, season/episode info
-4. **Moves files** — relocates the main file and any associated files (subtitles, etc.) to the destination
-5. **Cleans up** — if the input was a directory and everything moved cleanly, moves the source directory to Trash
+If a subtitle or other accompanying file can't be moved, the main media is still moved and you'll see a warning. The source folder is left in place if anything was left behind.
 
-Associated file failures (e.g., a subtitle that couldn't be moved) are non-fatal — the main media is still moved and a warning is printed. The source directory is not trashed if any associated files failed.
-
-Use `--plan <path>` to preview what mintmedia would do without making any changes.
+Use `--plan <path>` to preview what mintmedia would do without touching anything.
 
 ## CLI Reference
 
@@ -46,63 +46,46 @@ Use `--plan <path>` to preview what mintmedia would do without making any change
 mintmedia [flags]
 ```
 
-**Modes** (choose one; default is `--process-drop` when `features.enable_processing=true`):
+With no flags, mintmedia processes everything currently in the drop folder.
 
 | Flag | Description |
 |------|-------------|
-| `--plan <path>` | Preview the processing plan — no filesystem changes |
-| `--apply <path>` | Plan then apply changes for a specific path |
-| `--process <path>` | Process a path with policy (silently skips non-media) |
-| `-p, --process-drop` | Process everything currently in the drop folder |
-| `-d, --daemon` | Run the daemon (watches drop folder, polls clipboard) |
-
-**Other flags:**
-
-| Flag | Description |
-|------|-------------|
-| `--config <path>` | Config file path (default: `~/.config/mintmedia/config.toml`) |
-| `-v, --verbose` | Print config summary at startup |
-| `-h, --help` | Show help |
+| `--daemon` / `-d` | Run continuously, watching for new files |
+| `--apply <path>` | Process a specific path |
+| `--plan <path>` | Preview what would happen — no changes made |
+| `--config <path>` | Use a different config file |
+| `--verbose` / `-v` | Print config summary at startup |
+| `--help` / `-h` | Show help |
 
 ## Configuration
 
-The config file is TOML. Run `mintmedia` once to generate the default, then edit as needed. `config.example.toml` in this repository documents every available option.
+The config file lives at `~/.config/mintmedia/config.toml` and is created automatically on first run. Open it to customize paths, extensions, and behavior. Every option is documented in `config.example.toml`.
 
-**Key settings:**
+**Commonly changed settings:**
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `paths.drop_folder` | `~/Downloads/MintDrop` | Folder to watch/process |
-| `paths.state_dir` | `~/Library/Application Support/mintmedia` | History and state files |
-| `destinations.dest_dir_movies` | `~/Movies/Movies` | Where processed movies land |
-| `destinations.dest_dir_shows` | `~/Movies/Shows` | Where processed shows land |
-| `features.enable_processing` | `true` | Enable the file processor |
-| `system.auto_create_missing_dirs` | `true` | Create drop/state dirs if missing |
-| `system.defer_destination_checks` | `true` | Don't require destinations at startup |
-| `system.done_notification_mode` | `per_file` | Sound on completion: `per_file`, `per_job`, or `off` |
-| `watch.drop_settle_duration` | `3s` | How long a path must be quiet before processing |
-| `logging.console_level` | `INFO` | Console verbosity: `DEBUG`, `INFO`, `WARN`, `ERROR` |
-| `logging.history_file` | `history.jsonl` | Persistent JSONL log (relative to `state_dir`) |
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `paths.drop_folder` | `~/Downloads/MintDrop` | Where to look for incoming media |
+| `destinations.dest_dir_movies` | `~/Movies/Movies` | Where processed movies go |
+| `destinations.dest_dir_shows` | `~/Movies/Shows` | Where processed shows go |
+| `system.done_notification_mode` | `per_file` | Sound after processing: `per_file`, `per_job`, or `off` |
+| `watch.drop_settle_duration` | `3s` | How long to wait after a file stops changing before processing it |
+| `logging.console_level` | `INFO` | How much to print: `DEBUG`, `INFO`, `WARN`, or `ERROR` |
 
-**Notes:**
-- `dest_dir_movies` and `dest_dir_shows` must be different paths and neither may contain the other.
-- `defer_destination_checks = true` means the daemon will start even if destinations aren't mounted yet. Files that arrive before the destination is ready are queued and processed once it becomes available — useful for NAS or Tailscale-mounted shares.
-- `media.main_media_extensions` and `media.associated_file_extensions` control which files are treated as main media vs. accompanying files.
-- `naming.media_tag_blacklist` strips common release tags (codec, resolution, source) from parsed names.
+**A few things worth knowing:**
+- Movies and Shows destinations must be different directories — one can't be inside the other.
+- With `system.defer_destination_checks = true` (the default), the daemon starts even if your destinations aren't mounted yet. Anything that arrives while they're unavailable is queued and processed once they come back online — handy for NAS or Tailscale-mounted shares.
 
-## Logging and History
+## Logs
 
-Mintmedia writes a structured JSONL history log to `logging.history_file` (default: `history.jsonl` inside `state_dir`). This log records every file moved, every skip, and every warning — useful for auditing what the tool has done.
-
-Console output is controlled separately by `logging.console_level`. The history log level is controlled by `logging.history_level`.
-
-If you need to investigate why a file wasn't moved or a subtitle was left behind, the history log is the first place to look.
+Mintmedia keeps a structured log of everything it does at `~/Library/Application Support/mintmedia/history.jsonl` by default. If a file ended up somewhere unexpected, or a subtitle was left behind, that's the first place to look.
 
 ## Transmission Integration
 
-Mintmedia can monitor the clipboard for magnet links and submit them to Transmission automatically, then remove completed torrents from Transmission after their files have been processed.
+When the daemon is running, mintmedia watches the clipboard for magnet links. Copy one and it's automatically added to Transmission. When the download finishes, mintmedia organizes the files and removes the completed torrent — nothing left to do.
 
-Enable in config:
+To enable, add this to your config:
+
 ```toml
 [features]
 enable_torrent_automation = true
@@ -117,10 +100,4 @@ transmission_remote_path = "/opt/homebrew/bin/transmission-remote"
 auto_cleanup_completed_torrents = true
 ```
 
-Clipboard polling requires a macOS build with cgo enabled.
-
-## Platform Support
-
-- **Primary target**: macOS. Sound notifications (`afplay`), sleep prevention (`caffeinate`), and clipboard magnet polling (AppKit pasteboard) are macOS-only.
-- **Linux**: Supported on a best-effort basis for non-clipboard workflows. Clipboard polling is stubbed out.
-- Clipboard magnet polling requires a `darwin` build with `cgo` enabled.
+Clipboard monitoring is macOS-only and requires a cgo-enabled build (the default).
