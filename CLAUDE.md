@@ -38,7 +38,7 @@ The compiled binary is `mintmedia`. Default config path is `~/.config/mintmedia/
 ### Wiring (main.go)
 
 All dependency wiring happens in `main.go` before mode dispatch:
-1. `config.Load()` → `*config.Config` + `*config.Resolved` (normalized paths, parsed durations)
+1. `config.Load()` → `(*config.Config, *config.Resolved, bool, error)` — the bool is `bootstrapped` (true when no config existed and a default was written). If `--config` is not passed, Load auto-generates `~/.config/mintmedia/config.toml` from the embedded `internal/config/defaults.toml` on first run.
 2. `logging.New()` → `logging.Logger` (two sinks: console + JSONL history)
 3. `transfer.NewRenameOrCopy()` → `transfer.Transferer` (fast rename, falls back to copy+atomic finalize)
 4. `processor.New(cfg, xfer, logger)` → `processor.Processor`
