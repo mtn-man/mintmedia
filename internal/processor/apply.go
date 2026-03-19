@@ -77,6 +77,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	})
 
 	// Move associated files best-effort
+	assocFailedCount := 0
 	for _, mv := range pl.Associated {
 		if ctx.Err() != nil {
 			return Result{Plan: pl, Applied: true}, ctx.Err()
@@ -96,6 +97,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 				})
 				continue
 			}
+			assocFailedCount++
 			if pl.InputPath != "" && assocFailedByInput != nil {
 				assocFailedByInput[pl.InputPath] = true
 			}
@@ -111,6 +113,14 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			"dst":      mv.Dest,
 			"category": string(pl.Category),
 		})
+	}
+	if assocFailedCount > 0 {
+		logConsoleWarn(p, logging.EventProcessorMoveAssociatedFailed,
+			fmt.Sprintf("WARN: %d associated file(s) not moved for %s; check history log for details",
+				assocFailedCount, filepath.Base(pl.MainSourcePath)),
+			nil,
+			logging.Fields{"input_path": pl.InputPath},
+		)
 	}
 
 	// Cleanup: move source directory to Trash if safe (only for directory inputs)

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mtn-Man/mintmedia/internal/logging"
 	"github.com/Mtn-Man/mintmedia/internal/transfer"
 )
 
@@ -338,6 +339,71 @@ func TestApply_RefusesToDeleteDropFolderRoot_WhenInputIsRoot(t *testing.T) {
 	// Drop folder root must still exist (cleanup should refuse to delete it).
 	if st, err := os.Stat(p.cfg.DropFolder); err != nil || !st.IsDir() {
 		t.Fatalf("drop folder missing or not a dir after Apply: %v", err)
+	}
+}
+
+func TestApply_AssociatedMoveFailure_EmitsConsoleWarn(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	var consoleBuf strings.Builder
+	logger, err := logging.New(logging.Options{
+		Stdout:               &consoleBuf,
+		Stderr:               &consoleBuf,
+		ConsoleLevel:         "WARN",
+		HistoryLevel:         "WARN",
+		HistoryFile:          filepath.Join(root, "history.jsonl"),
+		HistoryInfoAllowlist: nil,
+	})
+	if err != nil {
+		t.Fatalf("logging.New: %v", err)
+	}
+
+	cfg := Config{
+		DropFolder:               drop,
+		MoviesDir:                movies,
+		ShowsDir:                 shows,
+		MainMediaExtensions:      []string{".mkv"},
+		AssociatedFileExtensions: []string{".srt"},
+		MediaTagBlacklist:        []string{"1080p", "x265"},
+	}
+	pr, err := New(cfg, &osRenameTransferer{}, logger)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	impl := pr.(*processorImpl)
+
+	inputDir := filepath.Join(drop, "Stranger.Things.S05E10.1080p.x265")
+	mkdirAll(t, inputDir)
+	mainSrc := filepath.Join(inputDir, "Stranger.Things.S05E10.1080p.x265.mkv")
+	assocSrc := filepath.Join(inputDir, "Stranger.Things.S05E10.1080p.x265.en.srt")
+	writeFile(t, mainSrc, strings.Repeat("m", 64))
+	writeFile(t, assocSrc, "subtitle")
+
+	pl, err := planOne(t, impl, inputDir)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	impl.xfer = &failOneTransferer{failSrc: assocSrc, delegate: &osRenameTransferer{}}
+
+	if _, err := impl.Apply(context.Background(), []Plan{pl}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	out := consoleBuf.String()
+	if !strings.Contains(out, "associated file(s) not moved") {
+		t.Fatalf("expected console warning about associated file failure; got:\n%s", out)
+	}
+	if !strings.Contains(out, filepath.Base(pl.MainSourcePath)) {
+		t.Fatalf("expected main source filename in console warning; got:\n%s", out)
 	}
 }
 

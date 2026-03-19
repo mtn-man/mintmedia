@@ -331,6 +331,13 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		errs = append(errs, errors.New("destinations.dest_dir_shows is required"))
 	}
 
+	// Destinations must not overlap.
+	if moviesAbs != "" && showsAbs != "" {
+		if err := validateDestinationSeparation(moviesAbs, showsAbs); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	// History file path (for logger persistence)
 	hf := strings.TrimSpace(cfg.Logging.HistoryFile)
 	if hf == "" {
@@ -475,6 +482,23 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 		MediaTagBlacklist: append([]string(nil), cfg.Naming.MediaTagBlacklist...),
 	}, nil
+}
+
+// validateDestinationSeparation returns an error if the two destination paths
+// are identical or if one is an ancestor of the other. Either condition would
+// cause movies and shows to be written into the same directory tree.
+func validateDestinationSeparation(moviesAbs, showsAbs string) error {
+	if moviesAbs == showsAbs {
+		return fmt.Errorf("destinations.dest_dir_movies and destinations.dest_dir_shows must be different directories (both resolve to %q)", moviesAbs)
+	}
+	sep := string(filepath.Separator)
+	if strings.HasPrefix(showsAbs, moviesAbs+sep) {
+		return fmt.Errorf("destinations.dest_dir_shows (%q) must not be inside destinations.dest_dir_movies (%q)", showsAbs, moviesAbs)
+	}
+	if strings.HasPrefix(moviesAbs, showsAbs+sep) {
+		return fmt.Errorf("destinations.dest_dir_movies (%q) must not be inside destinations.dest_dir_shows (%q)", moviesAbs, showsAbs)
+	}
+	return nil
 }
 
 func expandPath(p string) (string, error) {

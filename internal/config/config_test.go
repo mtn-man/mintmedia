@@ -796,6 +796,116 @@ shutdown_force_timeout = "nope"
 	}
 }
 
+func TestLoad_RejectsSameMoviesAndShowsDir(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	media := filepath.Join(root, "Media") // same path for both
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+`, drop, state, media, media)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "must be different directories") {
+		t.Fatalf("expected destination separation error, got: %v", err)
+	}
+}
+
+func TestLoad_RejectsShowsDirInsideMoviesDir(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Media")
+	shows := filepath.Join(root, "Media", "Shows") // shows is a subdirectory of movies
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "must not be inside") {
+		t.Fatalf("expected destination separation error, got: %v", err)
+	}
+}
+
+func TestLoad_RejectsMoviesDirInsideShowsDir(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Media", "Movies") // movies is a subdirectory of shows
+	shows := filepath.Join(root, "Media")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, _, err := Load(cfgPath)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "must not be inside") {
+		t.Fatalf("expected destination separation error, got: %v", err)
+	}
+}
+
 func writeConfigFile(t *testing.T, dir string, contents string) string {
 	t.Helper()
 	path := filepath.Join(dir, "config.toml")
