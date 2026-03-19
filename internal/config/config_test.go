@@ -39,7 +39,7 @@ associated_file_extensions = [".srt"]
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, res, err := Load(cfgPath)
+	_, res, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -108,7 +108,7 @@ history_file = "ops/history.jsonl"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, res, err := Load(cfgPath)
+	_, res, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -153,7 +153,7 @@ host = ""
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -193,7 +193,7 @@ history_file = "history.log"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -232,7 +232,7 @@ main_media_extensions = [".mkv"]
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -272,7 +272,7 @@ error_dir = "/tmp/errors"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -314,7 +314,7 @@ error_dir = "/tmp/errors"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -363,7 +363,7 @@ transmission_remote_path = "$MINTMEDIA_TESTROOT/bin/tx-remote"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, res, err := Load(cfgPath)
+	_, res, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -401,7 +401,7 @@ host = "localhost:9091"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, res, err := Load(cfgPath)
+	_, res, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -439,7 +439,7 @@ host = "localhost:9091"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	cfg, _, err := Load(cfgPath)
+	cfg, _, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -481,7 +481,7 @@ auto_cleanup_completed_torrents = false
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	cfg, _, err := Load(cfgPath)
+	cfg, _, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -523,7 +523,7 @@ auto_cleanup_completed_torrents = true
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	cfg, _, err := Load(cfgPath)
+	cfg, _, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -560,7 +560,7 @@ auto_create_missing_dirs = true
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	cfg, res, err := Load(cfgPath)
+	cfg, res, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -598,7 +598,7 @@ done_notification_mode = "PER_JOB"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	cfg, res, err := Load(cfgPath)
+	cfg, res, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -636,7 +636,7 @@ done_notification_mode = "off"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	cfg, res, err := Load(cfgPath)
+	cfg, res, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -674,7 +674,7 @@ done_notification_mode = "loud"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -708,7 +708,7 @@ auto_create_missing_dirs = true
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	cfg, res, err := Load(cfgPath)
+	cfg, res, _, err := Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
@@ -752,7 +752,7 @@ shutdown_grace_duration = "0s"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -787,7 +787,7 @@ shutdown_force_timeout = "nope"
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -823,7 +823,7 @@ main_media_extensions = [".mkv"]
 `, drop, state, media, media)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -860,7 +860,7 @@ main_media_extensions = [".mkv"]
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
@@ -897,12 +897,89 @@ main_media_extensions = [".mkv"]
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
-	_, _, err := Load(cfgPath)
+	_, _, _, err := Load(cfgPath)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "must not be inside") {
 		t.Fatalf("expected destination separation error, got: %v", err)
+	}
+}
+
+func TestLoad_Bootstrap_CreatesFileWhenMissing(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+
+	cfg, res, bootstrapped, err := Load("")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !bootstrapped {
+		t.Fatal("expected bootstrapped=true, got false")
+	}
+	if cfg == nil || res == nil {
+		t.Fatal("expected non-nil cfg and res")
+	}
+	wantPath := filepath.Join(root, DefaultConfigPathRel)
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Fatalf("expected config file to exist at %s: %v", wantPath, err)
+	}
+}
+
+func TestLoad_Bootstrap_ConfigDirCreated(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+
+	if _, _, _, err := Load(""); err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	configDir := filepath.Dir(filepath.Join(root, DefaultConfigPathRel))
+	st, err := os.Stat(configDir)
+	if err != nil {
+		t.Fatalf("config dir should exist: %v", err)
+	}
+	if !st.IsDir() {
+		t.Fatalf("expected directory at %s", configDir)
+	}
+}
+
+func TestLoad_Bootstrap_SecondLoadNotBootstrapped(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+
+	cfg1, _, bootstrapped1, err := Load("")
+	if err != nil {
+		t.Fatalf("first Load() error: %v", err)
+	}
+	if !bootstrapped1 {
+		t.Fatal("first Load: expected bootstrapped=true")
+	}
+
+	cfg2, _, bootstrapped2, err := Load("")
+	if err != nil {
+		t.Fatalf("second Load() error: %v", err)
+	}
+	if bootstrapped2 {
+		t.Fatal("second Load: expected bootstrapped=false")
+	}
+	if cfg1.Paths.DropFolder != cfg2.Paths.DropFolder {
+		t.Fatalf("drop folders differ: %q vs %q", cfg1.Paths.DropFolder, cfg2.Paths.DropFolder)
+	}
+}
+
+func TestLoad_ExplicitMissingConfigFails(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(root, "does-not-exist.toml")
+
+	_, _, bootstrapped, err := Load(missing)
+	if err == nil {
+		t.Fatal("expected error for missing explicit config, got nil")
+	}
+	if bootstrapped {
+		t.Fatal("expected bootstrapped=false for explicit missing config")
+	}
+	if !strings.Contains(err.Error(), "no such file") {
+		t.Fatalf("expected 'no such file' in error, got: %v", err)
 	}
 }
 

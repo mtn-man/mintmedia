@@ -1,6 +1,4 @@
-# mintmedia example configuration
-# Copy this file to your config location and edit paths/values as needed.
-# Keep in sync with internal/config/defaults.toml (the embedded bootstrap copy).
+# Embedded bootstrap default — keep in sync with /config.example.toml at the project root.
 
 [paths]
 # Folder watched for incoming media (drop zone).
@@ -45,7 +43,7 @@ shutdown_force_timeout = "15s"
 enable_processing = true
 
 # Enable torrent client automation/integration (e.g., Transmission)
-# Default off in the example config to avoid surprises.
+# Default off to avoid surprises.
 enable_torrent_automation = false
 
 [logging]

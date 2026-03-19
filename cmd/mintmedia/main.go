@@ -77,10 +77,13 @@ func main() {
 		return
 	}
 
-	cfg, resolved, err := config.Load(*configPath)
+	cfg, resolved, bootstrapped, err := config.Load(*configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(exitError)
+	}
+	if bootstrapped {
+		fmt.Printf("No config file found. A default config has been written to: %s\n", resolved.ConfigPathAbs)
 	}
 
 	mode, err := resolveModePolicy(

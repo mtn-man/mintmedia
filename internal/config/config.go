@@ -8,6 +8,7 @@
 package config
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -20,6 +21,9 @@ import (
 	"github.com/Mtn-Man/mintmedia/internal/logging"
 	"github.com/Mtn-Man/mintmedia/internal/notify"
 )
+
+//go:embed defaults.toml
+var defaultConfigContents []byte
 
 const (
 	// DefaultConfigPathRel is relative to the user's home directory.
@@ -159,43 +163,59 @@ type Resolved struct {
 
 // Load reads TOML from disk, applies defaults, expands paths/env vars,
 // validates, and returns both the raw Config and a Resolved view.
-func Load(configPath string) (*Config, *Resolved, error) {
-	if strings.TrimSpace(configPath) == "" {
+// The bool return value is true when no config file was found at the default
+// path and a fresh one was written from the embedded defaults.
+// An explicitly-provided configPath that does not exist is always an error.
+func Load(configPath string) (*Config, *Resolved, bool, error) {
+	usingDefault := strings.TrimSpace(configPath) == ""
+
+	if usingDefault {
 		p, err := defaultConfigPath()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 		configPath = p
 	}
 
 	cfgPathAbs, err := expandPath(configPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("expand config path: %w", err)
+		return nil, nil, false, fmt.Errorf("expand config path: %w", err)
+	}
+
+	bootstrapped := false
+	if usingDefault {
+		if _, statErr := os.Stat(cfgPathAbs); os.IsNotExist(statErr) {
+			if writeErr := writeDefaultConfig(cfgPathAbs); writeErr != nil {
+				return nil, nil, false, writeErr
+			}
+			bootstrapped = true
+		}
+		// Non-IsNotExist stat errors fall through to DecodeFile for a useful error.
 	}
 
 	var cfg Config
 	md, err := toml.DecodeFile(cfgPathAbs, &cfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("parse TOML (%s): %w", cfgPathAbs, err)
+		return nil, nil, false, fmt.Errorf("parse TOML (%s): %w", cfgPathAbs, err)
 	}
 	if md.IsDefined("processing", "history_file") {
-		return nil, nil, fmt.Errorf("config validation failed: processing.history_file has been removed; use logging.history_file")
+		return nil, nil, false, fmt.Errorf("config validation failed: processing.history_file has been removed; use logging.history_file")
 	}
 	if md.IsDefined("processing") {
-		return nil, nil, fmt.Errorf("config validation failed: [processing] section has been removed; use [logging]")
+		return nil, nil, false, fmt.Errorf("config validation failed: [processing] section has been removed; use [logging]")
 	}
 	if unknown := formatUndecodedKeys(md.Undecoded()); len(unknown) > 0 {
-		return nil, nil, fmt.Errorf("config validation failed: unknown config key(s): %s", strings.Join(unknown, ", "))
+		return nil, nil, false, fmt.Errorf("config validation failed: unknown config key(s): %s", strings.Join(unknown, ", "))
 	}
 
 	applyDefaults(&cfg)
 
 	res, err := normalizeAndValidate(&cfg, cfgPathAbs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
-	return &cfg, res, nil
+	return &cfg, res, bootstrapped, nil
 }
 
 func defaultConfigPath() (string, error) {
@@ -482,6 +502,18 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 		MediaTagBlacklist: append([]string(nil), cfg.Naming.MediaTagBlacklist...),
 	}, nil
+}
+
+// writeDefaultConfig writes the embedded defaults.toml to path,
+// creating any missing parent directories.
+func writeDefaultConfig(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create config directory: %w", err)
+	}
+	if err := os.WriteFile(path, defaultConfigContents, 0o644); err != nil {
+		return fmt.Errorf("write default config: %w", err)
+	}
+	return nil
 }
 
 // validateDestinationSeparation returns an error if the two destination paths
