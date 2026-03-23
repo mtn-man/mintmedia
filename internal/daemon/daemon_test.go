@@ -515,7 +515,7 @@ func TestDaemon_RunWaitingLogStartsOnNewLineForInFlightJobs(t *testing.T) {
 		t.Fatalf("Run did not exit after cancel")
 	}
 
-	if !strings.Contains(stderr.String(), "\nShutdown requested; waiting up to 50ms for in-flight jobs\n") {
+	if !strings.Contains(stderr.String(), "\nShutdown requested. Waiting up to 50ms for in-flight jobs.\n") {
 		t.Fatalf("expected newline-prefixed waiting log, got: %q", stderr.String())
 	}
 }

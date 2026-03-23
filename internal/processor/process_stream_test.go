@@ -95,8 +95,8 @@ func TestProcess_OnResult_StreamedForPartialPackSkip(t *testing.T) {
 	if streamed[1].Applied {
 		t.Fatalf("streamed[1].Applied = true, want false")
 	}
-	if !strings.HasPrefix(streamed[1].Reason, "skipped: ") {
-		t.Fatalf("streamed[1].Reason = %q, want prefix %q", streamed[1].Reason, "skipped: ")
+	if streamed[1].Reason == "" {
+		t.Fatalf("streamed[1].Reason is empty, want parse error message")
 	}
 }
 
@@ -136,7 +136,7 @@ func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T)
 			continue
 		}
 		skippedCount++
-		if strings.HasPrefix(streamed[i].Reason, "skipped: "+unparseable+": ") {
+		if streamed[i].Plan.InputPath == unparseable {
 			sawSkipPath = true
 		}
 	}
@@ -147,7 +147,7 @@ func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T)
 		t.Fatalf("missing skipped reason for unparseable path %q (reasons: %#v)", unparseable, streamed)
 	}
 
-	wantWarn := "WARN: movie pack skip (unparseable filename): " + unparseable + ":"
+	wantWarn := "movie pack skipped (unparseable filename): " + unparseable + ":"
 	if !strings.Contains(stderr.String(), wantWarn) {
 		t.Fatalf("stderr missing warning %q; got: %q", wantWarn, stderr.String())
 	}

@@ -116,7 +116,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	}
 	if assocFailedCount > 0 {
 		logConsoleWarn(p, logging.EventProcessorMoveAssociatedFailed,
-			fmt.Sprintf("WARN: %d associated file(s) not moved for %s; check history log for details",
+			fmt.Sprintf("%d associated file(s) not moved for %s; see history log",
 				assocFailedCount, filepath.Base(pl.MainSourcePath)),
 			nil,
 			logging.Fields{"input_path": pl.InputPath},
@@ -126,7 +126,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	// Cleanup: move source directory to Trash if safe (only for directory inputs)
 	if pl.DeleteEmptyInputDir {
 		if pl.InputPath != "" && assocFailedByInput[pl.InputPath] {
-			logWarn(p, logging.EventProcessorCleanupSkippedAssociatedFailed, fmt.Sprintf("CLEANUP SKIPPED: %s (reason=associated move failed)", pl.InputPath), nil, logging.Fields{
+			logWarn(p, logging.EventProcessorCleanupSkippedAssociatedFailed, fmt.Sprintf("source folder cleanup skipped for %s (associated move failed)", pl.InputPath), nil, logging.Fields{
 				"input_path": pl.InputPath,
 			})
 			return Result{
@@ -137,7 +137,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			}, nil
 		}
 		if err := cleanupSourceDirIfSafe(p, pl.InputPath); err != nil {
-			logWarn(p, logging.EventProcessorCleanupSkippedFailed, fmt.Sprintf("CLEANUP SKIPPED: %s (reason=%v)", pl.InputPath, err), err, logging.Fields{
+			logWarn(p, logging.EventProcessorCleanupSkippedFailed, fmt.Sprintf("source folder cleanup skipped for %s: %v", pl.InputPath, err), err, logging.Fields{
 				"input_path": pl.InputPath,
 			})
 		}
@@ -302,7 +302,7 @@ func handleCleanupError(p *processorImpl, err error, kind, src, dst string) bool
 	logWarn(
 		p,
 		logging.EventProcessorCleanupSourceFailed,
-		fmt.Sprintf("CLEANUP WARN: %s source not removed: %s (err=%v)", kind, logSrc, logErr),
+		fmt.Sprintf("%s source not removed: %s — %v", kind, logSrc, logErr),
 		logErr,
 		logging.Fields{
 			"cleanup_kind": kind,

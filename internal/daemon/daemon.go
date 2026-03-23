@@ -119,12 +119,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 	caffCtx, cancelCaff := context.WithCancel(context.Background())
 	caff := newDaemonCaffeinate()
 	if err := caff.Start(caffCtx); err != nil {
-		d.logConsoleWarn(logging.EventSystemStartup, fmt.Sprintf("caffeinate warning: %v", err), err, nil)
+		d.logConsoleWarn(logging.EventSystemStartup, fmt.Sprintf("[Warning!] caffeinate: %v", err), err, nil)
 	}
 	defer func() {
 		cancelCaff()
 		if err := caff.Stop(); err != nil {
-			d.logConsoleWarn(logging.EventSystemShutdownComplete, fmt.Sprintf("caffeinate stop warning: %v", err), err, nil)
+			d.logConsoleWarn(logging.EventSystemShutdownComplete, fmt.Sprintf("[Warning!] caffeinate stop: %v", err), err, nil)
 		}
 	}()
 
@@ -160,7 +160,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	defer func() {
 		if err := d.Watcher.Close(); err != nil {
-			d.logConsoleWarn(logging.EventSystemShutdownComplete, fmt.Sprintf("watcher close warning: %v", err), err, nil)
+			d.logConsoleWarn(logging.EventSystemShutdownComplete, fmt.Sprintf("[Warning!] watcher close: %v", err), err, nil)
 		}
 	}()
 
@@ -209,10 +209,9 @@ runLoop:
 				continue
 			}
 
-			d.logConsoleWarn(
+			d.logConsoleInfo(
 				logging.EventSystemDestinationsReady,
-				fmt.Sprintf("Destinations ready; processing %d pending item(s)", len(pending)),
-				nil,
+				fmt.Sprintf("Destinations ready; processing %d pending item(s).", len(pending)),
 				logging.Fields{"pending": len(pending)},
 			)
 			d.logHistoryInfo(logging.EventSystemDestinationsReady, logging.Fields{
@@ -227,7 +226,7 @@ runLoop:
 				if !d.tryMarkInFlight(key) {
 					d.logConsoleWarn(
 						logging.EventDaemonPathDuplicate,
-						fmt.Sprintf("WARN: suppressed duplicate path already in-flight: %s", pth),
+						fmt.Sprintf("Already in-flight, skipping: %s", pth),
 						nil,
 						logging.Fields{"path": pth},
 					)
@@ -245,8 +244,8 @@ runLoop:
 				return nil
 			}
 			if err != nil {
-				d.logConsoleWarn(logging.EventDaemonWatchError, fmt.Sprintf("watch error: %v", err), err, nil)
-				d.logHistoryWarn(logging.EventDaemonWatchError, err, nil)
+				d.logConsoleError(logging.EventDaemonWatchError, fmt.Sprintf("error   watcher: %v", err), err, nil)
+				d.logHistoryError(logging.EventDaemonWatchError, err, nil)
 			}
 
 		// --- Stable filesystem events ---
@@ -268,7 +267,7 @@ runLoop:
 				if d.isInFlight(key) {
 					d.logConsoleWarn(
 						logging.EventDaemonPathDuplicate,
-						fmt.Sprintf("WARN: suppressed duplicate path already in-flight: %s", path),
+						fmt.Sprintf("Already in-flight, skipping: %s", path),
 						nil,
 						logging.Fields{"path": path},
 					)
@@ -279,7 +278,7 @@ runLoop:
 				if lastWaitLog.IsZero() || time.Since(lastWaitLog) > time.Minute {
 					d.logConsoleWarn(
 						logging.EventSystemDestinationsWaiting,
-						fmt.Sprintf("Destinations not available/writable; waiting (pending=%d)", len(pending)),
+						fmt.Sprintf("Destinations unavailable; waiting (%d pending)", len(pending)),
 						nil,
 						logging.Fields{"pending": len(pending)},
 					)
@@ -294,7 +293,7 @@ runLoop:
 			if !d.tryMarkInFlight(key) {
 				d.logConsoleWarn(
 					logging.EventDaemonPathDuplicate,
-					fmt.Sprintf("WARN: suppressed duplicate path already in-flight: %s", path),
+					fmt.Sprintf("Already in-flight, skipping: %s", path),
 					nil,
 					logging.Fields{"path": path},
 				)
@@ -312,8 +311,8 @@ runLoop:
 				continue
 			}
 			if err != nil {
-				d.logConsoleWarn(logging.EventDaemonClipboardError, fmt.Sprintf("clipboard error: %v", err), err, nil)
-				d.logHistoryWarn(logging.EventDaemonClipboardError, err, nil)
+				d.logConsoleError(logging.EventDaemonClipboardError, fmt.Sprintf("error   clipboard: %v", err), err, nil)
+				d.logHistoryError(logging.EventDaemonClipboardError, err, nil)
 			}
 
 		// --- Clipboard magnet events ---
@@ -337,7 +336,7 @@ runLoop:
 
 			d.logConsoleInfo(
 				logging.EventDaemonMagnetAdded,
-				fmt.Sprintf("MAGNET: btih=%s dn=%q tr=%d", btih, truncateForLog(dn, 80), tr),
+				fmt.Sprintf("[torrent] %q queued  (btih=%s, %d trackers)", truncateForLog(dn, 80), btih, tr),
 				logging.Fields{"btih": btih, "dn": dn, "trackers": tr},
 			)
 
@@ -352,10 +351,10 @@ runLoop:
 				defer cancel()
 
 				if err := d.Tx.AddMagnet(tctx, m); err != nil {
-					d.logConsoleWarn(logging.EventDaemonTxAddError, fmt.Sprintf("TRANSMISSION ERROR: %v", err), err, logging.Fields{
+					d.logConsoleError(logging.EventDaemonTxAddError, fmt.Sprintf("[torrent] error: could not add — %v", err), err, logging.Fields{
 						"btih": btihShort,
 					})
-					d.logHistoryWarn(logging.EventDaemonTxAddError, err, logging.Fields{
+					d.logHistoryError(logging.EventDaemonTxAddError, err, logging.Fields{
 						"btih": btihShort,
 					})
 					return
@@ -363,7 +362,7 @@ runLoop:
 
 				d.logConsoleInfo(
 					logging.EventDaemonMagnetAdded,
-					fmt.Sprintf("TRANSMISSION: added (btih=%s)", btihShort),
+					fmt.Sprintf("[torrent] %s — added to Transmission", btihShort),
 					logging.Fields{"btih": btihShort, "dn": dn},
 				)
 				if strings.TrimSpace(d.TransmissionHost) != "" {
@@ -418,7 +417,7 @@ runLoop:
 				d.logConsoleWarn(
 					logging.EventSystemShutdownRequested,
 					fmt.Sprintf(
-						"\nShutdown requested; waiting up to %s for in-flight jobs",
+						"\nShutdown requested. Waiting up to %s for in-flight jobs.",
 						shutdown.FormatDurationCompact(grace),
 					),
 					nil,
@@ -432,7 +431,7 @@ runLoop:
 				d.logConsoleWarn(
 					logging.EventSystemShutdownGraceElapsed,
 					fmt.Sprintf(
-						"Shutdown grace elapsed; canceling in-flight jobs (timeout=%s)",
+						"Shutdown grace elapsed. Canceling in-flight jobs (timeout=%s).",
 						shutdown.FormatDurationCompact(force),
 					),
 					nil,
@@ -483,7 +482,7 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 		if r.Applied {
 			d.logConsoleInfo(
 				logging.EventProcessorMoveMainApplied,
-				fmt.Sprintf("APPLIED:\n  Source:   %s\n  Dest:     %s\n  Duration: %s", pth, r.Plan.DestMainPath, dur),
+				fmt.Sprintf("moved   %s -> %s  (%s)", filepath.Base(pth), r.Plan.DestMainPath, dur),
 				logging.Fields{"path": pth, "dest_path": r.Plan.DestMainPath, "duration": dur.String()},
 			)
 			playCount := planner.OnAppliedMain()
@@ -499,7 +498,7 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 		}
 		d.logConsoleInfo(
 			logging.EventProcessorInputSkippedParseError,
-			fmt.Sprintf("IGNORED (%s): %s (duration=%s)", pth, r.Reason, dur),
+			fmt.Sprintf("skipped %s — %s", filepath.Base(pth), r.Reason),
 			logging.Fields{"path": pth, "reason": r.Reason, "duration": dur.String()},
 		)
 	}
@@ -517,7 +516,7 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 	if err != nil {
 		d.logConsoleError(
 			logging.EventDaemonProcessError,
-			fmt.Sprintf("PROCESS ERROR (%s): %v (duration=%s)", pth, err, dur),
+			fmt.Sprintf("error   %s — %v  (%s)", pth, err, dur),
 			err,
 			logging.Fields{"path": pth, "duration": dur.String()},
 		)
@@ -581,14 +580,14 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 
 	removed, err := d.Tx.RemoveCompleted(tctx)
 	if err != nil {
-		d.logConsoleWarn(logging.EventDaemonTxCleanupError, fmt.Sprintf("TRANSMISSION CLEANUP ERROR: %v", err), err, nil)
-		d.logHistoryWarn(logging.EventDaemonTxCleanupError, err, nil)
+		d.logConsoleError(logging.EventDaemonTxCleanupError, fmt.Sprintf("[torrent] error: cleanup failed — %v", err), err, nil)
+		d.logHistoryError(logging.EventDaemonTxCleanupError, err, nil)
 		return
 	}
 	if removed > 0 {
 		d.logConsoleInfo(
 			logging.EventDaemonTxCleanupRemoved,
-			fmt.Sprintf("TRANSMISSION: removed %d completed torrent(s)", removed),
+			fmt.Sprintf("[torrent] %d completed torrent(s) removed", removed),
 			logging.Fields{"removed": removed},
 		)
 		d.logHistoryInfo(logging.EventDaemonTxCleanupRemoved, logging.Fields{

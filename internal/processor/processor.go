@@ -190,7 +190,7 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 		for _, issue := range partial.Issues {
 			var pme *ParseMovieError
 			if errors.As(issue.Err, &pme) {
-				msg := fmt.Sprintf("WARN: movie pack skip (unparseable filename): %s: %v", issue.Path, issue.Err)
+				msg := fmt.Sprintf("movie pack skipped (unparseable filename): %s: %v", issue.Path, issue.Err)
 				logWarn(p, logging.EventProcessorMoviePackSkipUnparseable, msg, issue.Err, logging.Fields{
 					"input_path": issue.Path,
 				})
@@ -199,7 +199,7 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 				"input_path": issue.Path,
 				"reason":     issue.Err.Error(),
 			})
-			reason := fmt.Sprintf("skipped: %s: %v", issue.Path, issue.Err)
+			reason := issue.Err.Error()
 			out := Result{
 				Plan:    Plan{InputPath: issue.Path},
 				Handled: true,

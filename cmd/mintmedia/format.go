@@ -58,34 +58,8 @@ func printPlanBody(pl processor.Plan) {
 
 // PrintResults writes result output to stdout.
 func PrintResults(results []processor.Result) {
-	if len(results) == 0 {
-		fmt.Println("--- RESULT ---")
-		fmt.Println("No results.")
-		return
-	}
-	for i, res := range results {
-		if len(results) > 1 {
-			fmt.Printf("\n--- RESULT %d/%d ---\n", i+1, len(results))
-			printResultBody(res)
-			continue
-		}
-		printResult(res)
-	}
-}
-
-func printResult(res processor.Result) {
-	fmt.Println("--- RESULT ---")
-	printResultBody(res)
-}
-
-func printResultBody(res processor.Result) {
-	fmt.Printf("Handled: %t\n", res.Handled)
-	fmt.Printf("Applied: %t\n", res.Applied)
-	if res.Reason != "" {
-		fmt.Printf("Reason:  %s\n", res.Reason)
-	}
-	if res.Applied {
-		fmt.Printf("Dest:    %s\n", res.Plan.DestMainPath)
+	for _, res := range results {
+		fmt.Println(processDropCompactLine(res))
 	}
 }
 
@@ -104,12 +78,12 @@ func PrintProcessDropCandidates(count int, verbose bool) {
 
 // PrintProcessDropStatError writes a process-drop stat error to stderr.
 func PrintProcessDropStatError(path string, err error) {
-	fmt.Fprintf(os.Stderr, "process-drop: stat %s: %v\n", path, err)
+	fmt.Fprintf(os.Stderr, "error   stat %s: %v\n", path, err)
 }
 
 // PrintProcessDropItemError writes a process-drop item error to stderr.
 func PrintProcessDropItemError(path string, err error) {
-	fmt.Fprintf(os.Stderr, "process-drop: %s: %v\n", path, err)
+	fmt.Fprintf(os.Stderr, "error   %s: %v\n", path, err)
 }
 
 // PrintProcessDropResults writes process-drop results to stdout.
@@ -140,9 +114,6 @@ type ProcessDropSummary struct {
 func PrintProcessDropSummary(s ProcessDropSummary) {
 	fmt.Println()
 	fmt.Println(processDropSummaryLine(s))
-	if s.Errors > 0 {
-		fmt.Fprintf(os.Stderr, "process-drop completed with %d error(s).\n", s.Errors)
-	}
 }
 
 func processDropCompactLine(res processor.Result) string {
@@ -153,9 +124,9 @@ func processDropCompactLine(res processor.Result) string {
 			name = "(unknown)"
 		}
 		if dest == "" {
-			return fmt.Sprintf("OK   %s", name)
+			return fmt.Sprintf("moved   %s", name)
 		}
-		return fmt.Sprintf("OK   %s -> %s", name, dest)
+		return fmt.Sprintf("moved   %s -> %s", name, dest)
 	}
 
 	ref := strings.TrimSpace(res.Plan.InputPath)
@@ -170,15 +141,14 @@ func processDropCompactLine(res processor.Result) string {
 	if reason == "" {
 		reason = "not applied"
 	}
-	return fmt.Sprintf("SKIP %s (%s)", name, reason)
+	return fmt.Sprintf("skipped %s — %s", name, reason)
 }
 
 func processDropSummaryLine(s ProcessDropSummary) string {
 	elapsed := s.Elapsed.Round(time.Second)
 	return fmt.Sprintf(
-		"SUMMARY candidates=%d results=%d applied=%d skipped=%d errors=%d elapsed=%s",
+		"Done. %d candidates — %d moved, %d skipped, %d errors  (%s)",
 		s.Candidates,
-		s.Results,
 		s.Applied,
 		s.Skipped,
 		s.Errors,
