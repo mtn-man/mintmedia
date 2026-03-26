@@ -34,4 +34,9 @@ var (
 
 	// Language tag suffix (case-insensitive), e.g. ".en" at end of a stem.
 	reLangTag = regexp.MustCompile(`(?i)\.([a-z]{2,3})$`)
+
+	// Matches a website advertisement prefix at the start of a release name,
+	// e.g. "www.UIndex.org - " or "EZTVx.to - ". Requires a dash-style separator
+	// after the domain to avoid false positives on show names with dotted tokens.
+	reWebsitePrefix = regexp.MustCompile(`(?i)^(?:www\.)?[a-z0-9][a-z0-9-]*\.[a-z]{2,10}(?:\.[a-z]{2,3})?\s*[-–—]+\s*`)
 )

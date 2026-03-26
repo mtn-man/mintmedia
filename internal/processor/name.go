@@ -304,6 +304,9 @@ func cleanReleaseName(blacklist []*regexp.Regexp, raw string) string {
 	// Remove bracketed tags like [EZTVx.to]
 	s = reBracketedTag.ReplaceAllString(s, " ")
 
+	// Strip website prefix like "www.UIndex.org - " before dots are replaced.
+	s = reWebsitePrefix.ReplaceAllLiteralString(s, "")
+
 	// Replace separators with spaces
 	s = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(s)
 

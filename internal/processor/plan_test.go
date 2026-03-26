@@ -791,6 +791,39 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowFile_WebsitePrefixStripped",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "www.UIndex.org - Invincible 2021 S02E01 A LESSON FOR YOUR NEXT LIFE 1080p AMZN WEB-DL DDP5 1 H 264-FLUX.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Invincible" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Invincible")
+				}
+				if pl.ShowYear != "2021" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2021")
+				}
+				if pl.Season != 2 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 2/1", pl.Season, pl.Episode)
+				}
+				if pl.DestRadix != "Invincible (2021) - S02E01" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Invincible (2021) - S02E01")
+				}
+			},
+		},
+		{
 			name: "MovieFile_MultipleBracketTags",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
