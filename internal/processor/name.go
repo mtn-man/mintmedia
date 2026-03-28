@@ -329,8 +329,8 @@ func findYear(raw string) string {
 }
 
 func titleCaseSimple(s string) string {
-	// Conservative title casing with acronym preservation.
-	// We keep tokens that are already ALLCAPS (2-4 letters) as-is, and also preserve a small allowlist.
+	// Title casing with explicit acronym preservation.
+	// Only roman numerals, "US" (context-sensitive), and the acronyms allowlist are kept uppercase.
 	parts := strings.Fields(strings.TrimSpace(s))
 	if len(parts) == 0 {
 		return ""
@@ -342,10 +342,18 @@ func titleCaseSimple(s string) string {
 	// "US" is handled separately so we can avoid forcing uppercase in the middle
 	// of regular titles like "All of Us Strangers".
 	acronyms := map[string]struct{}{
-		"UK":  {},
-		"UAE": {},
+		"AI":  {},
+		"CIA": {},
+		"DEA": {},
 		"EU":  {},
+		"FBI": {},
+		"NASA": {},
+		"NYC": {},
+		"UAE": {},
+		"UFC": {},
+		"UK":  {},
 		"USA": {},
+		"WWE": {},
 	}
 
 	for i := range parts {
@@ -370,12 +378,6 @@ func titleCaseSimple(s string) string {
 		// Preserve allowlisted acronyms regardless of case.
 		if _, ok := acronyms[up]; ok {
 			parts[i] = up
-			continue
-		}
-
-		// Preserve tokens that are already all-uppercase short acronyms (e.g. "US", "UFC").
-		if len(tok) >= 2 && len(tok) <= 4 && tok == up && isAllLetters(tok) {
-			parts[i] = tok
 			continue
 		}
 
