@@ -94,8 +94,8 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 		return "", "", 0, 0, false
 	}
 
-	// Allow episode 00 (specials), but keep season > 0.
-	if season <= 0 || episode < 0 {
+	// Allow season 00 and episode 00 (both used for specials).
+	if season < 0 || episode < 0 {
 		return "", "", 0, 0, false
 	}
 
@@ -138,7 +138,7 @@ func parseSeasonEpisode(raw string) (season, episode int, ok bool) {
 		return 0, 0, false
 	}
 
-	if season <= 0 || episode < 0 {
+	if season < 0 || episode < 0 {
 		return 0, 0, false
 	}
 
@@ -190,28 +190,28 @@ func parseShowCrossSeasonEpisode(blacklist []*regexp.Regexp, baseName string, fi
 func parseSeasonComponent(raw string) (season int, idx int, ok bool) {
 	if idxs := reSeasonEpisode.FindStringSubmatchIndex(raw); len(idxs) == 6 {
 		season = atoiSafe(raw[idxs[2]:idxs[3]])
-		if season > 0 {
+		if season >= 0 {
 			return season, idxs[0], true
 		}
 	}
 
 	if idxs := reSeasonWord.FindStringSubmatchIndex(raw); len(idxs) == 4 {
 		season = atoiSafe(raw[idxs[2]:idxs[3]])
-		if season > 0 {
+		if season >= 0 {
 			return season, idxs[0], true
 		}
 	}
 
 	if idxs := reSeasonRange.FindStringSubmatchIndex(raw); len(idxs) == 6 {
 		season = atoiSafe(raw[idxs[2]:idxs[3]])
-		if season > 0 {
+		if season >= 0 {
 			return season, idxs[0], true
 		}
 	}
 
 	if idxs := reSeasonWordRange.FindStringSubmatchIndex(raw); len(idxs) == 6 {
 		season = atoiSafe(raw[idxs[2]:idxs[3]])
-		if season > 0 {
+		if season >= 0 {
 			return season, idxs[0], true
 		}
 	}

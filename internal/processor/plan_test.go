@@ -475,6 +475,36 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowFile_Invincible_S00E01_Special",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "invincible.2021.s00e01.presenting.atom.eve.special.episode.1080p.web.h264-nhtfs.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Invincible" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Invincible")
+				}
+				if pl.Season != 0 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 0/1", pl.Season, pl.Episode)
+				}
+				if pl.DestRadix != "Invincible (2021) - S00E01" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Invincible (2021) - S00E01")
+				}
+			},
+		},
+		{
 			name: "ShowFile_Fallout_2024_S02E04",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
