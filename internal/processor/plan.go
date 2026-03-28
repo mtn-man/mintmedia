@@ -53,7 +53,7 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 		mainPaths, hitMaxDepth, err := listMainMediaFromDir(ctx, p, abs)
 		if err != nil {
 			if errors.Is(err, ErrNoMainMediaFound) && hitMaxDepth {
-				msg := fmt.Sprintf("WARN: max depth %d reached while scanning %s; no main media found", paths.MaxDepth, abs)
+				msg := fmt.Sprintf("WARNING  max depth %d reached while scanning %s; no main media found", paths.MaxDepth, abs)
 				logConsoleWarn(p, logging.EventProcessorInputMaxDepthNoMedia, msg, nil, logging.Fields{
 					"input_path": abs,
 					"depth":      paths.MaxDepth,

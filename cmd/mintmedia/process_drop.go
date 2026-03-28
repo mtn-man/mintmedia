@@ -53,18 +53,18 @@ func processDropFolder(
 	caffCtx, cancelCaff := context.WithCancel(context.Background())
 	caff := newProcessDropCaffeinate()
 	if err := caff.Start(caffCtx); err != nil {
-		fmt.Fprintf(os.Stderr, "[Warning!] caffeinate: %v\n", err)
+		fmt.Fprintf(os.Stderr, "WARNING  caffeinate: %v\n", err)
 	}
 	defer func() {
 		cancelCaff()
 		if err := caff.Stop(); err != nil {
-			fmt.Fprintf(os.Stderr, "[Warning!] caffeinate stop: %v\n", err)
+			fmt.Fprintf(os.Stderr, "WARNING  caffeinate stop: %v\n", err)
 		}
 	}()
 
 	entries, err := os.ReadDir(dropRoot)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		fmt.Fprintf(os.Stderr, "ERROR    %v\n", err)
 		return ProcessDropOutcome{ErrorCount: 1}
 	}
 
@@ -118,7 +118,7 @@ func processDropFolder(
 	for _, item := range candidates {
 		if ctx.Err() != nil {
 			if !interrupted {
-				fmt.Fprintf(os.Stderr, "Shutdown requested. Stopping before next item.\n")
+				fmt.Fprintf(os.Stderr, "WARNING  shutdown requested. Stopping before next item.\n")
 				interrupted = true
 			}
 			break
@@ -223,10 +223,10 @@ func processDropFolder(
 					cancelItem,
 					shutdown.Hooks{
 						OnWaitStart: func(grace time.Duration) {
-							fmt.Fprintf(os.Stderr, "Shutdown requested. Waiting up to %s for in-flight item.\n", grace)
+							fmt.Fprintf(os.Stderr, "WARNING  shutdown requested. Waiting up to %s for in-flight item.\n", grace)
 						},
 						OnGraceElapsed: func(force time.Duration) {
-							fmt.Fprintf(os.Stderr, "Shutdown grace elapsed. Canceling in-flight item, waiting up to %s.\n", force)
+							fmt.Fprintf(os.Stderr, "WARNING  shutdown grace elapsed. Canceling in-flight item, waiting up to %s.\n", force)
 						},
 					},
 				)
@@ -234,7 +234,7 @@ func processDropFolder(
 					timedOut = true
 					errCount++
 					closeItemClosed()
-					fmt.Fprintln(os.Stderr, "Shutdown timed out while waiting for in-flight item.")
+					fmt.Fprintf(os.Stderr, "ERROR    shutdown timed out while waiting for in-flight item.\n")
 				}
 			}
 		}
@@ -260,7 +260,7 @@ func processDropFolder(
 		closeItemClosed()
 
 		if interrupted {
-			fmt.Fprintf(os.Stderr, "Shutdown requested. Stopping after current item.\n")
+			fmt.Fprintf(os.Stderr, "WARNING  shutdown requested. Stopping after current item.\n")
 			break
 		}
 	}

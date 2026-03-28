@@ -116,7 +116,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	}
 	if assocFailedCount > 0 {
 		logConsoleWarn(p, logging.EventProcessorMoveAssociatedFailed,
-			fmt.Sprintf("%d associated file(s) not moved for %s; see history log",
+			fmt.Sprintf("WARNING  %d associated file(s) not moved for %s; see history log",
 				assocFailedCount, filepath.Base(pl.MainSourcePath)),
 			nil,
 			logging.Fields{"input_path": pl.InputPath},

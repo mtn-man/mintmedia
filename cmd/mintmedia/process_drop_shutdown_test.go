@@ -375,7 +375,7 @@ func TestProcessDropFolder_StreamedPerFile_NoDuplicateLinesOrSounds(t *testing.T
 		}
 	})
 
-	if got := strings.Count(out, "moved   "); got != 2 {
+	if got := strings.Count(out, "MOVED    "); got != 2 {
 		t.Fatalf("expected 2 compact moved lines, got %d (output=%q)", got, out)
 	}
 

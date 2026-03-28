@@ -78,12 +78,12 @@ func PrintProcessDropCandidates(count int, verbose bool) {
 
 // PrintProcessDropStatError writes a process-drop stat error to stderr.
 func PrintProcessDropStatError(path string, err error) {
-	fmt.Fprintf(os.Stderr, "error   stat %s: %v\n", path, err)
+	fmt.Fprintf(os.Stderr, "ERROR    stat %s: %v\n", path, err)
 }
 
 // PrintProcessDropItemError writes a process-drop item error to stderr.
 func PrintProcessDropItemError(path string, err error) {
-	fmt.Fprintf(os.Stderr, "error   %s: %v\n", path, err)
+	fmt.Fprintf(os.Stderr, "ERROR    %s: %v\n", path, err)
 }
 
 // PrintProcessDropResults writes process-drop results to stdout.
@@ -124,9 +124,9 @@ func processDropCompactLine(res processor.Result) string {
 			name = "(unknown)"
 		}
 		if dest == "" {
-			return fmt.Sprintf("moved   %s", name)
+			return fmt.Sprintf("MOVED    %s", name)
 		}
-		return fmt.Sprintf("moved   %s -> %s", name, dest)
+		return fmt.Sprintf("MOVED    %s -> %s", name, dest)
 	}
 
 	ref := strings.TrimSpace(res.Plan.InputPath)
@@ -141,7 +141,7 @@ func processDropCompactLine(res processor.Result) string {
 	if reason == "" {
 		reason = "not applied"
 	}
-	return fmt.Sprintf("skipped %s — %s", name, reason)
+	return fmt.Sprintf("SKIPPED  %s — %s", name, reason)
 }
 
 func processDropSummaryLine(s ProcessDropSummary) string {

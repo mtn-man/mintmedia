@@ -88,7 +88,7 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 		return yearFolders[0].name, yearFolders[0].year, nil
 	}
 	if len(yearFolders) > 1 {
-		msg := fmt.Sprintf("WARN: multiple show folders match %q: %s; skipping", showName, strings.Join(matchedYearFolder, ", "))
+		msg := fmt.Sprintf("WARNING  multiple show folders match %q: %s; skipping", showName, strings.Join(matchedYearFolder, ", "))
 		logConsoleWarn(p, logging.EventProcessorInputSkippedParseError, msg, ErrAmbiguousShow, logging.Fields{
 			"path":   showsDir,
 			"reason": ErrAmbiguousShow.Error(),

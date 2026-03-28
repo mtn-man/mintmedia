@@ -16,7 +16,7 @@ func TestProcessDropCompactLine_Applied(t *testing.T) {
 	}
 
 	got := processDropCompactLine(res)
-	want := "moved   All of Us Strangers (2023).mp4 -> /Volumes/media/Movies/All of Us Strangers (2023)/All of Us Strangers (2023).mp4"
+	want := "MOVED    All of Us Strangers (2023).mp4 -> /Volumes/media/Movies/All of Us Strangers (2023)/All of Us Strangers (2023).mp4"
 	if got != want {
 		t.Fatalf("processDropCompactLine(applied) = %q, want %q", got, want)
 	}
@@ -32,7 +32,7 @@ func TestProcessDropCompactLine_Skipped(t *testing.T) {
 	}
 
 	got := processDropCompactLine(res)
-	want := "skipped Unknown.Release \u2014 no main media found in directory"
+	want := "SKIPPED  Unknown.Release \u2014 no main media found in directory"
 	if got != want {
 		t.Fatalf("processDropCompactLine(skipped) = %q, want %q", got, want)
 	}
