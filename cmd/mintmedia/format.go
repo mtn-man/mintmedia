@@ -65,7 +65,7 @@ func PrintResults(results []processor.Result) {
 
 // PrintProcessDropNoFiles writes process-drop no-op output when no candidates are found.
 func PrintProcessDropNoFiles() {
-	fmt.Println("No files detected, exiting...")
+	fmt.Println("INFO     No files detected.")
 }
 
 // PrintProcessDropCandidates writes process-drop candidate discovery output.
@@ -73,7 +73,7 @@ func PrintProcessDropCandidates(count int, verbose bool) {
 	if verbose {
 		return
 	}
-	fmt.Printf("Discovered %d candidate(s).\n\n", count)
+	fmt.Printf("INFO     Discovered %d candidate(s).\n\n", count)
 }
 
 // PrintProcessDropStatError writes a process-drop stat error to stderr.
@@ -119,14 +119,14 @@ func PrintProcessDropSummary(s ProcessDropSummary) {
 func processDropCompactLine(res processor.Result) string {
 	if res.Applied {
 		dest := strings.TrimSpace(res.Plan.DestMainPath)
-		name := filepath.Base(dest)
+		name := filepath.Base(strings.TrimSpace(res.Plan.MainSourcePath))
 		if name == "." || name == string(os.PathSeparator) || strings.TrimSpace(name) == "" {
 			name = "(unknown)"
 		}
 		if dest == "" {
 			return fmt.Sprintf("MOVED    %s", name)
 		}
-		return fmt.Sprintf("MOVED    %s -> %s", name, dest)
+		return fmt.Sprintf("MOVED    %s\n    ->   %s", name, dest)
 	}
 
 	ref := strings.TrimSpace(res.Plan.InputPath)
@@ -147,7 +147,7 @@ func processDropCompactLine(res processor.Result) string {
 func processDropSummaryLine(s ProcessDropSummary) string {
 	elapsed := s.Elapsed.Round(time.Second)
 	return fmt.Sprintf(
-		"Done. %d candidates — %d moved, %d skipped, %d errors  (%s)",
+		"INFO     Done. %d candidates — %d moved, %d skipped, %d errors  (%s)",
 		s.Candidates,
 		s.Applied,
 		s.Skipped,

@@ -96,6 +96,9 @@ type Daemon struct {
 
 	// internal test seam; defaults to notify.PlaySound when nil.
 	playSoundFn func(context.Context, string) error
+
+	// internal: ensures "Track progress here" is logged at most once per session.
+	trackProgressOnce sync.Once
 }
 
 // Run starts the daemon loop. The caller is responsible for creating and starting the Watcher and Poller.
@@ -183,7 +186,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	default:
 		d.logConsoleInfo(logging.EventSystemStartup, "Polling clipboard for magnet links (logging only).", nil)
 	}
-	d.logConsoleInfo(logging.EventSystemStartup, "Press Ctrl+C to stop.", nil)
+	d.logConsoleInfo(logging.EventSystemStartup, "Press Ctrl+C to stop.\n", nil)
 	d.logHistoryInfo(logging.EventSystemStartup, logging.Fields{
 		"mode": "daemon",
 	})
@@ -211,7 +214,7 @@ runLoop:
 
 			d.logConsoleInfo(
 				logging.EventSystemDestinationsReady,
-				fmt.Sprintf("Destinations ready; processing %d pending item(s).", len(pending)),
+				fmt.Sprintf("INFO     destinations ready; processing %d pending item(s).", len(pending)),
 				logging.Fields{"pending": len(pending)},
 			)
 			d.logHistoryInfo(logging.EventSystemDestinationsReady, logging.Fields{
@@ -276,10 +279,9 @@ runLoop:
 				}
 				pending[path] = time.Now()
 				if lastWaitLog.IsZero() || time.Since(lastWaitLog) > time.Minute {
-					d.logConsoleWarn(
+					d.logConsoleInfo(
 						logging.EventSystemDestinationsWaiting,
-						fmt.Sprintf("WARNING  destinations unavailable; waiting (%d pending)", len(pending)),
-						nil,
+						fmt.Sprintf("INFO     destinations unavailable; waiting (%d pending)", len(pending)),
 						logging.Fields{"pending": len(pending)},
 					)
 					d.logHistoryInfo(logging.EventSystemDestinationsWaiting, logging.Fields{
@@ -336,7 +338,7 @@ runLoop:
 
 			d.logConsoleInfo(
 				logging.EventDaemonMagnetAdded,
-				fmt.Sprintf("QUEUED   %q  (btih=%s, %d trackers)", truncateForLog(dn, 80), btih, tr),
+				fmt.Sprintf("TORRENT  %q  (btih=%s, %d trackers)", truncateForLog(dn, 80), btih, tr),
 				logging.Fields{"btih": btih, "dn": dn, "trackers": tr},
 			)
 
@@ -360,17 +362,14 @@ runLoop:
 					return
 				}
 
-				d.logConsoleInfo(
-					logging.EventDaemonMagnetAdded,
-					fmt.Sprintf("ADDED    torrent %s", btihShort),
-					logging.Fields{"btih": btihShort, "dn": dn},
-				)
 				if strings.TrimSpace(d.TransmissionHost) != "" {
-					d.logConsoleInfo(
-						logging.EventDaemonMagnetAdded,
-						fmt.Sprintf("Track progress here: http://%s/transmission/web/", d.TransmissionHost),
-						logging.Fields{"host": d.TransmissionHost},
-					)
+					d.trackProgressOnce.Do(func() {
+						d.logConsoleInfo(
+							logging.EventDaemonMagnetAdded,
+							fmt.Sprintf("TORRENT  Track progress here: http://%s/transmission/web/", d.TransmissionHost),
+							logging.Fields{"host": d.TransmissionHost},
+						)
+					})
 				}
 				base := context.WithoutCancel(ctx)
 				_ = notify.PlaySound(base, d.SoundInput)
@@ -482,7 +481,7 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 		if r.Applied {
 			d.logConsoleInfo(
 				logging.EventProcessorMoveMainApplied,
-				fmt.Sprintf("MOVED    %s -> %s  (%s)", filepath.Base(pth), r.Plan.DestMainPath, dur),
+				fmt.Sprintf("MOVED    %s\n    ->   %s  (%s)", filepath.Base(r.Plan.MainSourcePath), r.Plan.DestMainPath, dur),
 				logging.Fields{"path": pth, "dest_path": r.Plan.DestMainPath, "duration": dur.String()},
 			)
 			playCount := planner.OnAppliedMain()

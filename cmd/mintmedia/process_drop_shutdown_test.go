@@ -317,7 +317,7 @@ func TestProcessDropFolder_NoCandidates_PrintsNoFilesWithoutConfigPath(t *testin
 		}
 	})
 
-	if !strings.Contains(out, "No files detected, exiting...") {
+	if !strings.Contains(out, "INFO     No files detected.") {
 		t.Fatalf("expected no-files message, got: %q", out)
 	}
 	if strings.Contains(out, "Config file:") {

@@ -11,12 +11,13 @@ func TestProcessDropCompactLine_Applied(t *testing.T) {
 	res := processor.Result{
 		Applied: true,
 		Plan: processor.Plan{
-			DestMainPath: "/Volumes/media/Movies/All of Us Strangers (2023)/All of Us Strangers (2023).mp4",
+			MainSourcePath: "/tmp/drop/All.of.Us.Strangers.2023.mkv",
+			DestMainPath:   "/Volumes/media/Movies/All of Us Strangers (2023)/All of Us Strangers (2023).mp4",
 		},
 	}
 
 	got := processDropCompactLine(res)
-	want := "MOVED    All of Us Strangers (2023).mp4 -> /Volumes/media/Movies/All of Us Strangers (2023)/All of Us Strangers (2023).mp4"
+	want := "MOVED    All.of.Us.Strangers.2023.mkv\n    ->   /Volumes/media/Movies/All of Us Strangers (2023)/All of Us Strangers (2023).mp4"
 	if got != want {
 		t.Fatalf("processDropCompactLine(applied) = %q, want %q", got, want)
 	}
@@ -49,7 +50,7 @@ func TestProcessDropSummaryLine(t *testing.T) {
 	}
 
 	got := processDropSummaryLine(sum)
-	want := "Done. 10 candidates \u2014 10 moved, 2 skipped, 1 errors  (3m14s)"
+	want := "INFO     Done. 10 candidates \u2014 10 moved, 2 skipped, 1 errors  (3m14s)"
 	if got != want {
 		t.Fatalf("processDropSummaryLine() = %q, want %q", got, want)
 	}

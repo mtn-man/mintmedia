@@ -189,7 +189,7 @@ func (r *terminalReporter) renderClassicCopyingLine(name string, s Snapshot) str
 	if s.Total > 0 {
 		pct := (float64(s.Copied) / float64(s.Total)) * 100
 		line := fmt.Sprintf(
-			"COPYING: %s %.1f%% (%s / %s) %.1f MB/s",
+			"SORTING  %s %.1f%% (%s / %s) %.1f MB/s",
 			name,
 			pct,
 			humanBytes(s.Copied),
@@ -200,7 +200,7 @@ func (r *terminalReporter) renderClassicCopyingLine(name string, s Snapshot) str
 	}
 
 	line := fmt.Sprintf(
-		"COPYING: %s (%s copied) %.1f MB/s",
+		"SORTING  %s (%s copied) %.1f MB/s",
 		name,
 		humanBytes(s.Copied),
 		s.RateMBps,
@@ -251,10 +251,10 @@ func (r *terminalReporter) renderBarLine(name string, s Snapshot) string {
 	bar := ansiCyan + barRaw + ansiReset
 
 	// Color conventions:
-	// - "COPYING:" label in yellow
+	// - "SORTING " label in yellow
 	// - progress bar in teal (cyan)
 	// - percentage token in cyan
-	labelRaw := "COPYING:"
+	labelRaw := "SORTING "
 	label := ansiYellow + labelRaw + ansiReset
 	pctTokRaw := fmt.Sprintf("%.0f%%", pct)
 	pctTok := ansiCyan + pctTokRaw + ansiReset
@@ -304,10 +304,10 @@ func (r *terminalReporter) renderBarLine(name string, s Snapshot) string {
 }
 
 func colorizeCopyingLine(line string) string {
-	// Color the title "COPYING:" yellow, and the first percentage token (e.g. "76.0%") cyan.
+	// Color the title "SORTING  " yellow, and the first percentage token (e.g. "76.0%") cyan.
 	out := line
-	if strings.HasPrefix(out, "COPYING:") {
-		out = ansiYellow + "COPYING:" + ansiReset + strings.TrimPrefix(out, "COPYING:")
+	if strings.HasPrefix(out, "SORTING  ") {
+		out = ansiYellow + "SORTING  " + ansiReset + strings.TrimPrefix(out, "SORTING  ")
 	}
 
 	// Find the first percentage token and color it cyan.

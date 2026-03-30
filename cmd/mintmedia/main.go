@@ -121,9 +121,7 @@ func main() {
 		os.Exit(exitError)
 	}
 
-	suppressReporterDone := mode.ProcessDrop && !*verbose
-
-	proc, err := newGoProcessor(resolved, logger, suppressReporterDone)
+	proc, err := newGoProcessor(resolved, logger)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(exitError)
@@ -219,7 +217,7 @@ func main() {
 
 // --- Go-native processor wiring --------------------------------------------
 
-func newGoProcessor(res *config.Resolved, logger logging.Logger, suppressReporterDone bool) (processor.Processor, error) {
+func newGoProcessor(res *config.Resolved, logger logging.Logger) (processor.Processor, error) {
 	pcfg := processor.Config{
 		DropFolder: res.DropFolderAbs,
 		MoviesDir:  res.DestDirMoviesAbs,
@@ -235,7 +233,7 @@ func newGoProcessor(res *config.Resolved, logger logging.Logger, suppressReporte
 		Reporter: transfer.NewTerminalReporter(os.Stdout, transfer.ReportOptions{
 			EnableBar:        true,
 			EnableETA:        true,
-			SuppressDoneLine: suppressReporterDone,
+			SuppressDoneLine: true,
 		}),
 		UpdateEvery: defaultReportEvery,
 	})
