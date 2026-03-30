@@ -32,7 +32,8 @@ var prefixColors = []struct {
 	prefix string
 	color  string
 }{
-	{"MOVED    ", Green},
+	{"STARTED  ", Green},
+	{"SORTED   ", Green},
 	{"REMOVED  ", Green},
 	{"SORTING  ", Yellow},
 	{"SKIPPED  ", Yellow},

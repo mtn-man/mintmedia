@@ -375,8 +375,8 @@ func TestProcessDropFolder_StreamedPerFile_NoDuplicateLinesOrSounds(t *testing.T
 		}
 	})
 
-	if got := strings.Count(out, "MOVED    "); got != 2 {
-		t.Fatalf("expected 2 compact moved lines, got %d (output=%q)", got, out)
+	if got := strings.Count(out, "SORTED   "); got != 2 {
+		t.Fatalf("expected 2 compact sorted lines, got %d (output=%q)", got, out)
 	}
 
 	soundMu.Lock()

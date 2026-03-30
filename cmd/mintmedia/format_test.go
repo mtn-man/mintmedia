@@ -17,7 +17,7 @@ func TestProcessDropCompactLine_Applied(t *testing.T) {
 	}
 
 	got := processDropCompactLine(res)
-	want := "MOVED    All.of.Us.Strangers.2023.mkv\n    ->   /Volumes/media/Movies/All of Us Strangers (2023)/All of Us Strangers (2023).mp4"
+	want := "SORTED   All.of.Us.Strangers.2023.mkv\n    ->   /Volumes/media/Movies/All of Us Strangers (2023)/All of Us Strangers (2023).mp4"
 	if got != want {
 		t.Fatalf("processDropCompactLine(applied) = %q, want %q", got, want)
 	}
@@ -54,7 +54,7 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Errors:     1,
 				Elapsed:    3*time.Minute + 14*time.Second + 250*time.Millisecond,
 			},
-			want: "INFO     10 files \u2014 7 moved, 2 skipped, 1 error (3m14s)",
+			want: "INFO     10 files \u2014 7 sorted, 2 skipped, 1 error (3m14s)",
 		},
 		{
 			name: "clean run",
@@ -63,7 +63,7 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Applied:    3,
 				Elapsed:    62 * time.Second,
 			},
-			want: "INFO     3 files \u2014 3 moved (1m2s)",
+			want: "INFO     3 files \u2014 3 sorted (1m2s)",
 		},
 		{
 			name: "single file",
@@ -72,7 +72,7 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Applied:    1,
 				Elapsed:    5 * time.Second,
 			},
-			want: "INFO     1 file \u2014 1 moved (5s)",
+			want: "INFO     1 file \u2014 1 sorted (5s)",
 		},
 		{
 			name: "multiple errors",
@@ -82,7 +82,7 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Errors:     2,
 				Elapsed:    10 * time.Second,
 			},
-			want: "INFO     4 files \u2014 2 moved, 2 errors (10s)",
+			want: "INFO     4 files \u2014 2 sorted, 2 errors (10s)",
 		},
 	}
 

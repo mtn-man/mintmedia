@@ -178,7 +178,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	sem := make(chan struct{}, d.MaxConcurrent)
 
-	d.logConsoleInfo(logging.EventSystemStartup, "Mintmedia daemon started.", nil)
+	d.logConsoleInfo(logging.EventSystemStartup, "STARTED  mintmedia daemon", nil)
 	switch {
 	case d.Poller == nil:
 		d.logConsoleInfo(logging.EventSystemStartup, "Clipboard polling disabled.", nil)
@@ -482,7 +482,7 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 		if r.Applied {
 			d.logConsoleInfo(
 				logging.EventProcessorMoveMainApplied,
-				fmt.Sprintf("MOVED    %s\n    ->   %s  (%s)", filepath.Base(r.Plan.MainSourcePath), r.Plan.DestMainPath, dur),
+				fmt.Sprintf("SORTED   %s\n    ->   %s  (%s)", filepath.Base(r.Plan.MainSourcePath), r.Plan.DestMainPath, dur),
 				logging.Fields{"path": pth, "dest_path": r.Plan.DestMainPath, "duration": dur.String()},
 			)
 			playCount := planner.OnAppliedMain()

@@ -126,9 +126,9 @@ func processDropCompactLine(res processor.Result) string {
 			name = "(unknown)"
 		}
 		if dest == "" {
-			return fmt.Sprintf("MOVED    %s", name)
+			return fmt.Sprintf("SORTED   %s", name)
 		}
-		return fmt.Sprintf("MOVED    %s\n    ->   %s", name, dest)
+		return fmt.Sprintf("SORTED   %s\n    ->   %s", name, dest)
 	}
 
 	ref := strings.TrimSpace(res.Plan.InputPath)
@@ -153,7 +153,7 @@ func processDropSummaryLine(s ProcessDropSummary) string {
 	}
 	elapsed := s.Elapsed.Round(time.Second)
 
-	parts := []string{fmt.Sprintf("%d moved", s.Applied)}
+	parts := []string{fmt.Sprintf("%d sorted", s.Applied)}
 	if s.Skipped > 0 {
 		parts = append(parts, fmt.Sprintf("%d skipped", s.Skipped))
 	}

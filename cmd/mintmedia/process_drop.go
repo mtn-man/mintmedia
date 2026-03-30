@@ -47,6 +47,9 @@ func processDropFolder(
 	shutdownGrace time.Duration,
 	shutdownForce time.Duration,
 ) ProcessDropOutcome {
+	fmt.Println(console.ColorizePrefix("STARTED  mintmedia"))
+	fmt.Println()
+
 	start := time.Now()
 	policy := shutdown.ResolvePolicy(shutdownGrace, shutdownForce)
 
