@@ -46,9 +46,6 @@ func TestCopyThenReplace_WritesFileAndEmitsDone(t *testing.T) {
 	if reporter.DoneCount() != 1 {
 		t.Fatalf("done count = %d, want 1", reporter.DoneCount())
 	}
-	if reporter.DoneSnapshot().Name != filepath.Base(dst) {
-		t.Fatalf("Done snapshot name = %q, want %q", reporter.DoneSnapshot().Name, filepath.Base(dst))
-	}
 }
 
 func TestCopyThenReplace_EmitsPeriodicUpdate(t *testing.T) {
@@ -271,7 +268,6 @@ func TestMove_SameDeviceRenameFailure_NoFallback(t *testing.T) {
 
 type stubReporter struct {
 	mu              sync.Mutex
-	done            Snapshot
 	doneCount       int
 	updateCount     int
 	lateUpdateCount int
@@ -293,10 +289,9 @@ func (s *stubReporter) Update(Snapshot) {
 	}
 }
 
-func (s *stubReporter) Done(sn Snapshot) {
+func (s *stubReporter) Done() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.done = sn
 	s.doneCount++
 }
 
@@ -304,12 +299,6 @@ func (s *stubReporter) DoneCalled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.doneCount > 0
-}
-
-func (s *stubReporter) DoneSnapshot() Snapshot {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.done
 }
 
 func (s *stubReporter) DoneCount() int {

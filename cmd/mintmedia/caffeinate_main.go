@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Mtn-Man/mintmedia/internal/console"
 	"github.com/Mtn-Man/mintmedia/internal/notify"
 )
 
@@ -22,7 +23,7 @@ func withCaffeinate(fn func() error) error {
 	caff := newMainCaffeinate()
 	if caff != nil {
 		if err := caff.Start(caffCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "caffeinate warning: %v\n", err)
+			fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("WARNING  caffeinate: %v", err)))
 		}
 	}
 	defer func() {
@@ -31,7 +32,7 @@ func withCaffeinate(fn func() error) error {
 			return
 		}
 		if err := caff.Stop(); err != nil {
-			fmt.Fprintf(os.Stderr, "caffeinate stop warning: %v\n", err)
+			fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("WARNING  caffeinate stop: %v", err)))
 		}
 	}()
 

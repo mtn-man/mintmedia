@@ -8,14 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mtn-Man/mintmedia/internal/console"
 	"golang.org/x/term"
-)
-
-const (
-	ansiReset  = "\033[0m"
-	ansiCyan   = "\033[36m"
-	ansiYellow = "\033[33m"
-	ansiGreen  = "\033[32m"
 )
 
 // IsTerminal is a best-effort check for whether the given file is a terminal.
@@ -45,17 +39,13 @@ type Snapshot struct {
 // Implementations should be safe for concurrent calls.
 type Reporter interface {
 	Update(s Snapshot)
-	Done(s Snapshot)
+	Done()
 }
 
 // ReportOptions controls rendering behavior.
 type ReportOptions struct {
 	// EnableBar controls whether a progress bar may be rendered when conditions are met.
 	EnableBar bool
-
-	// SuppressDoneLine suppresses final "COPY DONE" renderer output while still
-	// allowing progress updates and in-place line cleanup.
-	SuppressDoneLine bool
 
 	// BarMinBytes is the minimum total size required to show a bar.
 	// Typical use: avoid bar for small/local copies.
@@ -130,13 +120,9 @@ func (r *terminalReporter) Update(s Snapshot) {
 	_, _ = fmt.Fprintln(r.out, line)
 }
 
-func (r *terminalReporter) Done(s Snapshot) {
+func (r *terminalReporter) Done() {
 	if r.out == nil {
 		return
-	}
-	name := strings.TrimSpace(s.Name)
-	if name == "" {
-		name = "(unknown)"
 	}
 
 	r.mu.Lock()
@@ -146,14 +132,6 @@ func (r *terminalReporter) Done(s Snapshot) {
 	if r.inPlace {
 		_, _ = fmt.Fprint(r.out, "\r\033[2K")
 	}
-
-	if r.opts.SuppressDoneLine {
-		return
-	}
-
-	// Print completion line.
-	line := r.renderDoneLine(name, s)
-	_, _ = fmt.Fprintln(r.out, line)
 }
 
 func (r *terminalReporter) shouldShowBar(s Snapshot) bool {
@@ -208,24 +186,6 @@ func (r *terminalReporter) renderClassicCopyingLine(name string, s Snapshot) str
 	return colorizeCopyingLine(line)
 }
 
-func (r *terminalReporter) renderDoneLine(name string, s Snapshot) string {
-	// Keep the existing DONE format for consistency.
-	elapsed := s.Elapsed.Round(time.Second)
-	if s.Total > 0 {
-		return colorizeCopyDoneLine(fmt.Sprintf(
-			"COPY DONE: %s (%s) in %s",
-			name,
-			humanBytes(s.Total),
-			elapsed,
-		))
-	}
-	return colorizeCopyDoneLine(fmt.Sprintf(
-		"COPY DONE: %s in %s",
-		name,
-		elapsed,
-	))
-}
-
 func (r *terminalReporter) renderBarLine(name string, s Snapshot) string {
 	pct := (float64(s.Copied) / float64(s.Total)) * 100
 	if pct < 0 {
@@ -239,25 +199,20 @@ func (r *terminalReporter) renderBarLine(name string, s Snapshot) string {
 	if w <= 0 {
 		return r.renderClassicCopyingLine(name, s)
 	}
-	filled := int((pct / 100) * float64(w))
-	if filled < 0 {
-		filled = 0
-	}
-	if filled > w {
-		filled = w
-	}
+	filled := max(int((pct/100)*float64(w)), 0)
+	filled = min(filled, w)
 
 	barRaw := strings.Repeat("█", filled) + strings.Repeat("░", w-filled)
-	bar := ansiCyan + barRaw + ansiReset
+	bar := console.Cyan + barRaw + console.Reset
 
 	// Color conventions:
 	// - "SORTING " label in yellow
 	// - progress bar in teal (cyan)
 	// - percentage token in cyan
 	labelRaw := "SORTING "
-	label := ansiYellow + labelRaw + ansiReset
+	label := console.Yellow + labelRaw + console.Reset
 	pctTokRaw := fmt.Sprintf("%.0f%%", pct)
-	pctTok := ansiCyan + pctTokRaw + ansiReset
+	pctTok := console.Cyan + pctTokRaw + console.Reset
 
 	copiedStr := humanBytes(s.Copied)
 	totalStr := humanBytes(s.Total)
@@ -306,8 +261,8 @@ func (r *terminalReporter) renderBarLine(name string, s Snapshot) string {
 func colorizeCopyingLine(line string) string {
 	// Color the title "SORTING  " yellow, and the first percentage token (e.g. "76.0%") cyan.
 	out := line
-	if strings.HasPrefix(out, "SORTING  ") {
-		out = ansiYellow + "SORTING  " + ansiReset + strings.TrimPrefix(out, "SORTING  ")
+	if after, ok := strings.CutPrefix(out, "SORTING  "); ok {
+		out = console.Yellow + "SORTING  " + console.Reset + after
 	}
 
 	// Find the first percentage token and color it cyan.
@@ -332,15 +287,7 @@ func colorizeCopyingLine(line string) string {
 	}
 
 	pctToken := out[start : pctEnd+1]
-	return out[:start] + ansiCyan + pctToken + ansiReset + out[pctEnd+1:]
-}
-
-func colorizeCopyDoneLine(line string) string {
-	// Color the title "COPY DONE:" green.
-	if strings.HasPrefix(line, "COPY DONE:") {
-		return ansiGreen + "COPY DONE:" + ansiReset + strings.TrimPrefix(line, "COPY DONE:")
-	}
-	return line
+	return out[:start] + console.Cyan + pctToken + console.Reset + out[pctEnd+1:]
 }
 
 func (r *terminalReporter) etaToken(s Snapshot) (string, bool) {

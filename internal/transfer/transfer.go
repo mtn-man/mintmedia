@@ -210,10 +210,7 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 	// Structured reporter ticker (intended for progress bars).
 	if t.opts.Reporter != nil {
 		stopReport = make(chan struct{})
-		reportWG.Add(1)
-		go func() {
-			defer reportWG.Done()
-
+		reportWG.Go(func() {
 			tick := t.opts.UpdateEvery
 			if tick <= 0 {
 				tick = 250 * time.Millisecond
@@ -262,7 +259,7 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 					lastTime = now
 				}
 			}
-		}()
+		})
 	}
 
 	// Counting reader updates "copied" atomically
@@ -317,15 +314,9 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 	// Ensure no further updates can be emitted before the final callback.
 	stopReporter()
 
-	// Structured completion callback
+	// Clear any in-place progress line.
 	if t.opts.Reporter != nil {
-		t.opts.Reporter.Done(Snapshot{
-			Name:     filepath.Base(dst),
-			Copied:   atomic.LoadInt64(&copied),
-			Total:    total,
-			RateMBps: 0,
-			Elapsed:  time.Since(start),
-		})
+		t.opts.Reporter.Done()
 	}
 
 	return nil

@@ -231,9 +231,8 @@ func newGoProcessor(res *config.Resolved, logger logging.Logger) (processor.Proc
 	xfer := transfer.NewRenameOrCopy(transfer.Options{
 		// Structured reporter enables the progress bar for large/slow copies.
 		Reporter: transfer.NewTerminalReporter(os.Stdout, transfer.ReportOptions{
-			EnableBar:        true,
-			EnableETA:        true,
-			SuppressDoneLine: true,
+			EnableBar: true,
+			EnableETA: true,
 		}),
 		UpdateEvery: defaultReportEvery,
 	})

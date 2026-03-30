@@ -89,7 +89,7 @@ func TestWithCaffeinate_StartErrorStillRunsCallback(t *testing.T) {
 	if fake.stopCalls != 1 {
 		t.Fatalf("Stop calls = %d, want 1", fake.stopCalls)
 	}
-	if !strings.Contains(stderr, "caffeinate warning:") {
+	if !strings.Contains(stderr, "WARNING  caffeinate:") {
 		t.Fatalf("stderr missing start warning, got %q", stderr)
 	}
 }

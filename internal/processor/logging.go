@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"github.com/Mtn-Man/mintmedia/internal/console"
 	"github.com/Mtn-Man/mintmedia/internal/logging"
 )
 
@@ -22,7 +23,7 @@ func logConsoleWarn(p *processorImpl, event logging.Event, msg string, err error
 	if p == nil || p.logger == nil {
 		return
 	}
-	p.logger.ConsoleWarn("processor", event, msg, err, fields)
+	p.logger.ConsoleWarn("processor", event, console.ColorizePrefix(msg), err, fields)
 }
 
 func logWarn(p *processorImpl, event logging.Event, msg string, err error, fields logging.Fields) {

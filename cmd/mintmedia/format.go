@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mtn-Man/mintmedia/internal/console"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 )
 
@@ -59,7 +60,7 @@ func printPlanBody(pl processor.Plan) {
 // PrintResults writes result output to stdout.
 func PrintResults(results []processor.Result) {
 	for _, res := range results {
-		fmt.Println(processDropCompactLine(res))
+		fmt.Println(console.ColorizePrefix(processDropCompactLine(res)))
 	}
 }
 
@@ -69,21 +70,22 @@ func PrintProcessDropNoFiles() {
 }
 
 // PrintProcessDropCandidates writes process-drop candidate discovery output.
-func PrintProcessDropCandidates(count int, verbose bool) {
-	if verbose {
-		return
+func PrintProcessDropCandidates(count int) {
+	noun := "files"
+	if count == 1 {
+		noun = "file"
 	}
-	fmt.Printf("INFO     Discovered %d candidate(s).\n\n", count)
+	fmt.Printf("INFO     Discovered %d %s.\n\n", count, noun)
 }
 
 // PrintProcessDropStatError writes a process-drop stat error to stderr.
 func PrintProcessDropStatError(path string, err error) {
-	fmt.Fprintf(os.Stderr, "ERROR    stat %s: %v\n", path, err)
+	fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    stat %s: %v", path, err)))
 }
 
 // PrintProcessDropItemError writes a process-drop item error to stderr.
 func PrintProcessDropItemError(path string, err error) {
-	fmt.Fprintf(os.Stderr, "ERROR    %s: %v\n", path, err)
+	fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    %s: %v", path, err)))
 }
 
 // PrintProcessDropResults writes process-drop results to stdout.
@@ -93,7 +95,7 @@ func PrintProcessDropResults(results []processor.Result, verbose bool) {
 	}
 	if !verbose {
 		for _, res := range results {
-			fmt.Println(processDropCompactLine(res))
+			fmt.Println(console.ColorizePrefix(processDropCompactLine(res)))
 		}
 		return
 	}
@@ -145,13 +147,29 @@ func processDropCompactLine(res processor.Result) string {
 }
 
 func processDropSummaryLine(s ProcessDropSummary) string {
+	noun := "files"
+	if s.Candidates == 1 {
+		noun = "file"
+	}
 	elapsed := s.Elapsed.Round(time.Second)
+
+	parts := []string{fmt.Sprintf("%d moved", s.Applied)}
+	if s.Skipped > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped", s.Skipped))
+	}
+	if s.Errors > 0 {
+		errNoun := "error"
+		if s.Errors != 1 {
+			errNoun = "errors"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s", s.Errors, errNoun))
+	}
+
 	return fmt.Sprintf(
-		"INFO     Done. %d candidates — %d moved, %d skipped, %d errors  (%s)",
+		"INFO     %d %s — %s (%s)",
 		s.Candidates,
-		s.Applied,
-		s.Skipped,
-		s.Errors,
+		noun,
+		strings.Join(parts, ", "),
 		elapsed,
 	)
 }

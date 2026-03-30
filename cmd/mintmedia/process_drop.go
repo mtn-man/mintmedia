@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Mtn-Man/mintmedia/internal/console"
 	"github.com/Mtn-Man/mintmedia/internal/notify"
 	"github.com/Mtn-Man/mintmedia/internal/processor"
 	"github.com/Mtn-Man/mintmedia/internal/shutdown"
@@ -53,18 +54,18 @@ func processDropFolder(
 	caffCtx, cancelCaff := context.WithCancel(context.Background())
 	caff := newProcessDropCaffeinate()
 	if err := caff.Start(caffCtx); err != nil {
-		fmt.Fprintf(os.Stderr, "WARNING  caffeinate: %v\n", err)
+		fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("WARNING  caffeinate: %v", err)))
 	}
 	defer func() {
 		cancelCaff()
 		if err := caff.Stop(); err != nil {
-			fmt.Fprintf(os.Stderr, "WARNING  caffeinate stop: %v\n", err)
+			fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("WARNING  caffeinate stop: %v", err)))
 		}
 	}()
 
 	entries, err := os.ReadDir(dropRoot)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR    %v\n", err)
+		fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    %v", err)))
 		return ProcessDropOutcome{ErrorCount: 1}
 	}
 
@@ -106,7 +107,7 @@ func processDropFolder(
 		return ProcessDropOutcome{ErrorCount: errCount}
 	}
 
-	PrintProcessDropCandidates(len(candidates), verbose)
+	PrintProcessDropCandidates(len(candidates))
 
 	summary := ProcessDropSummary{
 		Candidates: len(candidates),
@@ -118,7 +119,6 @@ func processDropFolder(
 	for _, item := range candidates {
 		if ctx.Err() != nil {
 			if !interrupted {
-				fmt.Fprintf(os.Stderr, "WARNING  shutdown requested. Stopping before next item.\n")
 				interrupted = true
 			}
 			break
@@ -223,10 +223,10 @@ func processDropFolder(
 					cancelItem,
 					shutdown.Hooks{
 						OnWaitStart: func(grace time.Duration) {
-							fmt.Fprintf(os.Stderr, "WARNING  shutdown requested. Waiting up to %s for in-flight item.\n", grace)
+							fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefix(fmt.Sprintf("WARNING  shutdown requested. Waiting up to %s for in-flight item.", grace))+"\n")
 						},
 						OnGraceElapsed: func(force time.Duration) {
-							fmt.Fprintf(os.Stderr, "WARNING  shutdown grace elapsed. Canceling in-flight item, waiting up to %s.\n", force)
+							fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("WARNING  shutdown grace elapsed. Canceling in-flight item, waiting up to %s.", force)))
 						},
 					},
 				)
@@ -234,7 +234,7 @@ func processDropFolder(
 					timedOut = true
 					errCount++
 					closeItemClosed()
-					fmt.Fprintf(os.Stderr, "ERROR    shutdown timed out while waiting for in-flight item.\n")
+					fmt.Fprintln(os.Stderr, console.ColorizePrefix("ERROR    shutdown timed out while waiting for in-flight item."))
 				}
 			}
 		}
@@ -260,9 +260,12 @@ func processDropFolder(
 		closeItemClosed()
 
 		if interrupted {
-			fmt.Fprintf(os.Stderr, "WARNING  shutdown requested. Stopping after current item.\n")
 			break
 		}
+	}
+
+	if interrupted && !timedOut {
+		fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefix("WARNING  shutdown requested. Stopping.")+"\n")
 	}
 
 	summary.Errors = errCount
