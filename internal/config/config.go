@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/Mtn-Man/mintmedia/internal/logging"
-	"github.com/Mtn-Man/mintmedia/internal/notify"
+	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/notify"
 )
 
 //go:embed defaults.toml

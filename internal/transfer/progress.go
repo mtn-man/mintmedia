@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mtn-Man/mintmedia/internal/console"
+	"github.com/mtn-man/mintmedia/internal/console"
 	"golang.org/x/term"
 )
 

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Mtn-Man/mintmedia/internal/logging"
-	"github.com/Mtn-Man/mintmedia/internal/transfer"
+	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/transfer"
 )
 
 // --- Tests ------------------------------------------------------------------

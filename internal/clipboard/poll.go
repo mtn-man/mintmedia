@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mtn-Man/mintmedia/internal/magnet"
+	"github.com/mtn-man/mintmedia/internal/magnet"
 )
 
 var ErrUnsupportedPlatform = errors.New("clipboard backend unsupported on this platform")

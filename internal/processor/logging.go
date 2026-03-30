@@ -1,8 +1,8 @@
 package processor
 
 import (
-	"github.com/Mtn-Man/mintmedia/internal/console"
-	"github.com/Mtn-Man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/console"
+	"github.com/mtn-man/mintmedia/internal/logging"
 )
 
 func logInfoHistoryOnly(p *processorImpl, event logging.Event, fields logging.Fields) {

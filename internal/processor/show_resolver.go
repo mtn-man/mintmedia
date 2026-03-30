@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Mtn-Man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/logging"
 )
 
 var reShowFolderYear = regexp.MustCompile(`^(?i)(.+?)\s*\((19\d{2}|20\d{2})\)\s*$`)

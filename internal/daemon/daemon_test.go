@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mtn-Man/mintmedia/internal/logging"
-	"github.com/Mtn-Man/mintmedia/internal/notify"
-	"github.com/Mtn-Man/mintmedia/internal/processor"
-	"github.com/Mtn-Man/mintmedia/internal/transmission"
-	"github.com/Mtn-Man/mintmedia/internal/watch"
+	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/notify"
+	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/transmission"
+	"github.com/mtn-man/mintmedia/internal/watch"
 )
 
 func TestDaemon_RunProcessesDropEvents(t *testing.T) {

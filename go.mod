@@ -1,4 +1,4 @@
-module github.com/Mtn-Man/mintmedia
+module github.com/mtn-man/mintmedia
 
 go 1.25.5
 

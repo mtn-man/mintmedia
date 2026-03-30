@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Mtn-Man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/logging"
 )
 
 // Processor implementation notes (v1):

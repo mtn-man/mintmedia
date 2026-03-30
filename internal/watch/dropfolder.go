@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mtn-Man/mintmedia/internal/paths"
+	"github.com/mtn-man/mintmedia/internal/paths"
 
 	"github.com/fsnotify/fsnotify"
 )

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Mtn-Man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/logging"
 )
 
 func TestProcess_OnResult_StreamedForAppliedPackFiles(t *testing.T) {

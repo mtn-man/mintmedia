@@ -14,11 +14,11 @@ import (
 
 	pflag "github.com/spf13/pflag"
 
-	"github.com/Mtn-Man/mintmedia/internal/config"
-	"github.com/Mtn-Man/mintmedia/internal/daemon"
-	"github.com/Mtn-Man/mintmedia/internal/logging"
-	"github.com/Mtn-Man/mintmedia/internal/processor"
-	"github.com/Mtn-Man/mintmedia/internal/transfer"
+	"github.com/mtn-man/mintmedia/internal/config"
+	"github.com/mtn-man/mintmedia/internal/daemon"
+	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/transfer"
 )
 
 const (

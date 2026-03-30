@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/Mtn-Man/mintmedia/internal/magnet"
+	"github.com/mtn-man/mintmedia/internal/magnet"
 )
 
 // Client invokes transmission-remote to add magnets.

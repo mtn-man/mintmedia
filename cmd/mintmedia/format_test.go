@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mtn-Man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/processor"
 )
 
 func TestProcessDropCompactLine_Applied(t *testing.T) {

@@ -9,14 +9,14 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/Mtn-Man/mintmedia/internal/clipboard"
-	"github.com/Mtn-Man/mintmedia/internal/config"
-	"github.com/Mtn-Man/mintmedia/internal/daemon"
-	"github.com/Mtn-Man/mintmedia/internal/logging"
-	"github.com/Mtn-Man/mintmedia/internal/processor"
-	"github.com/Mtn-Man/mintmedia/internal/state"
-	"github.com/Mtn-Man/mintmedia/internal/transmission"
-	"github.com/Mtn-Man/mintmedia/internal/watch"
+	"github.com/mtn-man/mintmedia/internal/clipboard"
+	"github.com/mtn-man/mintmedia/internal/config"
+	"github.com/mtn-man/mintmedia/internal/daemon"
+	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/state"
+	"github.com/mtn-man/mintmedia/internal/transmission"
+	"github.com/mtn-man/mintmedia/internal/watch"
 )
 
 func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor.Processor, logger logging.Logger) (bool, error) {

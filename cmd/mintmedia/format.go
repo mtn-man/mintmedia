@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Mtn-Man/mintmedia/internal/console"
-	"github.com/Mtn-Man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/console"
+	"github.com/mtn-man/mintmedia/internal/processor"
 )
 
 // --- Printing helpers -------------------------------------------------------

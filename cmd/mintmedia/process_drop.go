@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Mtn-Man/mintmedia/internal/console"
-	"github.com/Mtn-Man/mintmedia/internal/notify"
-	"github.com/Mtn-Man/mintmedia/internal/processor"
-	"github.com/Mtn-Man/mintmedia/internal/shutdown"
-	"github.com/Mtn-Man/mintmedia/internal/watch"
+	"github.com/mtn-man/mintmedia/internal/console"
+	"github.com/mtn-man/mintmedia/internal/notify"
+	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/shutdown"
+	"github.com/mtn-man/mintmedia/internal/watch"
 )
 
 type dropCandidate struct {

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Mtn-Man/mintmedia/internal/notify"
-	"github.com/Mtn-Man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/notify"
+	"github.com/mtn-man/mintmedia/internal/processor"
 )
 
 func TestProcessDropFolder_InterruptStopsAfterCurrentItem(t *testing.T) {

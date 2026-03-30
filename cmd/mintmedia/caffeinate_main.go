@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Mtn-Man/mintmedia/internal/console"
-	"github.com/Mtn-Man/mintmedia/internal/notify"
+	"github.com/mtn-man/mintmedia/internal/console"
+	"github.com/mtn-man/mintmedia/internal/notify"
 )
 
 type mainCaffeinateController interface {

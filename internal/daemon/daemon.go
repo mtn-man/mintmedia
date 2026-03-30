@@ -12,15 +12,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Mtn-Man/mintmedia/internal/clipboard"
-	"github.com/Mtn-Man/mintmedia/internal/console"
-	"github.com/Mtn-Man/mintmedia/internal/logging"
-	"github.com/Mtn-Man/mintmedia/internal/magnet"
-	"github.com/Mtn-Man/mintmedia/internal/notify"
-	"github.com/Mtn-Man/mintmedia/internal/processor"
-	"github.com/Mtn-Man/mintmedia/internal/shutdown"
-	"github.com/Mtn-Man/mintmedia/internal/transmission"
-	"github.com/Mtn-Man/mintmedia/internal/watch"
+	"github.com/mtn-man/mintmedia/internal/clipboard"
+	"github.com/mtn-man/mintmedia/internal/console"
+	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/magnet"
+	"github.com/mtn-man/mintmedia/internal/notify"
+	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/shutdown"
+	"github.com/mtn-man/mintmedia/internal/transmission"
+	"github.com/mtn-man/mintmedia/internal/watch"
 )
 
 var ErrShutdownTimedOut = errors.New("daemon shutdown timed out")

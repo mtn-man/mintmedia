@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Mtn-Man/mintmedia/internal/logging"
-	"github.com/Mtn-Man/mintmedia/internal/paths"
+	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/paths"
 )
 
 // plan is the internal implementation behind (*processorImpl).Plan().
