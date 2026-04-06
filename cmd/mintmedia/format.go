@@ -128,7 +128,7 @@ func processDropCompactLine(res processor.Result) string {
 		if dest == "" {
 			return fmt.Sprintf("SORTED   %s", name)
 		}
-		return fmt.Sprintf("SORTED   %s\n    ->   %s", name, dest)
+		return fmt.Sprintf("SORTED   %s\n    %s   %s", name, console.Colorize("->", console.Green), dest)
 	}
 
 	ref := strings.TrimSpace(res.Plan.InputPath)

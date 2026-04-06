@@ -482,7 +482,7 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 		if r.Applied {
 			d.logConsoleInfo(
 				logging.EventProcessorMoveMainApplied,
-				fmt.Sprintf("SORTED   %s\n    ->   %s  (%s)", filepath.Base(r.Plan.MainSourcePath), r.Plan.DestMainPath, dur),
+				fmt.Sprintf("SORTED   %s\n    %s   %s  (%s)", filepath.Base(r.Plan.MainSourcePath), console.Colorize("->", console.Green), r.Plan.DestMainPath, dur),
 				logging.Fields{"path": pth, "dest_path": r.Plan.DestMainPath, "duration": dur.String()},
 			)
 			playCount := planner.OnAppliedMain()

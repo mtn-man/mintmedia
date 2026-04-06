@@ -42,6 +42,14 @@ var prefixColors = []struct {
 	{"TORRENT  ", Cyan},
 }
 
+// Colorize wraps text in the given ANSI color if color is enabled.
+func Colorize(text, color string) string {
+	if !colorEnabled {
+		return text
+	}
+	return color + text + Reset
+}
+
 // ColorizePrefix detects a known label prefix at the start of line
 // and wraps it in the appropriate ANSI color. Returns the line
 // unchanged if color is disabled or no prefix matches.
