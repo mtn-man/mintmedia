@@ -179,3 +179,12 @@ var (
 	// ErrAmbiguousShow indicates multiple possible show folders matched with no clear choice.
 	ErrAmbiguousShow = errors.New("ambiguous show folder match")
 )
+
+// IsSuppressedResult reports whether r is an expected non-event that callers should
+// silently ignore rather than surface as a SKIPPED item. Covers inputs that are not
+// media files, directories with no media, and inputs that disappeared before processing.
+func IsSuppressedResult(r Result) bool {
+	return r.Reason == ErrNotMedia.Error() ||
+		r.Reason == ErrNoMainMediaFound.Error() ||
+		r.Reason == ErrInputMissing.Error()
+}

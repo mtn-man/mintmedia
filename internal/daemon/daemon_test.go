@@ -42,7 +42,6 @@ func TestDaemon_RunProcessesDropEvents(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		MaxConcurrent: 1,
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -109,7 +108,6 @@ func TestDaemon_RunWaitsForInFlightJobsOnShutdown(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		MaxConcurrent: 1,
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -191,7 +189,6 @@ func TestDaemon_RunCaffeinateStaysActiveDuringShutdownDrain(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		MaxConcurrent: 1,
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -274,7 +271,6 @@ func TestDaemon_RunForceCancelsInFlightAfterGrace(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		MaxConcurrent: 1,
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -345,7 +341,6 @@ func TestDaemon_RunReturnsShutdownTimeoutWhenJobsIgnoreCancel(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		MaxConcurrent: 1,
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -408,7 +403,6 @@ func TestDaemon_RunSkipsWaitingLogWhenNoInFlightJobs(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		MaxConcurrent: 1,
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -476,7 +470,6 @@ func TestDaemon_RunWaitingLogStartsOnNewLineForInFlightJobs(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		MaxConcurrent: 1,
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -542,7 +535,6 @@ func TestDaemon_DeferDestinationChecks(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		MaxConcurrent: 1,
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -601,9 +593,7 @@ func TestDaemon_ProcessPathAsync_CleansCompletedWhenEnabled(t *testing.T) {
 		SoundDone:                    "",
 	}
 
-	sem := make(chan struct{}, 1)
-	d.jobsWg.Add(1)
-	d.processPathAsync(context.Background(), context.Background(), sem, "/tmp/input.mkv", "/tmp/input.mkv")
+	d.processPath(context.Background(), "/tmp/input.mkv", "/tmp/input.mkv")
 
 	b, err := os.ReadFile(removedFile)
 	if err != nil {
@@ -667,9 +657,7 @@ func TestDaemon_ProcessPathAsync_DoneNotificationModes(t *testing.T) {
 				AutoCleanupCompletedTorrents: false,
 			}
 
-			sem := make(chan struct{}, 1)
-			d.jobsWg.Add(1)
-			d.processPathAsync(context.Background(), context.Background(), sem, "/tmp/input.mkv", "/tmp/input.mkv")
+			d.processPath(context.Background(), "/tmp/input.mkv", "/tmp/input.mkv")
 
 			waitForSoundCount(t, soundCalls, tc.want, 2*time.Second)
 			assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
@@ -732,9 +720,7 @@ func TestDaemon_ProcessPathAsync_DoneNotificationModes_StreamedResults(t *testin
 				AutoCleanupCompletedTorrents: false,
 			}
 
-			sem := make(chan struct{}, 1)
-			d.jobsWg.Add(1)
-			d.processPathAsync(context.Background(), context.Background(), sem, "/tmp/input.mkv", "/tmp/input.mkv")
+			d.processPath(context.Background(), "/tmp/input.mkv", "/tmp/input.mkv")
 
 			waitForSoundCount(t, soundCalls, tc.want, 2*time.Second)
 			assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)

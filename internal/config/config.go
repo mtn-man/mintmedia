@@ -30,8 +30,7 @@ const (
 	DefaultConfigPathRel = ".config/mintmedia/config.toml"
 
 	// Defaults (opinionated for reliability).
-	defaultMaxConcurrentProcessors = 1
-	defaultClipboardPollInterval   = 1 * time.Second
+	defaultClipboardPollInterval = 1 * time.Second
 	defaultDropSettleDuration      = 3 * time.Second
 	defaultShutdownGraceDuration   = 10 * time.Minute
 	defaultShutdownForceTimeout    = 15 * time.Second
@@ -82,12 +81,11 @@ type Logging struct {
 }
 
 type System struct {
-	AutoCreateMissingDirs   bool   `toml:"auto_create_missing_dirs"`
-	DeferDestinationChecks  bool   `toml:"defer_destination_checks"`
-	MaxConcurrentProcessors int    `toml:"max_concurrent_processors"`
-	DoneNotificationMode    string `toml:"done_notification_mode"`
-	ShutdownGraceDuration   string `toml:"shutdown_grace_duration"`
-	ShutdownForceTimeout    string `toml:"shutdown_force_timeout"`
+	AutoCreateMissingDirs  bool   `toml:"auto_create_missing_dirs"`
+	DeferDestinationChecks bool   `toml:"defer_destination_checks"`
+	DoneNotificationMode   string `toml:"done_notification_mode"`
+	ShutdownGraceDuration  string `toml:"shutdown_grace_duration"`
+	ShutdownForceTimeout   string `toml:"shutdown_force_timeout"`
 }
 
 type Watch struct {
@@ -228,9 +226,6 @@ func defaultConfigPath() (string, error) {
 
 func applyDefaults(cfg *Config) {
 	// System defaults
-	if cfg.System.MaxConcurrentProcessors <= 0 {
-		cfg.System.MaxConcurrentProcessors = defaultMaxConcurrentProcessors
-	}
 	if strings.TrimSpace(cfg.System.DoneNotificationMode) == "" {
 		cfg.System.DoneNotificationMode = notify.DoneNotificationPerFile
 	}

@@ -74,8 +74,6 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 
 		TransmissionHost: cfg.Torrent.Host,
 
-		MaxConcurrent: cfg.System.MaxConcurrentProcessors,
-
 		MoviesDir: resolved.DestDirMoviesAbs,
 		ShowsDir:  resolved.DestDirShowsAbs,
 

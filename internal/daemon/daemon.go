@@ -58,9 +58,6 @@ type Daemon struct {
 	// directories exist and are writable.
 	DeferDestinationChecks bool
 
-	// Max concurrent media processing jobs.
-	MaxConcurrent int
-
 	// Sounds (best-effort; empty disables)
 	SoundInput string // played on successful Transmission add
 	SoundDone  string // played after successful APPLIED processing based on DoneNotificationMode
@@ -102,6 +99,12 @@ type Daemon struct {
 	trackProgressOnce sync.Once
 }
 
+// workItem is a unit of work queued for the single processing worker.
+type workItem struct {
+	path        string
+	inFlightKey string
+}
+
 // Run starts the daemon loop. The caller is responsible for creating and starting the Watcher and Poller.
 // However, for convenience and symmetry with the current approach, Run() will Start() them if not started yet.
 //
@@ -133,9 +136,6 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}()
 
 	// Defaults
-	if d.MaxConcurrent < 1 {
-		d.MaxConcurrent = 1
-	}
 	if d.MagnetTimeout <= 0 {
 		d.MagnetTimeout = 10 * time.Second
 	}
@@ -176,7 +176,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 		pollerErrors = d.Poller.Errors()
 	}
 
-	sem := make(chan struct{}, d.MaxConcurrent)
+	workQueue := make(chan workItem, 128)
+	go d.runWorker(ctx, jobsCtx, workQueue)
 
 	d.logConsoleInfo(logging.EventSystemStartup, "STARTED  mintmedia daemon", nil)
 	switch {
@@ -237,9 +238,11 @@ runLoop:
 					d.logHistoryWarn(logging.EventDaemonPathDuplicate, nil, logging.Fields{"path": pth})
 					continue
 				}
-				d.jobsWg.Add(1)
-				atomic.AddInt64(&d.jobsInFlight, 1)
-				go d.processPathAsync(ctx, jobsCtx, sem, pth, key)
+				select {
+				case workQueue <- workItem{path: pth, inFlightKey: key}:
+				case <-ctx.Done():
+					d.clearInFlight(key)
+				}
 			}
 
 		// --- Watcher errors ---
@@ -303,9 +306,12 @@ runLoop:
 				d.logHistoryWarn(logging.EventDaemonPathDuplicate, nil, logging.Fields{"path": path})
 				continue
 			}
-			d.jobsWg.Add(1)
-			atomic.AddInt64(&d.jobsInFlight, 1)
-			go d.processPathAsync(ctx, jobsCtx, sem, path, key)
+			select {
+			case workQueue <- workItem{path: path, inFlightKey: key}:
+			case <-ctx.Done():
+				d.clearInFlight(key)
+				break runLoop
+			}
 
 		// --- Clipboard errors ---
 		case err, ok := <-pollerErrors:
@@ -461,24 +467,34 @@ runLoop:
 	)
 }
 
-func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Context, sem chan struct{}, pth string, inFlightKey string) {
-	defer d.jobsWg.Done()
-	defer atomic.AddInt64(&d.jobsInFlight, -1)
+func (d *Daemon) runWorker(runCtx, jobsCtx context.Context, queue <-chan workItem) {
+	for {
+		select {
+		case <-runCtx.Done():
+			return
+		case item, ok := <-queue:
+			if !ok {
+				return
+			}
+			d.jobsWg.Add(1)
+			atomic.AddInt64(&d.jobsInFlight, 1)
+			func() {
+				defer d.jobsWg.Done()
+				defer atomic.AddInt64(&d.jobsInFlight, -1)
+				d.processPath(jobsCtx, item.path, item.inFlightKey)
+			}()
+		}
+	}
+}
+
+func (d *Daemon) processPath(ctx context.Context, pth string, inFlightKey string) {
 	defer d.clearInFlight(inFlightKey)
 
-	// Acquire a processing slot without blocking the main event loop.
-	select {
-	case sem <- struct{}{}:
-		defer func() { <-sem }()
-	case <-runCtx.Done():
-		return
-	}
-
 	start := time.Now()
-	jobCtx := context.WithoutCancel(runCtx)
+	jobCtx := context.WithoutCancel(ctx)
 	planner := notify.NewDoneSoundPlanner(d.DoneNotificationMode)
-	streamed := false
-	emit := func(r processor.Result, dur time.Duration) {
+	emit := func(r processor.Result) {
+		dur := time.Since(start).Round(time.Second)
 		if r.Applied {
 			d.logConsoleInfo(
 				logging.EventProcessorMoveMainApplied,
@@ -491,9 +507,7 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 			}
 			return
 		}
-		if r.Reason == processor.ErrNotMedia.Error() ||
-			r.Reason == processor.ErrNoMainMediaFound.Error() ||
-			r.Reason == processor.ErrInputMissing.Error() {
+		if processor.IsSuppressedResult(r) {
 			return
 		}
 		d.logConsoleInfo(
@@ -502,14 +516,7 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 			logging.Fields{"path": pth, "reason": r.Reason, "duration": dur.String()},
 		)
 	}
-	req := processor.Request{
-		InputPath: pth,
-		OnResult: func(r processor.Result) {
-			streamed = true
-			emit(r, time.Since(start).Round(time.Second))
-		},
-	}
-	results, err := d.Proc.Process(procCtx, req)
+	err := processor.ProcessEach(ctx, d.Proc, processor.Request{InputPath: pth}, emit)
 
 	dur := time.Since(start).Round(time.Second)
 
@@ -525,12 +532,6 @@ func (d *Daemon) processPathAsync(runCtx context.Context, procCtx context.Contex
 			"duration": dur.String(),
 		})
 		return
-	}
-
-	if !streamed {
-		for _, r := range results {
-			emit(r, dur)
-		}
 	}
 
 	playCount := planner.OnJobComplete()

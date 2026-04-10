@@ -128,11 +128,7 @@ func processDropFolder(
 		}
 
 		itemCtx, cancelItem := context.WithCancel(context.Background())
-		type processResult struct {
-			res []processor.Result
-			err error
-		}
-		done := make(chan processResult, 1)
+		done := make(chan error, 1)
 		resultEvents := make(chan processor.Result)
 		itemClosed := make(chan struct{})
 		var closeItemClosedOnce sync.Once
@@ -141,7 +137,6 @@ func processDropFolder(
 				close(itemClosed)
 			})
 		}
-		streamed := false
 		planner := notify.NewDoneSoundPlanner(doneNotificationMode)
 		playDoneCount := func(count int) {
 			for i := 0; i < count; i++ {
@@ -149,6 +144,9 @@ func processDropFolder(
 			}
 		}
 		recordResult := func(r processor.Result) {
+			if processor.IsSuppressedResult(r) {
+				return
+			}
 			PrintProcessDropResults([]processor.Result{r}, verbose)
 			summary.Results++
 			if r.Applied {
@@ -158,27 +156,19 @@ func processDropFolder(
 			}
 			summary.Skipped++
 		}
-		handleStreamResult := func(r processor.Result) {
-			streamed = true
-			recordResult(r)
-		}
 
 		go func(path string) {
-			req := processor.Request{
-				InputPath: path,
-				OnResult: func(r processor.Result) {
+			err := processor.ProcessEach(itemCtx, proc, processor.Request{InputPath: path},
+				func(r processor.Result) {
 					select {
 					case resultEvents <- r:
 					case <-itemClosed:
 					}
-				},
-			}
-			res, err := proc.Process(itemCtx, req)
-			done <- processResult{res: res, err: err}
+				})
+			done <- err
 		}(item.path)
 
 		var (
-			res      []processor.Result
 			runErr   error
 			gotFinal bool
 		)
@@ -193,10 +183,8 @@ func processDropFolder(
 			for !gotFinal {
 				select {
 				case r := <-resultEvents:
-					handleStreamResult(r)
-				case out := <-done:
-					res = out.res
-					runErr = out.err
+					recordResult(r)
+				case runErr = <-done:
 					gotFinal = true
 					return true
 				case <-timer.C:
@@ -209,10 +197,8 @@ func processDropFolder(
 		for !gotFinal && !timedOut {
 			select {
 			case r := <-resultEvents:
-				handleStreamResult(r)
-			case out := <-done:
-				res = out.res
-				runErr = out.err
+				recordResult(r)
+			case runErr = <-done:
 				gotFinal = true
 			case <-ctx.Done():
 				if !interrupted {
@@ -250,12 +236,6 @@ func processDropFolder(
 		if runErr != nil {
 			PrintProcessDropItemError(item.path, runErr)
 			errCount++
-		}
-
-		if !streamed {
-			for _, r := range res {
-				recordResult(r)
-			}
 		}
 
 		playCount := planner.OnJobComplete()
