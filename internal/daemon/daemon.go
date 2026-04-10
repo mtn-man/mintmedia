@@ -158,6 +158,19 @@ func (d *Daemon) Run(ctx context.Context) error {
 	d.inFlight = make(map[string]struct{})
 	d.inFlightMu.Unlock()
 
+	// Wire media-aware ordering into the watcher's settle batch. The closure
+	// captures ctx so sorting respects daemon shutdown cancellation.
+	d.Watcher.SetSortFunc(func(paths []string) []string {
+		sorted, errs, sortErr := processor.SortCandidates(ctx, d.Proc, paths)
+		if sortErr != nil {
+			return paths // context canceled; preserve original order
+		}
+		for _, se := range errs {
+			d.logSortParseError(se.Path, se.Err)
+		}
+		return sorted
+	})
+
 	// Start watcher + poller (safe to call even if already running in your design).
 	if err := d.Watcher.Start(ctx); err != nil {
 		return fmt.Errorf("start watcher: %w", err)
@@ -222,7 +235,20 @@ runLoop:
 			d.logHistoryInfo(logging.EventSystemDestinationsReady, logging.Fields{
 				"pending": len(pending),
 			})
+
+			pendingPaths := make([]string, 0, len(pending))
 			for pth := range pending {
+				pendingPaths = append(pendingPaths, pth)
+			}
+			sortedPaths, sortErrs, sortErr := processor.SortCandidates(ctx, d.Proc, pendingPaths)
+			if sortErr != nil {
+				sortedPaths = pendingPaths // context canceled; fall back to arbitrary order
+			}
+			for _, se := range sortErrs {
+				// Leave parse-error paths in pending; they will be retried on the next tick.
+				d.logSortParseError(se.Path, se.Err)
+			}
+			for _, pth := range sortedPaths {
 				delete(pending, pth)
 				key := d.inFlightKey(pth)
 				if key == "" {
@@ -741,6 +767,16 @@ func (d *Daemon) logConsoleError(event logging.Event, msg string, err error, fie
 		return
 	}
 	d.Logger.ConsoleError(componentForEvent(event), event, console.ColorizePrefix(msg), err, fields)
+}
+
+func (d *Daemon) logSortParseError(path string, err error) {
+	d.logConsoleWarn(
+		logging.EventProcessorInputSkippedParseError,
+		fmt.Sprintf("WARNING  skipping %s: %v", path, err),
+		err,
+		logging.Fields{"path": path},
+	)
+	d.logHistoryWarn(logging.EventProcessorInputSkippedParseError, err, logging.Fields{"path": path})
 }
 
 func componentForEvent(event logging.Event) string {

@@ -116,6 +116,14 @@ func (e *ParseMovieError) Error() string {
 	return fmt.Sprintf("failed to parse movie info from %q or %q", e.BaseName, e.FileName)
 }
 
+// SortError records a path excluded from SortCandidates because its filename
+// could not be parsed as a recognizable media title.
+type SortError struct {
+	Path string
+	Err  error
+}
+
+
 // Processor is the core media decision+execution engine.
 // Plan should be deterministic and side-effect free except for filesystem reads (stat/list).
 // Apply performs the actual filesystem modifications (moves, logging events).
@@ -123,6 +131,7 @@ type Processor interface {
 	Plan(ctx context.Context, req Request) ([]Plan, error)
 	Apply(ctx context.Context, plans []Plan) ([]Result, error)
 	Process(ctx context.Context, req Request) ([]Result, error)
+
 }
 
 // Transferer moves a file from src -> dst.

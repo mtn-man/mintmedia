@@ -83,6 +83,11 @@ func PrintProcessDropStatError(path string, err error) {
 	fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    stat %s: %v", path, err)))
 }
 
+// PrintProcessDropSortError writes a process-drop sort parse error to stderr.
+func PrintProcessDropSortError(path string, err error) {
+	fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    cannot sort %s: %v", path, err)))
+}
+
 // PrintProcessDropDestinationError writes a process-drop destination unavailable error to stderr.
 func PrintProcessDropDestinationError(dir string) {
 	fmt.Fprintln(os.Stderr, console.ColorizePrefix(

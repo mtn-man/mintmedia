@@ -36,6 +36,11 @@ type DropFolderWatcher struct {
 
 	startMu sync.Mutex
 	started bool
+
+	// sortFn is applied to each settled batch before paths are emitted.
+	// Protected by sortFnMu; set via SetSortFunc.
+	sortFnMu sync.RWMutex
+	sortFn   func([]string) []string
 }
 
 // NewDropFolderWatcher creates a recursive watcher rooted at rootDir.
@@ -126,6 +131,14 @@ func (d *DropFolderWatcher) Close() error {
 	// and our loops to exit. Do not close output channels here; callers stop
 	// consuming based on context cancellation.
 	return d.watcher.Close()
+}
+
+// SetSortFunc sets the function applied to each settled batch before paths are
+// emitted. Safe to call concurrently or after Start().
+func (d *DropFolderWatcher) SetSortFunc(fn func([]string) []string) {
+	d.sortFnMu.Lock()
+	d.sortFn = fn
+	d.sortFnMu.Unlock()
 }
 
 // --- Internals --------------------------------------------------------------
@@ -260,6 +273,15 @@ func (d *DropFolderWatcher) loopSettle(ctx context.Context) {
 				d.mu.Unlock()
 
 				toEmit = append(toEmit, item.path)
+			}
+
+			if len(toEmit) > 1 {
+				d.sortFnMu.RLock()
+				sortFn := d.sortFn
+				d.sortFnMu.RUnlock()
+				if sortFn != nil {
+					toEmit = sortFn(toEmit)
+				}
 			}
 
 			for _, pth := range toEmit {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 	"time"
 
@@ -100,9 +99,32 @@ func processDropFolder(
 		})
 	}
 
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].modTime.Before(candidates[j].modTime)
-	})
+	{
+		paths := make([]string, len(candidates))
+		for i, c := range candidates {
+			paths[i] = c.path
+		}
+		sortedPaths, sortErrs, sortErr := processor.SortCandidates(ctx, proc, paths)
+		if sortErr != nil {
+			return ProcessDropOutcome{ErrorCount: errCount, Interrupted: true}
+		}
+		for _, se := range sortErrs {
+			PrintProcessDropSortError(se.Path, se.Err)
+			errCount++
+		}
+		// Build a lookup so we can reconstruct candidates in sorted order.
+		idx := make(map[string]dropCandidate, len(candidates))
+		for _, c := range candidates {
+			idx[c.path] = c
+		}
+		ordered := make([]dropCandidate, 0, len(sortedPaths))
+		for _, p := range sortedPaths {
+			if c, ok := idx[p]; ok {
+				ordered = append(ordered, c)
+			}
+		}
+		candidates = ordered
+	}
 
 	if len(candidates) == 0 && errCount == 0 {
 		PrintProcessDropNoFiles()
