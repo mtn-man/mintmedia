@@ -83,6 +83,12 @@ func PrintProcessDropStatError(path string, err error) {
 	fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    stat %s: %v", path, err)))
 }
 
+// PrintProcessDropDestinationError writes a process-drop destination unavailable error to stderr.
+func PrintProcessDropDestinationError(dir string) {
+	fmt.Fprintln(os.Stderr, console.ColorizePrefix(
+		fmt.Sprintf("ERROR    destination unavailable: %s (directory missing or not yet mounted)", dir)))
+}
+
 // PrintProcessDropItemError writes a process-drop item error to stderr.
 func PrintProcessDropItemError(path string, err error) {
 	fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    %s: %v", path, err)))

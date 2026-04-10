@@ -185,6 +185,8 @@ func main() {
 			runCtx,
 			proc,
 			resolved.DropFolderAbs,
+			resolved.DestDirMoviesAbs,
+			resolved.DestDirShowsAbs,
 			defaultSoundDone,
 			resolved.DoneNotificationMode,
 			*verbose,

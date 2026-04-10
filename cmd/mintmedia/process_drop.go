@@ -41,6 +41,8 @@ func processDropFolder(
 	ctx context.Context,
 	proc processor.Processor,
 	dropRoot string,
+	moviesDir string,
+	showsDir string,
 	soundDone string,
 	doneNotificationMode string,
 	verbose bool,
@@ -111,6 +113,14 @@ func processDropFolder(
 	}
 
 	PrintProcessDropCandidates(len(candidates))
+
+	for _, dir := range []string{moviesDir, showsDir} {
+		st, err := os.Stat(dir)
+		if err != nil || !st.IsDir() {
+			PrintProcessDropDestinationError(dir)
+			return ProcessDropOutcome{ErrorCount: 1}
+		}
+	}
 
 	summary := ProcessDropSummary{
 		Candidates: len(candidates),
