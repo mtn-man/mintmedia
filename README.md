@@ -101,3 +101,9 @@ auto_cleanup_completed_torrents = true
 ```
 
 Clipboard monitoring is macOS-only and requires a cgo-enabled build (the default).
+
+## Roadmap
+
+**Batch plan/apply for process-drop**
+
+The `process-drop` command currently processes candidates sequentially: plan then apply for each item before moving to the next. A cleaner model would be to plan all candidates first, then apply the plans in sequence — "see everything before you move anything." This would give accurate file counts in output messages naturally (no separate counting pass needed), allow pre-validation of all destination paths before any files are moved, and make the operation easier to reason about as a whole. The apply phase would still stream results one file at a time, so the live output behavior would be unchanged.
