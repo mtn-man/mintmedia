@@ -115,12 +115,11 @@ func PrintProcessDropResults(results []processor.Result, verbose bool) {
 
 // ProcessDropSummary captures final process-drop run stats for compact rendering.
 type ProcessDropSummary struct {
-	Candidates int
-	Results    int
-	Applied    int
-	Skipped    int
-	Errors     int
-	Elapsed    time.Duration
+	Results int
+	Applied int
+	Skipped int
+	Errors  int
+	Elapsed time.Duration
 }
 
 // PrintProcessDropSummary writes process-drop completion summary.
@@ -158,8 +157,9 @@ func processDropCompactLine(res processor.Result) string {
 }
 
 func processDropSummaryLine(s ProcessDropSummary) string {
+	total := s.Applied + s.Skipped + s.Errors
 	noun := "files"
-	if s.Candidates == 1 {
+	if total == 1 {
 		noun = "file"
 	}
 	elapsed := s.Elapsed.Round(time.Second)
@@ -178,7 +178,7 @@ func processDropSummaryLine(s ProcessDropSummary) string {
 
 	return fmt.Sprintf(
 		"INFO     %d %s — %s (%s)",
-		s.Candidates,
+		total,
 		noun,
 		strings.Join(parts, ", "),
 		elapsed,

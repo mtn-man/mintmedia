@@ -560,8 +560,8 @@ func (f *fakeProcessDropCaffeinate) stopCallsCount() int {
 	return f.stopCalls
 }
 
-func (s *processDropStubProcessor) Plan(context.Context, processor.Request) ([]processor.Plan, error) {
-	return nil, nil
+func (s *processDropStubProcessor) Plan(_ context.Context, req processor.Request) ([]processor.Plan, error) {
+	return []processor.Plan{{InputPath: req.InputPath, MainSourcePath: req.InputPath}}, nil
 }
 
 func (s *processDropStubProcessor) Apply(context.Context, []processor.Plan) ([]processor.Result, error) {
