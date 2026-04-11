@@ -227,15 +227,6 @@ runLoop:
 				continue
 			}
 
-			d.logConsoleInfo(
-				logging.EventSystemDestinationsReady,
-				fmt.Sprintf("INFO     destinations ready; processing %d pending item(s).", len(pending)),
-				logging.Fields{"pending": len(pending)},
-			)
-			d.logHistoryInfo(logging.EventSystemDestinationsReady, logging.Fields{
-				"pending": len(pending),
-			})
-
 			pendingPaths := make([]string, 0, len(pending))
 			for pth := range pending {
 				pendingPaths = append(pendingPaths, pth)
@@ -248,6 +239,30 @@ runLoop:
 				// Leave parse-error paths in pending; they will be retried on the next tick.
 				d.logSortParseError(se.Path, se.Err)
 			}
+
+			fileCount := 0
+			for _, pth := range sortedPaths {
+				if ctx.Err() != nil {
+					break
+				}
+				plans, planErr := d.Proc.Plan(ctx, processor.Request{InputPath: pth})
+				if planErr != nil {
+					continue
+				}
+				fileCount += len(plans)
+			}
+			noun := "files"
+			if fileCount == 1 {
+				noun = "file"
+			}
+			d.logConsoleInfo(
+				logging.EventSystemDestinationsReady,
+				fmt.Sprintf("INFO     destinations ready; processing %d pending %s.", fileCount, noun),
+				logging.Fields{"pending": fileCount},
+			)
+			d.logHistoryInfo(logging.EventSystemDestinationsReady, logging.Fields{
+				"pending": fileCount,
+			})
 			for _, pth := range sortedPaths {
 				delete(pending, pth)
 				key := d.inFlightKey(pth)
@@ -311,7 +326,7 @@ runLoop:
 				if lastWaitLog.IsZero() || time.Since(lastWaitLog) > time.Minute {
 					d.logConsoleInfo(
 						logging.EventSystemDestinationsWaiting,
-						fmt.Sprintf("INFO     destinations unavailable; waiting (%d pending)", len(pending)),
+						"INFO     destination library unavailable; waiting...",
 						logging.Fields{"pending": len(pending)},
 					)
 					d.logHistoryInfo(logging.EventSystemDestinationsWaiting, logging.Fields{
