@@ -250,14 +250,6 @@ func moveToTrashWithDir(src, trashDir string) error {
 	return fmt.Errorf("unable to find available trash name for %q", base)
 }
 
-func resolveTrashDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home dir: %w", err)
-	}
-	return filepath.Join(home, ".Trash"), nil
-}
-
 func sameDevice(a, b string) (bool, error) {
 	aInfo, err := os.Stat(a)
 	if err != nil {

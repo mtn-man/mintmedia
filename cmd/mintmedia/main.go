@@ -26,8 +26,6 @@ const (
 	exitUsage       = 2
 	exitInterrupted = 130
 
-	defaultSoundInput      = "/System/Library/Sounds/Funk.aiff"
-	defaultSoundDone       = "/System/Library/Sounds/Glass.aiff"
 	defaultMagnetTimeout   = 10 * time.Second
 	defaultCleanupCooldown = 2 * time.Minute
 

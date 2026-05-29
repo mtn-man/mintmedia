@@ -43,7 +43,7 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 		if err != nil {
 			if errors.Is(err, clipboard.ErrUnsupportedPlatform) {
 				return false, fmt.Errorf(
-					"clipboard polling is enabled but unsupported: %w; disable [clipboard].enabled or build for darwin with cgo enabled",
+					"clipboard polling is enabled but not available: %w",
 					err,
 				)
 			}

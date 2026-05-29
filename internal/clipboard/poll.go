@@ -12,7 +12,7 @@ import (
 
 var ErrUnsupportedPlatform = errors.New("clipboard backend unsupported on this platform")
 
-// Poller polls macOS clipboard content using native pasteboard functions.
+// Poller polls clipboard content using a platform-specific backend.
 // It emits magnet URIs when clipboard content changes.
 type Poller struct {
 	interval time.Duration

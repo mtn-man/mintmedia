@@ -21,7 +21,11 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	_ = os.Setenv("HOME", homeDir)
-	trashDir := filepath.Join(homeDir, ".Trash")
+	trashDir, err := resolveTrashDir()
+	if err != nil {
+		_ = os.RemoveAll(homeDir)
+		os.Exit(1)
+	}
 	if err := os.MkdirAll(trashDir, 0o700); err != nil {
 		_ = os.RemoveAll(homeDir)
 		os.Exit(1)

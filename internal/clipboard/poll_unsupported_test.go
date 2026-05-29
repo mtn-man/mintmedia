@@ -1,10 +1,9 @@
-//go:build !darwin || !cgo
+//go:build (!darwin || !cgo) && !linux
 
 package clipboard
 
 import (
 	"errors"
-	"strings"
 	"testing"
 	"time"
 )
@@ -16,8 +15,5 @@ func TestNewPollerUnsupportedPlatform(t *testing.T) {
 	}
 	if !errors.Is(err, ErrUnsupportedPlatform) {
 		t.Fatalf("expected ErrUnsupportedPlatform, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "requires darwin with cgo enabled") {
-		t.Fatalf("expected actionable requirement in error, got %q", err.Error())
 	}
 }

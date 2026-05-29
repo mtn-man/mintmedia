@@ -11,7 +11,8 @@ import (
 	"syscall"
 )
 
-// Caffeinate prevents macOS from idle sleeping while the daemon is running.
+// Caffeinate prevents idle sleep while the daemon is running.
+// Uses caffeinate on macOS and systemd-inhibit on Linux.
 // It is best-effort: failures should be logged by callers but should not be fatal.
 type Caffeinate struct {
 	mu   sync.Mutex
@@ -20,15 +21,36 @@ type Caffeinate struct {
 }
 
 // NewCaffeinate returns a new controller.
-// On non-darwin platforms, Start() will return nil (no-op).
+// On unsupported platforms, Start() returns nil immediately.
 func NewCaffeinate() *Caffeinate {
 	return &Caffeinate{}
 }
 
-// Start launches "caffeinate -i" in the background if not already running.
-// On non-macOS platforms, this is a no-op.
-func (c *Caffeinate) Start(ctx context.Context) error {
-	if runtime.GOOS != "darwin" {
+// inhibitCmd returns the platform-specific command that prevents idle sleep,
+// or nil if unsupported. Uses exec.Command (not CommandContext) so Stop() owns
+// the process lifecycle exclusively — context cancellation must not race with SIGTERM.
+func inhibitCmd() *exec.Cmd {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("caffeinate", "-i")
+	case "linux":
+		return exec.Command("systemd-inhibit",
+			"--what=idle:sleep",
+			"--who=mintmedia",
+			"--why=processing media",
+			"--mode=block",
+			"sleep", "infinity",
+		)
+	default:
+		return nil
+	}
+}
+
+// Start launches the platform sleep-inhibit command in the background if not already running.
+// On unsupported platforms, this is a no-op.
+func (c *Caffeinate) Start(_ context.Context) error {
+	cmd := inhibitCmd()
+	if cmd == nil {
 		return nil
 	}
 
@@ -50,12 +72,10 @@ func (c *Caffeinate) Start(ctx context.Context) error {
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, "caffeinate", "-i")
-
 	// Start the process
 	if err := cmd.Start(); err != nil {
 		c.mu.Unlock()
-		return fmt.Errorf("start caffeinate: %w", err)
+		return fmt.Errorf("start sleep inhibit: %w", err)
 	}
 
 	done := make(chan struct{})
@@ -78,13 +98,8 @@ func (c *Caffeinate) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop terminates the caffeinate process if running.
-// On non-macOS platforms, this is a no-op.
+// Stop terminates the sleep-inhibit process if running.
 func (c *Caffeinate) Stop() error {
-	if runtime.GOOS != "darwin" {
-		return nil
-	}
-
 	c.mu.Lock()
 	cmd := c.cmd
 	done := c.done
@@ -115,7 +130,7 @@ func (c *Caffeinate) Stop() error {
 		}
 		// Some systems return ESRCH for missing proc
 		c.mu.Unlock()
-		return fmt.Errorf("signal caffeinate: %w", err)
+		return fmt.Errorf("signal sleep inhibit: %w", err)
 	}
 
 	// Clear state; process will be reaped by Wait goroutine.

@@ -1,4 +1,4 @@
-//go:build darwin && cgo
+//go:build (darwin && cgo) || linux
 
 package clipboard
 
@@ -8,6 +8,9 @@ import (
 )
 
 func TestNewPollerSupportedPlatform(t *testing.T) {
+	if !clipboardBackendSupported() {
+		t.Skip("clipboard backend not available (wl-paste not installed?)")
+	}
 	p, err := NewPoller(time.Second)
 	if err != nil {
 		t.Fatalf("expected poller creation to succeed, got error: %v", err)
