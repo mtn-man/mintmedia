@@ -12,19 +12,6 @@ import (
 	"golang.org/x/term"
 )
 
-// IsTerminal is a best-effort check for whether the given file is a terminal.
-// It is intentionally simple and does not require third-party packages.
-func IsTerminal(f *os.File) bool {
-	if f == nil {
-		return false
-	}
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return (fi.Mode() & os.ModeCharDevice) != 0
-}
-
 // Snapshot is a structured progress update emitted by the transfer layer.
 // It is renderer-friendly and avoids embedding presentation concerns in transfer.go.
 type Snapshot struct {
@@ -73,7 +60,7 @@ type ReportOptions struct {
 //
 // It can optionally render a progress bar for large/slow transfers.
 func NewTerminalReporter(out *os.File, opts ReportOptions) Reporter {
-	inPlace := IsTerminal(out)
+	inPlace := console.IsTerminal(out)
 
 	// Defaults
 	if opts.BarMinBytes <= 0 {

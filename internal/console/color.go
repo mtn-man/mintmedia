@@ -14,9 +14,10 @@ const (
 )
 
 // colorEnabled is true when stdout is a terminal.
-var colorEnabled = isTerminal(os.Stdout)
+var colorEnabled = IsTerminal(os.Stdout)
 
-func isTerminal(f *os.File) bool {
+// IsTerminal reports whether f is an interactive terminal.
+func IsTerminal(f *os.File) bool {
 	if f == nil {
 		return false
 	}
