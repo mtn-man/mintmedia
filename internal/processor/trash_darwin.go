@@ -11,3 +11,7 @@ func resolveTrashDir() (string, error) {
 	}
 	return filepath.Join(home, ".Trash"), nil
 }
+
+func resolvePreferredTrashDir(_ string) (string, error) {
+	return resolveTrashDir()
+}

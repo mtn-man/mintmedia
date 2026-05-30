@@ -195,7 +195,7 @@ func cleanupSourceDirIfSafe(p *processorImpl, inputPath string) error {
 		return fmt.Errorf("refusing to trash directory outside drop folder: %s", in)
 	}
 
-	trashDir, err := resolveTrashDir()
+	trashDir, err := resolvePreferredTrashDir(in)
 	if err != nil {
 		return err
 	}

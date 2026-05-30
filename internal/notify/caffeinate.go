@@ -44,7 +44,7 @@ func inhibitCmd() *exec.Cmd {
 			"--what=idle:sleep",
 			"--who=mintmedia",
 			"--why=processing media",
-			"--mode=block",
+			"--mode=delay",
 			"sleep", "infinity",
 		)
 	default:
