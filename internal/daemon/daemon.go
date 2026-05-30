@@ -25,12 +25,7 @@ import (
 
 var ErrShutdownTimedOut = errors.New("daemon shutdown timed out")
 
-type caffeinateController interface {
-	Start(context.Context) error
-	Stop() error
-}
-
-var newDaemonCaffeinate = func() caffeinateController {
+var newDaemonCaffeinate = func() notify.CaffeinateController {
 	return notify.NewCaffeinate()
 }
 

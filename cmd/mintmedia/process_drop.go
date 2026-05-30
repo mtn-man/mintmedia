@@ -26,13 +26,8 @@ type ProcessDropOutcome struct {
 	TimedOut    bool
 }
 
-type processDropCaffeinateController interface {
-	Start(context.Context) error
-	Stop() error
-}
-
 var playDoneSound = notify.PlaySound
-var newProcessDropCaffeinate = func() processDropCaffeinateController {
+var newProcessDropCaffeinate = func() notify.CaffeinateController {
 	return notify.NewCaffeinate()
 }
 

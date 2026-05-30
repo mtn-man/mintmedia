@@ -7,12 +7,14 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/mtn-man/mintmedia/internal/notify"
 )
 
 func TestWithCaffeinate_Success(t *testing.T) {
 	fake := &fakeMainCaffeinate{}
 	oldNewMainCaffeinate := newMainCaffeinate
-	newMainCaffeinate = func() mainCaffeinateController { return fake }
+	newMainCaffeinate = func() notify.CaffeinateController { return fake }
 	defer func() { newMainCaffeinate = oldNewMainCaffeinate }()
 
 	called := false
@@ -45,7 +47,7 @@ func TestWithCaffeinate_Success(t *testing.T) {
 func TestWithCaffeinate_CallbackErrorStillStops(t *testing.T) {
 	fake := &fakeMainCaffeinate{}
 	oldNewMainCaffeinate := newMainCaffeinate
-	newMainCaffeinate = func() mainCaffeinateController { return fake }
+	newMainCaffeinate = func() notify.CaffeinateController { return fake }
 	defer func() { newMainCaffeinate = oldNewMainCaffeinate }()
 
 	wantErr := errors.New("apply failed")
@@ -66,7 +68,7 @@ func TestWithCaffeinate_StartErrorStillRunsCallback(t *testing.T) {
 		startErr: errors.New("start failed"),
 	}
 	oldNewMainCaffeinate := newMainCaffeinate
-	newMainCaffeinate = func() mainCaffeinateController { return fake }
+	newMainCaffeinate = func() notify.CaffeinateController { return fake }
 	defer func() { newMainCaffeinate = oldNewMainCaffeinate }()
 
 	called := false

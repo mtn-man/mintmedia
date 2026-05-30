@@ -223,7 +223,7 @@ func TestProcessDropFolder_CaffeinateStaysActiveDuringShutdownDrain(t *testing.T
 		startCalled: make(chan struct{}),
 	}
 	oldNewCaffeinate := newProcessDropCaffeinate
-	newProcessDropCaffeinate = func() processDropCaffeinateController {
+	newProcessDropCaffeinate = func() notify.CaffeinateController {
 		return fakeCaff
 	}
 	defer func() { newProcessDropCaffeinate = oldNewCaffeinate }()

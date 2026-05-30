@@ -11,6 +11,12 @@ import (
 	"syscall"
 )
 
+// CaffeinateController is the interface for controlling sleep inhibition.
+type CaffeinateController interface {
+	Start(context.Context) error
+	Stop() error
+}
+
 // Caffeinate prevents idle sleep while the daemon is running.
 // Uses caffeinate on macOS and systemd-inhibit on Linux.
 // It is best-effort: failures should be logged by callers but should not be fatal.

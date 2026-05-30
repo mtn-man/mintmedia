@@ -177,7 +177,7 @@ func TestDaemon_RunCaffeinateStaysActiveDuringShutdownDrain(t *testing.T) {
 		startCalled: make(chan struct{}),
 	}
 	oldNewDaemonCaffeinate := newDaemonCaffeinate
-	newDaemonCaffeinate = func() caffeinateController {
+	newDaemonCaffeinate = func() notify.CaffeinateController {
 		return fakeCaff
 	}
 	defer func() { newDaemonCaffeinate = oldNewDaemonCaffeinate }()

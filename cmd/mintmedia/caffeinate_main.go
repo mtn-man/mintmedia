@@ -9,12 +9,7 @@ import (
 	"github.com/mtn-man/mintmedia/internal/notify"
 )
 
-type mainCaffeinateController interface {
-	Start(context.Context) error
-	Stop() error
-}
-
-var newMainCaffeinate = func() mainCaffeinateController {
+var newMainCaffeinate = func() notify.CaffeinateController {
 	return notify.NewCaffeinate()
 }
 
