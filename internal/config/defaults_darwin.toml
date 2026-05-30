@@ -1,4 +1,4 @@
-# Embedded bootstrap default — keep in sync with /config.example.toml at the project root.
+# Embedded bootstrap default — keep in sync with defaults_linux.toml (sibling) and /config.example.toml at the project root.
 
 [paths]
 # Folder watched for incoming media (drop zone).
@@ -59,7 +59,7 @@ history_file = "history.jsonl"
 
 [clipboard]
 # Monitor clipboard for magnet links (optional / opinionated)
-# Requires a darwin build with cgo enabled (AppKit pasteboard backend).
+# Requires macOS with cgo enabled (AppKit pasteboard) or Linux with Wayland + wl-clipboard.
 enabled = false
 
 # How often to poll the clipboard when enabled

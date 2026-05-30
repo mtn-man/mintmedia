@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -22,8 +23,18 @@ import (
 	"github.com/mtn-man/mintmedia/internal/notify"
 )
 
-//go:embed defaults.toml
-var defaultConfigContents []byte
+//go:embed defaults_darwin.toml
+var defaultConfigDarwin []byte
+
+//go:embed defaults_linux.toml
+var defaultConfigLinux []byte
+
+func platformDefaultConfig() []byte {
+	if runtime.GOOS == "darwin" {
+		return defaultConfigDarwin
+	}
+	return defaultConfigLinux
+}
 
 const (
 	// DefaultConfigPathRel is relative to the user's home directory.
@@ -505,7 +516,7 @@ func writeDefaultConfig(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create config directory: %w", err)
 	}
-	if err := os.WriteFile(path, defaultConfigContents, 0o644); err != nil {
+	if err := os.WriteFile(path, platformDefaultConfig(), 0o644); err != nil {
 		return fmt.Errorf("write default config: %w", err)
 	}
 	return nil

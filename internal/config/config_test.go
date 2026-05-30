@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestLoad_MinimalProcessingConfig(t *testing.T) {
@@ -981,6 +983,60 @@ func TestLoad_ExplicitMissingConfigFails(t *testing.T) {
 	if !strings.Contains(err.Error(), "no such file") {
 		t.Fatalf("expected 'no such file' in error, got: %v", err)
 	}
+}
+
+// TestPlatformDefaultsSameKeys guards against structural drift between the two
+// embedded platform defaults. If a new key is added to one file but not the
+// other it will be caught here before reaching users.
+func TestPlatformDefaultsSameKeys(t *testing.T) {
+	t.Parallel()
+
+	var darwin, linux map[string]interface{}
+	if _, err := toml.Decode(string(defaultConfigDarwin), &darwin); err != nil {
+		t.Fatalf("parse defaults_darwin.toml: %v", err)
+	}
+	if _, err := toml.Decode(string(defaultConfigLinux), &linux); err != nil {
+		t.Fatalf("parse defaults_linux.toml: %v", err)
+	}
+
+	darwinKeys := collectTomlKeys(darwin, "")
+	linuxKeys := collectTomlKeys(linux, "")
+
+	for _, k := range darwinKeys {
+		if !sliceContains(linuxKeys, k) {
+			t.Errorf("key %q present in defaults_darwin.toml but missing from defaults_linux.toml", k)
+		}
+	}
+	for _, k := range linuxKeys {
+		if !sliceContains(darwinKeys, k) {
+			t.Errorf("key %q present in defaults_linux.toml but missing from defaults_darwin.toml", k)
+		}
+	}
+}
+
+func collectTomlKeys(m map[string]interface{}, prefix string) []string {
+	var keys []string
+	for k, v := range m {
+		full := k
+		if prefix != "" {
+			full = prefix + "." + k
+		}
+		if nested, ok := v.(map[string]interface{}); ok {
+			keys = append(keys, collectTomlKeys(nested, full)...)
+		} else {
+			keys = append(keys, full)
+		}
+	}
+	return keys
+}
+
+func sliceContains(s []string, target string) bool {
+	for _, v := range s {
+		if v == target {
+			return true
+		}
+	}
+	return false
 }
 
 func writeConfigFile(t *testing.T, dir string, contents string) string {

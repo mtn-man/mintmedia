@@ -1,6 +1,4 @@
-# mintmedia example configuration
-# Copy this file to your config location and edit paths/values as needed.
-# Keep in sync with internal/config/defaults_darwin.toml and defaults_linux.toml (the embedded bootstrap copies).
+# Embedded bootstrap default — keep in sync with defaults_darwin.toml (sibling) and /config.example.toml at the project root.
 
 [paths]
 # Folder watched for incoming media (drop zone).
@@ -9,21 +7,17 @@ drop_folder = "~/Downloads/MintDrop"
 
 
 # State directory (history, internal bookkeeping, etc.)
-# macOS idiomatic:   "~/Library/Application Support/mintmedia"
-# Linux/XDG default: "~/.local/state/mintmedia"
-state_dir = "~/Library/Application Support/mintmedia"
+# Linux/XDG default: "~/.local/state/mintmedia" (respects $XDG_STATE_HOME if set manually)
+# macOS idiomatic: "~/Library/Application Support/mintmedia"
+state_dir = "~/.local/state/mintmedia"
 
 
 [destinations]
 # Destination for processed movies
-# macOS default: "~/Movies/Movies"
-# Linux default: "~/Videos/Movies"
-dest_dir_movies = "~/Movies/Movies"
+dest_dir_movies = "~/Videos/Movies"
 
 # Destination for processed TV shows
-# macOS default: "~/Movies/Shows"
-# Linux default: "~/Videos/Shows"
-dest_dir_shows = "~/Movies/Shows"
+dest_dir_shows = "~/Videos/Shows"
 
 
 [system]
@@ -49,7 +43,7 @@ shutdown_force_timeout = "15s"
 enable_processing = true
 
 # Enable torrent client automation/integration (e.g., Transmission)
-# Default off in the example config to avoid surprises.
+# Default off to avoid surprises.
 enable_torrent_automation = false
 
 [logging]
@@ -114,9 +108,9 @@ auto_cleanup_completed_torrents = false
 host = "localhost:9091"
 
 # Path to transmission-remote binary.
-# macOS/Homebrew (Apple Silicon): "/opt/homebrew/bin/transmission-remote"
-# Linux: leave empty to use system PATH (typical for package manager installs).
-transmission_remote_path = "/opt/homebrew/bin/transmission-remote"
+# Leave empty to use system PATH (typical for Linux package manager installs).
+# macOS/Homebrew example: "/opt/homebrew/bin/transmission-remote"
+transmission_remote_path = ""
 
 # Optional authentication (only if required)
 # auth = "user:pass"
