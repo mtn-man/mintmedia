@@ -88,6 +88,14 @@ func TestProcessDropSummaryLine(t *testing.T) {
 			},
 			want: "INFO     8 files \u2014 8 sorted (6m2s)",
 		},
+		{
+			name: "instant \u2014 duration suppressed",
+			sum: ProcessDropSummary{
+				Applied: 1,
+				Elapsed: 400 * time.Millisecond,
+			},
+			want: "INFO     1 file \u2014 1 sorted",
+		},
 	}
 
 	for _, tt := range tests {

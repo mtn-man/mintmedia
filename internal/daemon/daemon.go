@@ -532,9 +532,13 @@ func (d *Daemon) processPath(ctx context.Context, pth string, inFlightKey string
 	emit := func(r processor.Result) {
 		dur := time.Since(start).Round(time.Second)
 		if r.Applied {
+			durSuffix := ""
+			if dur >= time.Second {
+				durSuffix = fmt.Sprintf("  (%s)", dur)
+			}
 			d.logConsoleInfo(
 				logging.EventProcessorMoveMainApplied,
-				fmt.Sprintf("SORTED   %s\n    %s   %s  (%s)", filepath.Base(r.Plan.MainSourcePath), console.Colorize("->", console.Green), r.Plan.DestMainPath, dur),
+				fmt.Sprintf("SORTED   %s\n    %s   %s%s", filepath.Base(r.Plan.MainSourcePath), console.Colorize("->", console.Green), r.Plan.DestMainPath, durSuffix),
 				logging.Fields{"path": pth, "dest_path": r.Plan.DestMainPath, "duration": dur.String()},
 			)
 			playCount := planner.OnAppliedMain()

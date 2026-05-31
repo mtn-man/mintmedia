@@ -176,11 +176,15 @@ func processDropSummaryLine(s ProcessDropSummary) string {
 		parts = append(parts, fmt.Sprintf("%d %s", s.Errors, errNoun))
 	}
 
+	durSuffix := ""
+	if elapsed >= time.Second {
+		durSuffix = fmt.Sprintf(" (%s)", elapsed)
+	}
 	return fmt.Sprintf(
-		"INFO     %d %s — %s (%s)",
+		"INFO     %d %s — %s%s",
 		total,
 		noun,
 		strings.Join(parts, ", "),
-		elapsed,
+		durSuffix,
 	)
 }
