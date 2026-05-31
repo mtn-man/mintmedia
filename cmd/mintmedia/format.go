@@ -60,7 +60,7 @@ func printPlanBody(pl processor.Plan) {
 // PrintResults writes result output to stdout.
 func PrintResults(results []processor.Result) {
 	for _, res := range results {
-		fmt.Println(console.ColorizePrefix(processDropCompactLine(res)))
+		fmt.Println(console.ColorizePrefix(processDropCompactLine(res, 0)))
 	}
 }
 
@@ -100,13 +100,13 @@ func PrintProcessDropItemError(path string, err error) {
 }
 
 // PrintProcessDropResults writes process-drop results to stdout.
-func PrintProcessDropResults(results []processor.Result, verbose bool) {
+func PrintProcessDropResults(results []processor.Result, verbose bool, dur time.Duration) {
 	if len(results) == 0 {
 		return
 	}
 	if !verbose {
 		for _, res := range results {
-			fmt.Println(console.ColorizePrefix(processDropCompactLine(res)))
+			fmt.Println(console.ColorizePrefix(processDropCompactLine(res, dur)))
 		}
 		return
 	}
@@ -128,17 +128,21 @@ func PrintProcessDropSummary(s ProcessDropSummary) {
 	fmt.Println(processDropSummaryLine(s))
 }
 
-func processDropCompactLine(res processor.Result) string {
+func processDropCompactLine(res processor.Result, dur time.Duration) string {
 	if res.Applied {
 		dest := strings.TrimSpace(res.Plan.DestMainPath)
 		name := filepath.Base(strings.TrimSpace(res.Plan.MainSourcePath))
 		if name == "." || name == string(os.PathSeparator) || strings.TrimSpace(name) == "" {
 			name = "(unknown)"
 		}
-		if dest == "" {
-			return fmt.Sprintf("SORTED   %s", name)
+		durSuffix := ""
+		if dur >= time.Second {
+			durSuffix = fmt.Sprintf("  (%s)", dur)
 		}
-		return fmt.Sprintf("SORTED   %s\n    %s   %s", name, console.Colorize("->", console.Green), dest)
+		if dest == "" {
+			return fmt.Sprintf("SORTED   %s%s", name, durSuffix)
+		}
+		return fmt.Sprintf("SORTED   %s\n    %s   %s%s", name, console.Colorize("->", console.Green), dest, durSuffix)
 	}
 
 	ref := strings.TrimSpace(res.Plan.InputPath)

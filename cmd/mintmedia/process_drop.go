@@ -190,11 +190,13 @@ func processDropFolder(
 				_ = playDoneSound(context.WithoutCancel(ctx), soundDone)
 			}
 		}
+		var itemStart time.Time
 		recordResult := func(r processor.Result) {
 			if processor.IsSuppressedResult(r) {
 				return
 			}
-			PrintProcessDropResults([]processor.Result{r}, verbose)
+			dur := time.Since(itemStart).Round(time.Second)
+			PrintProcessDropResults([]processor.Result{r}, verbose, dur)
 			summary.Results++
 			if r.Applied {
 				summary.Applied++
@@ -203,6 +205,7 @@ func processDropFolder(
 			}
 			summary.Skipped++
 		}
+		itemStart = time.Now()
 
 		go func(path string) {
 			err := processor.ProcessEach(itemCtx, proc, processor.Request{InputPath: path},

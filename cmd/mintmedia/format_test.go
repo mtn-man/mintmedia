@@ -16,10 +16,26 @@ func TestProcessDropCompactLine_Applied(t *testing.T) {
 		},
 	}
 
-	got := processDropCompactLine(res)
+	got := processDropCompactLine(res, 0)
 	want := "SORTED   All.of.Us.Strangers.2023.mkv\n    ->   /Volumes/media/Movies/All of Us Strangers (2023)/All of Us Strangers (2023).mp4"
 	if got != want {
 		t.Fatalf("processDropCompactLine(applied) = %q, want %q", got, want)
+	}
+}
+
+func TestProcessDropCompactLine_AppliedWithDuration(t *testing.T) {
+	res := processor.Result{
+		Applied: true,
+		Plan: processor.Plan{
+			MainSourcePath: "/tmp/drop/Some.Large.Remux.mkv",
+			DestMainPath:   "/Volumes/media/Movies/Some Large Remux/Some Large Remux.mkv",
+		},
+	}
+
+	got := processDropCompactLine(res, 4*time.Second)
+	want := "SORTED   Some.Large.Remux.mkv\n    ->   /Volumes/media/Movies/Some Large Remux/Some Large Remux.mkv  (4s)"
+	if got != want {
+		t.Fatalf("processDropCompactLine(applied, 4s) = %q, want %q", got, want)
 	}
 }
 
@@ -32,7 +48,7 @@ func TestProcessDropCompactLine_Skipped(t *testing.T) {
 		},
 	}
 
-	got := processDropCompactLine(res)
+	got := processDropCompactLine(res, 0)
 	want := "SKIPPED  Unknown.Release \u2014 no main media found in directory"
 	if got != want {
 		t.Fatalf("processDropCompactLine(skipped) = %q, want %q", got, want)
