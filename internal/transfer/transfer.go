@@ -49,12 +49,6 @@ func (e *CleanupError) Unwrap() error {
 	return e.Err
 }
 
-// Transferer moves a file from src -> dst.
-// If src/dst are on different devices, we copy+replace. If same device, we attempt os.Rename and return any error without fallback.
-type Transferer interface {
-	Move(ctx context.Context, src, dst string) error
-}
-
 // RenameOrCopy implements rename fast-path and copy fallback.
 type RenameOrCopy struct {
 	opts      Options
