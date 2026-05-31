@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"strings"
 	"testing"
@@ -15,7 +14,7 @@ func TestWithCaffeinate_Success(t *testing.T) {
 	fake := &fakeMainCaffeinate{}
 	oldNewMainCaffeinate := newMainCaffeinate
 	newMainCaffeinate = func() notify.CaffeinateController { return fake }
-	defer func() { newMainCaffeinate = oldNewMainCaffeinate }()
+	t.Cleanup(func() { newMainCaffeinate = oldNewMainCaffeinate })
 
 	called := false
 	err := withCaffeinate(func() error {
@@ -48,7 +47,7 @@ func TestWithCaffeinate_CallbackErrorStillStops(t *testing.T) {
 	fake := &fakeMainCaffeinate{}
 	oldNewMainCaffeinate := newMainCaffeinate
 	newMainCaffeinate = func() notify.CaffeinateController { return fake }
-	defer func() { newMainCaffeinate = oldNewMainCaffeinate }()
+	t.Cleanup(func() { newMainCaffeinate = oldNewMainCaffeinate })
 
 	wantErr := errors.New("apply failed")
 	err := withCaffeinate(func() error { return wantErr })
@@ -69,7 +68,7 @@ func TestWithCaffeinate_StartErrorStillRunsCallback(t *testing.T) {
 	}
 	oldNewMainCaffeinate := newMainCaffeinate
 	newMainCaffeinate = func() notify.CaffeinateController { return fake }
-	defer func() { newMainCaffeinate = oldNewMainCaffeinate }()
+	t.Cleanup(func() { newMainCaffeinate = oldNewMainCaffeinate })
 
 	called := false
 	stderr := captureStderr(t, func() {
@@ -117,25 +116,5 @@ func (f *fakeMainCaffeinate) Stop() error {
 
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
-
-	old := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	os.Stderr = w
-
-	done := make(chan string, 1)
-	go func() {
-		b, _ := io.ReadAll(r)
-		done <- string(b)
-	}()
-
-	fn()
-
-	_ = w.Close()
-	os.Stderr = old
-	out := <-done
-	_ = r.Close()
-	return out
+	return captureOutput(t, &os.Stderr, fn)
 }

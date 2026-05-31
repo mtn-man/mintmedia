@@ -284,6 +284,7 @@ func TestApply_AssociatedMoveFailure_SkipsCleanup(t *testing.T) {
 }
 
 func TestApply_MainMoveCleanupFailureIsNonFatal(t *testing.T) {
+	t.Parallel()
 	p := newTestProcessorWithExecDeps(t)
 
 	mainName := "The.Copenhagen.Test.S01E03.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
@@ -415,42 +416,9 @@ func TestApply_AssociatedMoveFailure_EmitsConsoleWarn(t *testing.T) {
 
 func newTestProcessorWithExecDeps(t *testing.T) *processorImpl {
 	t.Helper()
-
-	root := t.TempDir()
-	drop := filepath.Join(root, "drop")
-	movies := filepath.Join(root, "Movies")
-	shows := filepath.Join(root, "Shows")
-
-	mkdirAll(t, drop)
-	mkdirAll(t, movies)
-	mkdirAll(t, shows)
-
-	cfg := Config{
-		DropFolder: drop,
-		MoviesDir:  movies,
-		ShowsDir:   shows,
-
-		MainMediaExtensions:      []string{".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm"},
-		AssociatedFileExtensions: []string{".srt", ".sub", ".ass", ".idx", ".vtt", ".nfo"},
-
-		MediaTagBlacklist: []string{
-			"2160p", "1080p", "720p", "480p",
-			"web[- ]?dl", "webrip", "bluray", "brrip", "hdrip",
-			"x265", "x264", "hevc", "h\\.264", "h\\.265",
-		},
-	}
-
-	xfer := &osRenameTransferer{}
-
-	pr, err := New(cfg, xfer, nil)
-	if err != nil {
-		t.Fatalf("New() error: %v", err)
-	}
-	impl, ok := pr.(*processorImpl)
-	if !ok {
-		t.Fatalf("expected *processorImpl, got %T", pr)
-	}
-	return impl
+	p := newTestProcessor(t)
+	p.xfer = &osRenameTransferer{}
+	return p
 }
 
 type osRenameTransferer struct{}

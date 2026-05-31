@@ -2,6 +2,8 @@ package transfer
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -263,6 +265,208 @@ func TestMove_SameDeviceRenameFailure_NoFallback(t *testing.T) {
 	}
 	if _, err := os.Stat(src); err != nil {
 		t.Fatalf("expected source to remain, stat err=%v", err)
+	}
+}
+
+// --- CleanupError ---
+
+func TestCleanupError_NilReceiver(t *testing.T) {
+	t.Parallel()
+	var e *CleanupError
+	if e.Error() == "" {
+		t.Fatalf("expected non-empty error string from nil receiver")
+	}
+	if e.Unwrap() != nil {
+		t.Fatalf("expected nil from nil receiver Unwrap")
+	}
+}
+
+func TestCleanupError_WithErr(t *testing.T) {
+	t.Parallel()
+	inner := fmt.Errorf("permission denied")
+	e := &CleanupError{Src: "/a/src.mkv", Dst: "/b/dst.mkv", Err: inner}
+	msg := e.Error()
+	if !strings.Contains(msg, "src.mkv") || !strings.Contains(msg, "dst.mkv") || !strings.Contains(msg, "permission denied") {
+		t.Fatalf("unexpected error string: %q", msg)
+	}
+	if !errors.Is(e, inner) {
+		t.Fatalf("errors.Is: expected inner to be reachable via Unwrap")
+	}
+}
+
+func TestCleanupError_NilErr(t *testing.T) {
+	t.Parallel()
+	e := &CleanupError{Src: "/a/src.mkv", Dst: "/b/dst.mkv"}
+	msg := e.Error()
+	if !strings.Contains(msg, "src.mkv") || !strings.Contains(msg, "dst.mkv") {
+		t.Fatalf("unexpected error string: %q", msg)
+	}
+	if e.Unwrap() != nil {
+		t.Fatalf("expected nil Unwrap when Err is nil")
+	}
+}
+
+// --- Move error paths ---
+
+func TestMove_ContextCanceled(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	src := filepath.Join(root, "src.mkv")
+	dst := filepath.Join(root, "dst.mkv")
+	writeFile(t, src, "data")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	xfer := NewRenameOrCopy(Options{})
+	if err := xfer.Move(ctx, src, dst); err == nil {
+		t.Fatalf("expected context error, got nil")
+	}
+	if _, err := os.Stat(src); err != nil {
+		t.Fatalf("expected source to remain: %v", err)
+	}
+}
+
+func TestMove_SameDeviceError(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	// src does not exist → sameDevice lstat fails
+	src := filepath.Join(root, "nonexistent.mkv")
+	dst := filepath.Join(root, "dst.mkv")
+
+	xfer := NewRenameOrCopy(Options{})
+	if err := xfer.Move(context.Background(), src, dst); err == nil {
+		t.Fatalf("expected error from sameDevice, got nil")
+	}
+}
+
+// --- copyThenReplace error paths ---
+
+func TestCopyThenReplace_DestinationAlreadyExists(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	src := filepath.Join(root, "src.mkv")
+	dst := filepath.Join(root, "dst.mkv")
+	writeFile(t, src, "data")
+	writeFile(t, dst, "existing")
+
+	xfer := NewRenameOrCopy(Options{})
+	err := xfer.copyThenReplace(context.Background(), src, dst)
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "destination already exists") {
+		t.Fatalf("expected destination exists error, got: %v", err)
+	}
+}
+
+func TestCopyThenReplace_SourceOpenFails(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod semantics differ on windows")
+	}
+	root := t.TempDir()
+	src := filepath.Join(root, "src.mkv")
+	dst := filepath.Join(root, "dst.mkv")
+	writeFile(t, src, "data")
+	if err := os.Chmod(src, 0o000); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(src, 0o644) })
+
+	xfer := NewRenameOrCopy(Options{})
+	if err := xfer.copyThenReplace(context.Background(), src, dst); err == nil {
+		t.Fatalf("expected error for unreadable source, got nil")
+	}
+	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+		t.Fatalf("expected dst to not exist after failure")
+	}
+}
+
+func TestCopyThenReplace_CopyFails_TempCleaned(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	src := filepath.Join(root, "src.mkv")
+	dst := filepath.Join(root, "dst.mkv")
+	writeFile(t, src, "data")
+
+	xfer := NewRenameOrCopy(Options{})
+	xfer.copyFn = func(io.Writer, io.Reader) (int64, error) {
+		return 0, fmt.Errorf("injected copy error")
+	}
+
+	if err := xfer.copyThenReplace(context.Background(), src, dst); err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	entries, _ := os.ReadDir(root)
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".partial.") {
+			t.Fatalf("temp file not cleaned up: %s", e.Name())
+		}
+	}
+	if _, err := os.Stat(dst); !os.IsNotExist(err) {
+		t.Fatalf("expected dst to not exist after failed copy")
+	}
+}
+
+func TestCopyThenReplace_CleanupError(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod semantics differ on windows")
+	}
+	root := t.TempDir()
+	srcDir := filepath.Join(root, "srcdir")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("mkdir srcdir: %v", err)
+	}
+	src := filepath.Join(srcDir, "src.mkv")
+	dst := filepath.Join(root, "dst.mkv")
+	writeFile(t, src, strings.Repeat("x", 64))
+
+	xfer := NewRenameOrCopy(Options{})
+	xfer.copyFn = func(w io.Writer, r io.Reader) (int64, error) {
+		n, err := io.Copy(w, r)
+		// Make src's parent read-only so os.Remove(src) fails after dst is finalized.
+		_ = os.Chmod(srcDir, 0o555)
+		return n, err
+	}
+	t.Cleanup(func() { _ = os.Chmod(srcDir, 0o755) })
+
+	err := xfer.copyThenReplace(context.Background(), src, dst)
+	if err == nil {
+		t.Fatalf("expected CleanupError, got nil")
+	}
+	var ce *CleanupError
+	if !errors.As(err, &ce) {
+		t.Fatalf("expected *CleanupError, got %T: %v", err, err)
+	}
+	if ce.Src != src || ce.Dst != dst {
+		t.Fatalf("CleanupError paths: src=%q dst=%q", ce.Src, ce.Dst)
+	}
+	if _, err := os.Stat(dst); err != nil {
+		t.Fatalf("expected dst to exist (destination was finalized): %v", err)
+	}
+}
+
+// --- humanBytes ---
+
+func TestHumanBytes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		n    int64
+		want string
+	}{
+		{500, "500 B"},
+		{1024, "1.00 KB"},
+		{1024 * 1024, "1.00 MB"},
+		{1024 * 1024 * 1024, "1.00 GB"},
+		{1024 * 1024 * 1024 * 1024, "1.00 TB"},
+	}
+	for _, tc := range tests {
+		got := humanBytes(tc.n)
+		if got != tc.want {
+			t.Errorf("humanBytes(%d) = %q, want %q", tc.n, got, tc.want)
+		}
 	}
 }
 

@@ -151,7 +151,7 @@ func TestProcessDropFolder_ForceTimeout_DropsLateOnResultCallbacks(t *testing.T)
 		soundMu.Unlock()
 		return nil
 	}
-	defer func() { playDoneSound = oldPlayDoneSound }()
+	t.Cleanup(func() { playDoneSound = oldPlayDoneSound })
 
 	release := make(chan struct{})
 	started := make(chan struct{}, 1)
@@ -229,7 +229,7 @@ func TestProcessDropFolder_CaffeinateStaysActiveDuringShutdownDrain(t *testing.T
 	newProcessDropCaffeinate = func() notify.CaffeinateController {
 		return fakeCaff
 	}
-	defer func() { newProcessDropCaffeinate = oldNewCaffeinate }()
+	t.Cleanup(func() { newProcessDropCaffeinate = oldNewCaffeinate })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -356,7 +356,7 @@ func TestProcessDropFolder_StreamedPerFile_NoDuplicateLinesOrSounds(t *testing.T
 		soundMu.Unlock()
 		return nil
 	}
-	defer func() { playDoneSound = oldPlayDoneSound }()
+	t.Cleanup(func() { playDoneSound = oldPlayDoneSound })
 
 	proc := &processDropStubProcessor{
 		processFn: func(ctx context.Context, req processor.Request) error {
@@ -420,7 +420,7 @@ func TestProcessDropFolder_StreamedPerJob_PlaysOneSoundForWholeJob(t *testing.T)
 		soundMu.Unlock()
 		return nil
 	}
-	defer func() { playDoneSound = oldPlayDoneSound }()
+	t.Cleanup(func() { playDoneSound = oldPlayDoneSound })
 
 	proc := &processDropStubProcessor{
 		processFn: func(ctx context.Context, req processor.Request) error {
@@ -459,64 +459,6 @@ func TestProcessDropFolder_StreamedPerJob_PlaysOneSoundForWholeJob(t *testing.T)
 	soundMu.Unlock()
 	if gotSounds != 1 {
 		t.Fatalf("sound count = %d, want 1", gotSounds)
-	}
-}
-
-func TestProcessDropFolder_StreamedPerFile_PlaysPerAppliedMain(t *testing.T) {
-	drop := t.TempDir()
-	input := filepath.Join(drop, "pack")
-	if err := os.MkdirAll(input, 0o755); err != nil {
-		t.Fatalf("mkdir pack: %v", err)
-	}
-
-	soundMu := sync.Mutex{}
-	soundCount := 0
-	oldPlayDoneSound := playDoneSound
-	playDoneSound = func(context.Context, string) error {
-		soundMu.Lock()
-		soundCount++
-		soundMu.Unlock()
-		return nil
-	}
-	defer func() { playDoneSound = oldPlayDoneSound }()
-
-	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
-			_ = ctx
-			results := []processor.Result{
-				{Applied: true, Plan: processor.Plan{DestMainPath: "/tmp/A.mkv"}},
-				{Applied: true, Plan: processor.Plan{DestMainPath: "/tmp/B.mkv"}},
-			}
-			if req.OnResult != nil {
-				for _, r := range results {
-					req.OnResult(r)
-				}
-			}
-			return nil
-		},
-	}
-
-	result := processDropFolder(
-		context.Background(),
-		proc,
-		drop,
-		t.TempDir(),
-		t.TempDir(),
-		"/tmp/done.aiff",
-		notify.DoneNotificationPerFile,
-		false,
-		10*time.Second,
-		10*time.Second,
-	)
-	if result.ErrorCount != 0 {
-		t.Fatalf("ErrorCount = %d, want 0", result.ErrorCount)
-	}
-
-	soundMu.Lock()
-	gotSounds := soundCount
-	soundMu.Unlock()
-	if gotSounds != 2 {
-		t.Fatalf("sound count = %d, want 2", gotSounds)
 	}
 }
 
@@ -613,24 +555,25 @@ func writeProcessDropFile(t *testing.T, path string) {
 
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
+	return captureOutput(t, &os.Stdout, fn)
+}
 
-	old := os.Stdout
+func captureOutput(t *testing.T, target **os.File, fn func()) string {
+	t.Helper()
+	old := *target
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("os.Pipe: %v", err)
 	}
-	os.Stdout = w
-
+	*target = w
 	done := make(chan string, 1)
 	go func() {
 		b, _ := io.ReadAll(r)
 		done <- string(b)
 	}()
-
 	fn()
-
 	_ = w.Close()
-	os.Stdout = old
+	*target = old
 	out := <-done
 	_ = r.Close()
 	return out
