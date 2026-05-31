@@ -163,9 +163,10 @@ func main() {
 	if mode.ProcessPath != "" {
 		var res []processor.Result
 		err := withCaffeinate(func() error {
-			var runErr error
-			res, runErr = proc.Process(ctx, processor.Request{InputPath: mode.ProcessPath})
-			return runErr
+			return proc.Process(ctx, processor.Request{
+				InputPath: mode.ProcessPath,
+				OnResult:  func(r processor.Result) { res = append(res, r) },
+			})
 		})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())

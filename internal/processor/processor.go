@@ -100,12 +100,12 @@ func (p *processorImpl) Apply(ctx context.Context, plans []Plan) ([]Result, erro
 // Policy (v1):
 // - Non-media files and directories with no main media are treated as handled and ignored.
 // - All other errors are returned to the caller.
-func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, error) {
+// Results are delivered via req.OnResult as they are produced.
+func (p *processorImpl) Process(ctx context.Context, req Request) error {
 	emit := func(res Result) {
-		if req.OnResult == nil {
-			return
+		if req.OnResult != nil {
+			req.OnResult(res)
 		}
-		req.OnResult(res)
 	}
 
 	plans, err := p.Plan(ctx, req)
@@ -122,13 +122,8 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 			logInfoHistoryOnly(p, logging.EventProcessorInputSkippedInputMissing, logging.Fields{
 				"input_path": req.InputPath,
 			})
-			out := Result{
-				Handled: true,
-				Applied: false,
-				Reason:  ErrInputMissing.Error(),
-			}
-			emit(out)
-			return []Result{out}, nil
+			emit(Result{Handled: true, Applied: false, Reason: ErrInputMissing.Error()})
+			return nil
 		}
 		var pse *ParseShowError
 		var pme *ParseMovieError
@@ -137,13 +132,8 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 				"input_path": req.InputPath,
 				"reason":     err.Error(),
 			})
-			out := Result{
-				Handled: true,
-				Applied: false,
-				Reason:  err.Error(),
-			}
-			emit(out)
-			return []Result{out}, nil
+			emit(Result{Handled: true, Applied: false, Reason: err.Error()})
+			return nil
 		}
 		if errors.Is(err, ErrNotMedia) || errors.Is(err, ErrNoMainMediaFound) || errors.Is(err, ErrAmbiguousShow) {
 			switch {
@@ -161,29 +151,14 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 					"reason":     err.Error(),
 				})
 			}
-			out := Result{
-				Handled: true,
-				Applied: false,
-				Reason:  err.Error(),
-			}
-			emit(out)
-			return []Result{out}, nil
+			emit(Result{Handled: true, Applied: false, Reason: err.Error()})
+			return nil
 		}
-		return nil, err
+		return err
 	}
 
-	res, err := applyWithEmitter(ctx, p, plans, emit)
-	if err != nil {
-		return res, err
-	}
-
-	for i := range res {
-		if !res[i].Handled {
-			res[i].Handled = true
-		}
-		if res[i].Reason == "" {
-			res[i].Reason = "applied"
-		}
+	if _, err := applyWithEmitter(ctx, p, plans, emit); err != nil {
+		return err
 	}
 
 	if partial != nil && len(partial.Issues) > 0 {
@@ -199,18 +174,15 @@ func (p *processorImpl) Process(ctx context.Context, req Request) ([]Result, err
 				"input_path": issue.Path,
 				"reason":     issue.Err.Error(),
 			})
-			reason := issue.Err.Error()
-			out := Result{
+			emit(Result{
 				Plan:    Plan{InputPath: issue.Path},
 				Handled: true,
 				Applied: false,
-				Reason:  reason,
-			}
-			res = append(res, out)
-			emit(out)
+				Reason:  issue.Err.Error(),
+			})
 		}
 	}
-	return res, nil
+	return nil
 }
 
 // --- Internal helpers -------------------------------------------------------
@@ -258,22 +230,10 @@ func isExtInSet(ext string, set map[string]struct{}) bool {
 	return ok
 }
 
-// ProcessEach calls proc.Process and invokes onResult for every result.
-// If Process streams results via OnResult, onResult is called for each as it arrives.
-// If Process returns without having streamed any results, onResult is called for each
-// result in the returned slice. The caller must not set req.OnResult.
+// ProcessEach calls proc.Process with onResult wired as the result callback.
+// The caller must not set req.OnResult.
 // Returns the error from Process.
 func ProcessEach(ctx context.Context, proc Processor, req Request, onResult func(Result)) error {
-	streamed := false
-	req.OnResult = func(r Result) {
-		streamed = true
-		onResult(r)
-	}
-	results, err := proc.Process(ctx, req)
-	if !streamed {
-		for _, r := range results {
-			onResult(r)
-		}
-	}
-	return err
+	req.OnResult = onResult
+	return proc.Process(ctx, req)
 }

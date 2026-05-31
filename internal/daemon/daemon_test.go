@@ -741,8 +741,7 @@ func TestDaemon_ProcessPathAsync_DoneNotificationModes_StreamedResults(t *testin
 
 			d := &Daemon{
 				Proc: &stubProcessor{
-					results:       tc.results,
-					streamResults: true,
+					results: tc.results,
 				},
 				SoundDone:                    "/tmp/done.aiff",
 				DoneNotificationMode:         tc.mode,
@@ -769,7 +768,6 @@ type stubProcessor struct {
 	blockUntilCtx bool
 	results       []processor.Result
 	err           error
-	streamResults bool
 }
 
 type fakeDaemonCaffeinate struct {
@@ -824,7 +822,7 @@ func (s *stubProcessor) Apply(context.Context, []processor.Plan) ([]processor.Re
 	return nil, nil
 }
 
-func (s *stubProcessor) Process(ctx context.Context, req processor.Request) ([]processor.Result, error) {
+func (s *stubProcessor) Process(ctx context.Context, req processor.Request) error {
 	s.mu.Lock()
 	s.calls = append(s.calls, req.InputPath)
 	s.mu.Unlock()
@@ -853,26 +851,22 @@ func (s *stubProcessor) Process(ctx context.Context, req processor.Request) ([]p
 			}
 		}
 		<-ctx.Done()
-		return nil, ctx.Err()
+		return ctx.Err()
 	}
 
 	if s.err != nil {
-		return nil, s.err
+		return s.err
 	}
-	if s.results != nil {
-		if s.streamResults && req.OnResult != nil {
-			for _, r := range s.results {
-				req.OnResult(r)
-			}
+	results := s.results
+	if results == nil {
+		results = []processor.Result{{Applied: true}}
+	}
+	if req.OnResult != nil {
+		for _, r := range results {
+			req.OnResult(r)
 		}
-		out := make([]processor.Result, len(s.results))
-		copy(out, s.results)
-		return out, nil
 	}
-
-	return []processor.Result{{
-		Applied: true,
-	}}, nil
+	return nil
 }
 
 func waitForPath(t *testing.T, ch <-chan string, timeout time.Duration) string {

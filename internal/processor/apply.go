@@ -80,13 +80,13 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	assocFailedCount := 0
 	for _, mv := range pl.Associated {
 		if ctx.Err() != nil {
-			return Result{Plan: pl, Applied: true}, ctx.Err()
+			return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, ctx.Err()
 		}
 		if mv.Source == "" || mv.Dest == "" {
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(mv.Dest), 0o755); err != nil {
-			return Result{Plan: pl, Applied: true}, fmt.Errorf("create associated dest dir %q: %w", filepath.Dir(mv.Dest), err)
+			return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, fmt.Errorf("create associated dest dir %q: %w", filepath.Dir(mv.Dest), err)
 		}
 		if err := p.xfer.Move(ctx, mv.Source, mv.Dest); err != nil {
 			if handleCleanupError(p, err, "associated", mv.Source, mv.Dest) {

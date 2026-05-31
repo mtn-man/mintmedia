@@ -19,7 +19,7 @@ func TestProcess_OnResult_StreamedForAppliedPackFiles(t *testing.T) {
 	writeFile(t, filepath.Join(inputDir, "The.Copenhagen.Test.S01E02.1080p.HEVC.x265.mkv"), "dummy")
 
 	var streamed []Result
-	res, err := p.Process(context.Background(), Request{
+	err := p.Process(context.Background(), Request{
 		InputPath: inputDir,
 		OnResult: func(r Result) {
 			streamed = append(streamed, r)
@@ -28,18 +28,15 @@ func TestProcess_OnResult_StreamedForAppliedPackFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Process() error: %v", err)
 	}
-	if len(res) != 2 {
-		t.Fatalf("expected 2 results, got %d", len(res))
+	if len(streamed) != 2 {
+		t.Fatalf("expected 2 streamed results, got %d", len(streamed))
 	}
-	if len(streamed) != len(res) {
-		t.Fatalf("streamed=%d, returned=%d", len(streamed), len(res))
-	}
-	for i := range res {
+	for i := range streamed {
 		if !streamed[i].Applied {
 			t.Fatalf("streamed[%d].Applied = false, want true", i)
 		}
-		if streamed[i].Plan.DestMainPath != res[i].Plan.DestMainPath {
-			t.Fatalf("streamed[%d].DestMainPath = %q, want %q", i, streamed[i].Plan.DestMainPath, res[i].Plan.DestMainPath)
+		if streamed[i].Plan.DestMainPath == "" {
+			t.Fatalf("streamed[%d].DestMainPath is empty", i)
 		}
 	}
 }
@@ -51,7 +48,7 @@ func TestProcess_OnResult_StreamedForHandledSkip(t *testing.T) {
 	writeFile(t, input, "not media")
 
 	var streamed []Result
-	res, err := p.Process(context.Background(), Request{
+	err := p.Process(context.Background(), Request{
 		InputPath: input,
 		OnResult: func(r Result) {
 			streamed = append(streamed, r)
@@ -60,8 +57,8 @@ func TestProcess_OnResult_StreamedForHandledSkip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Process() error: %v", err)
 	}
-	if len(res) != 1 || len(streamed) != 1 {
-		t.Fatalf("expected one result (returned=%d streamed=%d)", len(res), len(streamed))
+	if len(streamed) != 1 {
+		t.Fatalf("expected 1 streamed result, got %d", len(streamed))
 	}
 	if streamed[0].Reason != ErrNotMedia.Error() {
 		t.Fatalf("Reason = %q, want %q", streamed[0].Reason, ErrNotMedia.Error())
@@ -77,7 +74,7 @@ func TestProcess_OnResult_StreamedForPartialPackSkip(t *testing.T) {
 	writeFile(t, filepath.Join(inputDir, "Episode01.mkv"), "dummy")
 
 	var streamed []Result
-	res, err := p.Process(context.Background(), Request{
+	err := p.Process(context.Background(), Request{
 		InputPath: inputDir,
 		OnResult: func(r Result) {
 			streamed = append(streamed, r)
@@ -86,8 +83,8 @@ func TestProcess_OnResult_StreamedForPartialPackSkip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Process() error: %v", err)
 	}
-	if len(res) != 2 || len(streamed) != 2 {
-		t.Fatalf("expected 2 results (returned=%d streamed=%d)", len(res), len(streamed))
+	if len(streamed) != 2 {
+		t.Fatalf("expected 2 streamed results, got %d", len(streamed))
 	}
 	if !streamed[0].Applied {
 		t.Fatalf("streamed[0].Applied = false, want true")
@@ -110,11 +107,9 @@ func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T)
 	writeFile(t, filepath.Join(inputDir, "The Bourne Identity 2002 1080p BluRay HEVC x265 5.1 BONE.mkv"), "dummy")
 
 	var streamed []Result
-	var res []Result
-	var err error
 	var stderr strings.Builder
 	p.logger = newRuntimeLoggerForProcessorTest(t, io.Discard, &stderr)
-	res, err = p.Process(context.Background(), Request{
+	err := p.Process(context.Background(), Request{
 		InputPath: inputDir,
 		OnResult: func(r Result) {
 			streamed = append(streamed, r)
@@ -123,8 +118,8 @@ func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T)
 	if err != nil {
 		t.Fatalf("Process() error: %v", err)
 	}
-	if len(res) != 2 || len(streamed) != 2 {
-		t.Fatalf("expected 2 results (returned=%d streamed=%d)", len(res), len(streamed))
+	if len(streamed) != 2 {
+		t.Fatalf("expected 2 streamed results, got %d", len(streamed))
 	}
 
 	var appliedCount int

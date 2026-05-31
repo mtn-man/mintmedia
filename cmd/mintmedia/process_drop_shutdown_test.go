@@ -25,7 +25,7 @@ func TestProcessDropFolder_InterruptStopsAfterCurrentItem(t *testing.T) {
 	block := make(chan struct{})
 	started := make(chan struct{}, 1)
 	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) ([]processor.Result, error) {
+		processFn: func(ctx context.Context, req processor.Request) error {
 			if filepath.Base(req.InputPath) == "first.mkv" {
 				select {
 				case started <- struct{}{}:
@@ -33,7 +33,10 @@ func TestProcessDropFolder_InterruptStopsAfterCurrentItem(t *testing.T) {
 				}
 				<-block
 			}
-			return []processor.Result{{Applied: true}}, nil
+			if req.OnResult != nil {
+				req.OnResult(processor.Result{Applied: true})
+			}
+			return nil
 		},
 	}
 
@@ -87,13 +90,16 @@ func TestProcessDropFolder_ForceTimeoutWhenItemIgnoresCancel(t *testing.T) {
 	block := make(chan struct{})
 	started := make(chan struct{}, 1)
 	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) ([]processor.Result, error) {
+		processFn: func(ctx context.Context, req processor.Request) error {
 			select {
 			case started <- struct{}{}:
 			default:
 			}
 			<-block // ignores ctx cancellation on purpose
-			return []processor.Result{{Applied: true}}, nil
+			if req.OnResult != nil {
+				req.OnResult(processor.Result{Applied: true})
+			}
+			return nil
 		},
 	}
 
@@ -151,7 +157,7 @@ func TestProcessDropFolder_ForceTimeout_DropsLateOnResultCallbacks(t *testing.T)
 	started := make(chan struct{}, 1)
 	workerDone := make(chan struct{}, 1)
 	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) ([]processor.Result, error) {
+		processFn: func(ctx context.Context, req processor.Request) error {
 			_ = ctx // ignore cancellation on purpose
 			select {
 			case started <- struct{}{}:
@@ -165,10 +171,7 @@ func TestProcessDropFolder_ForceTimeout_DropsLateOnResultCallbacks(t *testing.T)
 				})
 			}
 			workerDone <- struct{}{}
-			return []processor.Result{{
-				Applied: true,
-				Plan:    processor.Plan{DestMainPath: "/tmp/late-callback.mkv"},
-			}}, nil
+			return nil
 		},
 	}
 
@@ -234,15 +237,17 @@ func TestProcessDropFolder_CaffeinateStaysActiveDuringShutdownDrain(t *testing.T
 	block := make(chan struct{})
 	started := make(chan struct{}, 1)
 	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) ([]processor.Result, error) {
+		processFn: func(ctx context.Context, req processor.Request) error {
 			_ = ctx // block independent of cancellation so drain path is exercised.
-			_ = req
 			select {
 			case started <- struct{}{}:
 			default:
 			}
 			<-block
-			return []processor.Result{{Applied: true}}, nil
+			if req.OnResult != nil {
+				req.OnResult(processor.Result{Applied: true})
+			}
+			return nil
 		},
 	}
 
@@ -354,18 +359,18 @@ func TestProcessDropFolder_StreamedPerFile_NoDuplicateLinesOrSounds(t *testing.T
 	defer func() { playDoneSound = oldPlayDoneSound }()
 
 	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) ([]processor.Result, error) {
+		processFn: func(ctx context.Context, req processor.Request) error {
 			_ = ctx
-			out := []processor.Result{
+			results := []processor.Result{
 				{Applied: true, Plan: processor.Plan{DestMainPath: "/tmp/A.mkv"}},
 				{Applied: true, Plan: processor.Plan{DestMainPath: "/tmp/B.mkv"}},
 			}
 			if req.OnResult != nil {
-				for _, r := range out {
+				for _, r := range results {
 					req.OnResult(r)
 				}
 			}
-			return out, nil
+			return nil
 		},
 	}
 
@@ -418,18 +423,18 @@ func TestProcessDropFolder_StreamedPerJob_PlaysOneSoundForWholeJob(t *testing.T)
 	defer func() { playDoneSound = oldPlayDoneSound }()
 
 	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) ([]processor.Result, error) {
+		processFn: func(ctx context.Context, req processor.Request) error {
 			_ = ctx
-			out := []processor.Result{
+			results := []processor.Result{
 				{Applied: true, Plan: processor.Plan{DestMainPath: "/tmp/A.mkv"}},
 				{Applied: true, Plan: processor.Plan{DestMainPath: "/tmp/B.mkv"}},
 			}
 			if req.OnResult != nil {
-				for _, r := range out {
+				for _, r := range results {
 					req.OnResult(r)
 				}
 			}
-			return out, nil
+			return nil
 		},
 	}
 
@@ -457,7 +462,7 @@ func TestProcessDropFolder_StreamedPerJob_PlaysOneSoundForWholeJob(t *testing.T)
 	}
 }
 
-func TestProcessDropFolder_NonStreamedPerFile_PlaysPerAppliedMain(t *testing.T) {
+func TestProcessDropFolder_StreamedPerFile_PlaysPerAppliedMain(t *testing.T) {
 	drop := t.TempDir()
 	input := filepath.Join(drop, "pack")
 	if err := os.MkdirAll(input, 0o755); err != nil {
@@ -476,13 +481,18 @@ func TestProcessDropFolder_NonStreamedPerFile_PlaysPerAppliedMain(t *testing.T) 
 	defer func() { playDoneSound = oldPlayDoneSound }()
 
 	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) ([]processor.Result, error) {
+		processFn: func(ctx context.Context, req processor.Request) error {
 			_ = ctx
-			_ = req
-			return []processor.Result{
+			results := []processor.Result{
 				{Applied: true, Plan: processor.Plan{DestMainPath: "/tmp/A.mkv"}},
 				{Applied: true, Plan: processor.Plan{DestMainPath: "/tmp/B.mkv"}},
-			}, nil
+			}
+			if req.OnResult != nil {
+				for _, r := range results {
+					req.OnResult(r)
+				}
+			}
+			return nil
 		},
 	}
 
@@ -513,7 +523,7 @@ func TestProcessDropFolder_NonStreamedPerFile_PlaysPerAppliedMain(t *testing.T) 
 type processDropStubProcessor struct {
 	mu        sync.Mutex
 	calls     []string
-	processFn func(context.Context, processor.Request) ([]processor.Result, error)
+	processFn func(context.Context, processor.Request) error
 }
 
 type fakeProcessDropCaffeinate struct {
@@ -568,7 +578,7 @@ func (s *processDropStubProcessor) Apply(context.Context, []processor.Plan) ([]p
 	return nil, nil
 }
 
-func (s *processDropStubProcessor) Process(ctx context.Context, req processor.Request) ([]processor.Result, error) {
+func (s *processDropStubProcessor) Process(ctx context.Context, req processor.Request) error {
 	s.mu.Lock()
 	s.calls = append(s.calls, req.InputPath)
 	s.mu.Unlock()
@@ -576,7 +586,10 @@ func (s *processDropStubProcessor) Process(ctx context.Context, req processor.Re
 	if s.processFn != nil {
 		return s.processFn(ctx, req)
 	}
-	return []processor.Result{{Applied: true}}, nil
+	if req.OnResult != nil {
+		req.OnResult(processor.Result{Applied: true})
+	}
+	return nil
 }
 
 func (s *processDropStubProcessor) Calls() []string {
