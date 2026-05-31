@@ -1,6 +1,6 @@
 # mintmedia
 
-**Mintmedia** is a lightweight macOS automation tool for organizing downloaded media — a simpler, local alternative to heavier media automation tools for setups that don't need a full media server stack. Drop a file or folder into the watch folder and mintmedia figures out what it is, renames it cleanly, and moves it to your Movies or Shows library. No web UI, no database, no infrastructure — just a binary that runs on your Mac.
+**Mintmedia** is a lightweight automation tool for organizing downloaded media — a simpler, local alternative to heavier media automation tools for setups that don't need a full media server stack. Drop a file or folder into the watch folder and mintmedia figures out what it is, renames it cleanly, and moves it to your Movies or Shows library. No web UI, no database, no infrastructure — just a binary that runs on macOS or Linux.
 
 With the daemon running and Transmission integration enabled, the full workflow is hands-free: copy a magnet link, and mintmedia handles the rest — queuing the download, organizing the files when it finishes, and dropping them into a library structure ready for Plex, Infuse, Jellyfin, or any other player.
 
@@ -14,8 +14,8 @@ brew install mtn-man/tools/mintmedia
 
 1. Run `mintmedia` to get started — a config is created automatically on first run at `~/.config/mintmedia/config.toml` with sensible defaults:
    - **Drop folder**: `~/Downloads/MintDrop`
-   - **Movies**: `~/Movies/Movies`
-   - **Shows**: `~/Movies/Shows`
+   - **Movies**: `~/Movies/Movies` (macOS) or `~/Videos/Movies` (Linux)
+   - **Shows**: `~/Movies/Shows` (macOS) or `~/Videos/Shows` (Linux)
 
 2. Drop some media into `~/Downloads/MintDrop` and run `mintmedia` to process it.
 
@@ -51,7 +51,9 @@ With no flags, mintmedia processes everything currently in the drop folder.
 | Flag | Description |
 |------|-------------|
 | `--daemon` / `-d` | Run continuously, watching for new files |
-| `--apply <path>` | Process a specific path |
+| `-p` / `--process-drop` | Process everything currently in the drop folder (default when no flag is given) |
+| `--process <path>` | Process a path with policy — non-media and empty directories are silently skipped |
+| `--apply <path>` | Plan then apply a specific path; prints the plan before applying |
 | `--plan <path>` | Preview what would happen — no changes made |
 | `--config <path>` | Use a different config file |
 | `--verbose` / `-v` | Print config summary at startup |
@@ -66,8 +68,8 @@ The config file lives at `~/.config/mintmedia/config.toml` and is created automa
 | Setting | Default | What it does |
 |---------|---------|--------------|
 | `paths.drop_folder` | `~/Downloads/MintDrop` | Where to look for incoming media |
-| `destinations.dest_dir_movies` | `~/Movies/Movies` | Where processed movies go |
-| `destinations.dest_dir_shows` | `~/Movies/Shows` | Where processed shows go |
+| `destinations.dest_dir_movies` | `~/Movies/Movies` (macOS), `~/Videos/Movies` (Linux) | Where processed movies go |
+| `destinations.dest_dir_shows` | `~/Movies/Shows` (macOS), `~/Videos/Shows` (Linux) | Where processed shows go |
 | `system.done_notification_mode` | `per_file` | Sound after processing: `per_file`, `per_job`, or `off` |
 | `watch.drop_settle_duration` | `3s` | How long to wait after a file stops changing before processing it |
 | `logging.console_level` | `INFO` | How much to print: `DEBUG`, `INFO`, `WARN`, or `ERROR` |
@@ -78,7 +80,12 @@ The config file lives at `~/.config/mintmedia/config.toml` and is created automa
 
 ## Logs
 
-Mintmedia keeps a structured log of everything it does at `~/Library/Application Support/mintmedia/history.jsonl` by default. If a file ended up somewhere unexpected, or a subtitle was left behind, that's the first place to look.
+Mintmedia keeps a structured log of everything it does. The default location depends on your platform:
+
+- **macOS**: `~/Library/Application Support/mintmedia/history.jsonl`
+- **Linux**: `~/.local/state/mintmedia/history.jsonl`
+
+If a file ended up somewhere unexpected, or a subtitle was left behind, that's the first place to look.
 
 ## Transmission Integration
 
@@ -96,14 +103,11 @@ enabled = true
 [torrent]
 enabled = true
 host = "localhost:9091"
-transmission_remote_path = "/opt/homebrew/bin/transmission-remote"
 auto_cleanup_completed_torrents = true
 ```
 
-Clipboard monitoring is macOS-only and requires a cgo-enabled build (the default).
+Clipboard monitoring requires macOS (cgo-enabled build) or Linux with a Wayland session and `wl-clipboard` installed (`wl-paste` must be on PATH).
 
 ## Roadmap
 
-**Batch plan/apply for process-drop**
-
-The `process-drop` command currently processes candidates sequentially: plan then apply for each item before moving to the next. A cleaner model would be to plan all candidates first, then apply the plans in sequence — "see everything before you move anything." This would give accurate file counts in output messages naturally (no separate counting pass needed), allow pre-validation of all destination paths before any files are moved, and make the operation easier to reason about as a whole. The apply phase would still stream results one file at a time, so the live output behavior would be unchanged.
+**Batch preview for `--process-drop`** — Currently each item is planned and applied one at a time. A future release will plan all candidates first and then apply, so you can see the full move list before anything changes.

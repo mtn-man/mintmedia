@@ -62,9 +62,6 @@ type Clipboard struct {
 type Torrent struct {
 	Enabled bool `toml:"enabled"`
 
-	// Optional. If empty, relies on PATH lookup for "transmission-remote".
-	TransmissionRemotePath string `toml:"transmission_remote_path"`
-
 	// e.g. "localhost:9091"
 	Host string `toml:"host"`
 

@@ -46,7 +46,7 @@ All dependency wiring happens in `main.go` before mode dispatch:
 2. `logging.New()` → `logging.Logger` (two sinks: console + JSONL history)
 3. `transfer.NewRenameOrCopy()` → `transfer.Transferer` (fast rename, falls back to copy+atomic finalize)
 4. `processor.New(cfg, xfer, logger)` → `processor.Processor`
-5. In daemon mode, `daemon.New(...)` wires the above with `watch.Watcher`, `clipboard.Poller`, and optionally `transmission.Client`
+5. In daemon mode, `daemon_mode.go` constructs `&daemon.Daemon{...}` directly (struct literal, no constructor) and calls `d.Run(runCtx)`, wiring in `watch.Watcher`, `clipboard.Poller`, and optionally `transmission.Client`
 
 ### Plan/Apply Separation
 
@@ -83,7 +83,7 @@ type Processor interface {
     Process(ctx context.Context, req Request) ([]Result, error)
 }
 
-// internal/transfer/transfer.go
+// internal/processor/types.go
 type Transferer interface {
     Move(ctx context.Context, src, dst string) error
 }
@@ -104,9 +104,9 @@ The daemon uses two independent contexts: `runCtx` (from the caller, cancelled o
 
 ### macOS-Specific Code
 
-- `internal/clipboard/pasteboard_darwin.go` — cgo-based pasteboard polling; `pasteboard_unsupported.go` stubs for Linux.
+- `internal/clipboard/pasteboard_darwin.go` — cgo-based pasteboard polling; `pasteboard_linux.go` — Wayland-based polling via `wl-paste`; `pasteboard_unsupported.go` stubs for all other platforms (build tag: `(!darwin || !cgo) && !linux`).
 - `internal/notify/` — wraps `afplay` (sounds) and `caffeinate` (sleep prevention).
-- Transmission automation uses `transmission-remote` CLI subprocess calls.
+- Transmission automation uses a native HTTP JSON-RPC client (`internal/transmission/client.go`); no subprocess calls.
 
 ### Testing Patterns
 
