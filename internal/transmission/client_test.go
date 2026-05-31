@@ -2,161 +2,181 @@ package transmission
 
 import (
 	"context"
-	"os"
-	"path/filepath"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-// Helper: create an executable script that writes its argv to a file and exits 0.
-func writeArgCaptureScript(t *testing.T, dir string, outFile string) string {
+// newRPCServer starts a test Transmission RPC server that handles the CSRF
+// session-ID handshake and dispatches each RPC call to handle.
+// handle receives the method name and raw arguments JSON; its return value is
+// marshalled as the "arguments" field in the success response.
+func newRPCServer(t *testing.T, handle func(method string, args json.RawMessage) interface{}) *httptest.Server {
 	t.Helper()
-
-	scriptPath := filepath.Join(dir, "tx-remote.sh")
-	script := `#!/usr/bin/env bash
-set -euo pipefail
-# Write all args (space-separated) to the output file
-printf "%s" "$@" > "` + outFile + `"
-exit 0
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
-	return scriptPath
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Transmission-Session-Id") == "" {
+			w.Header().Set("X-Transmission-Session-Id", "test-session-id")
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		var req struct {
+			Method    string          `json:"method"`
+			Arguments json.RawMessage `json:"arguments"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		respArgs := handle(req.Method, req.Arguments)
+		argsJSON, _ := json.Marshal(respArgs)
+		if argsJSON == nil {
+			argsJSON = json.RawMessage(`{}`)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"result":"success","arguments":%s}`, argsJSON)
+	}))
+	t.Cleanup(ts.Close)
+	return ts
 }
 
-// Helper: create an executable script that prints to stderr and exits nonzero.
-func writeFailScript(t *testing.T, dir string) string {
-	t.Helper()
+// hostOf returns the host:port of a test server (strips the http:// scheme).
+func hostOf(ts *httptest.Server) string {
+	return strings.TrimPrefix(ts.URL, "http://")
+}
 
-	scriptPath := filepath.Join(dir, "tx-fail.sh")
-	script := `#!/usr/bin/env bash
-set -euo pipefail
-echo "boom from fake transmission-remote" >&2
-exit 42
-`
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write fail script: %v", err)
+func TestRPCURL(t *testing.T) {
+	cases := []struct {
+		host string
+		want string
+	}{
+		{"localhost:9091", "http://localhost:9091/transmission/rpc"},
+		{"100.106.45.25:9091", "http://100.106.45.25:9091/transmission/rpc"},
+		// path accidentally included — must be stripped
+		{"localhost:9091/transmission/rpc", "http://localhost:9091/transmission/rpc"},
+		{"localhost:9091/", "http://localhost:9091/transmission/rpc"},
+		// explicit scheme preserved
+		{"http://localhost:9091", "http://localhost:9091/transmission/rpc"},
+		{"https://localhost:9091", "https://localhost:9091/transmission/rpc"},
+		// scheme + accidental path
+		{"http://localhost:9091/transmission/rpc", "http://localhost:9091/transmission/rpc"},
 	}
-	return scriptPath
+	for _, tc := range cases {
+		c := &Client{Host: tc.host}
+		if got := c.rpcURL(); got != tc.want {
+			t.Errorf("rpcURL(%q) = %q, want %q", tc.host, got, tc.want)
+		}
+	}
 }
 
 func TestAddMagnet_RequiresHost(t *testing.T) {
-	c := Client{
-		RemotePath: "/does/not/matter",
-		Host:       "",
-	}
-
+	c := &Client{Host: ""}
 	err := c.AddMagnet(context.Background(), "magnet:?xt=urn:btih:abc")
 	if err == nil {
-		t.Fatalf("expected error")
+		t.Fatal("expected error")
 	}
 	if !strings.Contains(err.Error(), "host") {
 		t.Fatalf("expected host error, got: %v", err)
 	}
 }
 
-func TestAddMagnet_RejectsNonMagnet(t *testing.T) {
-	c := Client{
-		RemotePath: "/does/not/matter",
-		Host:       "localhost:9091",
+func TestAddMagnet_RejectsMalformedAuth(t *testing.T) {
+	c := &Client{Host: "localhost:9091", Auth: "tokenonly"}
+	err := c.AddMagnet(context.Background(), "magnet:?xt=urn:btih:abc")
+	if err == nil {
+		t.Fatal("expected error for auth without colon")
 	}
+	if !strings.Contains(err.Error(), "user:pass") {
+		t.Fatalf("expected user:pass format error, got: %v", err)
+	}
+}
 
+func TestAddMagnet_RejectsNonMagnet(t *testing.T) {
+	c := &Client{Host: "localhost:9091"}
 	err := c.AddMagnet(context.Background(), "https://example.com/not-a-magnet")
 	if err == nil {
-		t.Fatalf("expected error")
+		t.Fatal("expected error")
 	}
 	if !strings.Contains(err.Error(), "not a magnet") {
 		t.Fatalf("expected not-a-magnet error, got: %v", err)
 	}
 }
 
-func TestAddMagnet_CallsRemote_WithHostAndAdd(t *testing.T) {
-	tmp := t.TempDir()
-	outFile := filepath.Join(tmp, "argv.txt")
-	script := writeArgCaptureScript(t, tmp, outFile)
+func TestAddMagnet_SendsTorrentAddRPC(t *testing.T) {
+	var gotMethod string
+	var gotFilename string
 
-	magnet := "magnet:?xt=urn:btih:45df42358b3a764e393e5dce02ab05683704a0c1&dn=test.mkv"
-	c := Client{
-		RemotePath: script,
-		Host:       "localhost:9091",
-		Auth:       "",
-	}
+	ts := newRPCServer(t, func(method string, args json.RawMessage) interface{} {
+		gotMethod = method
+		var a map[string]string
+		_ = json.Unmarshal(args, &a)
+		gotFilename = a["filename"]
+		return nil
+	})
 
-	if err := c.AddMagnet(context.Background(), magnet); err != nil {
+	mag := "magnet:?xt=urn:btih:45df42358b3a764e393e5dce02ab05683704a0c1&dn=test.mkv"
+	c := &Client{Host: hostOf(ts)}
+	if err := c.AddMagnet(context.Background(), mag); err != nil {
 		t.Fatalf("AddMagnet error: %v", err)
 	}
-
-	b, err := os.ReadFile(outFile)
-	if err != nil {
-		t.Fatalf("read argv file: %v", err)
+	if gotMethod != "torrent-add" {
+		t.Fatalf("method = %q, want %q", gotMethod, "torrent-add")
 	}
-	got := string(b)
-
-	// Our script writes args with no delimiters other than their natural concatenation.
-	// That’s slightly annoying, but sufficient to assert ordering/containment.
-	if !strings.Contains(got, "localhost:9091") {
-		t.Fatalf("expected host arg; got %q", got)
-	}
-	if !strings.Contains(got, "-a") {
-		t.Fatalf("expected -a; got %q", got)
-	}
-	if !strings.Contains(got, magnet) {
-		t.Fatalf("expected magnet; got %q", got)
+	if !strings.Contains(gotFilename, "45df42358b3a764e393e5dce02ab05683704a0c1") {
+		t.Fatalf("filename = %q, want magnet containing btih", gotFilename)
 	}
 }
 
-func TestAddMagnet_CallsRemote_WithAuth(t *testing.T) {
-	tmp := t.TempDir()
-	outFile := filepath.Join(tmp, "argv.txt")
-	script := writeArgCaptureScript(t, tmp, outFile)
+func TestAddMagnet_SendsBasicAuth(t *testing.T) {
+	var gotUser, gotPass string
+	var authOK bool
 
-	magnet := "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&dn=test"
-	c := Client{
-		RemotePath: script,
-		Host:       "localhost:9091",
-		Auth:       "user:pass",
-	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if ok {
+			gotUser, gotPass, authOK = u, p, true
+		}
+		if r.Header.Get("X-Transmission-Session-Id") == "" {
+			w.Header().Set("X-Transmission-Session-Id", "test-session-id")
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"result":"success","arguments":{}}`)
+	}))
+	defer ts.Close()
 
-	if err := c.AddMagnet(context.Background(), magnet); err != nil {
+	mag := "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&dn=test"
+	c := &Client{Host: hostOf(ts), Auth: "user:pass"}
+	if err := c.AddMagnet(context.Background(), mag); err != nil {
 		t.Fatalf("AddMagnet error: %v", err)
 	}
-
-	b, err := os.ReadFile(outFile)
-	if err != nil {
-		t.Fatalf("read argv file: %v", err)
-	}
-	got := string(b)
-
-	if !strings.Contains(got, "localhost:9091") {
-		t.Fatalf("expected host arg; got %q", got)
-	}
-	if !strings.Contains(got, "-n") {
-		t.Fatalf("expected -n; got %q", got)
-	}
-	if !strings.Contains(got, "user:pass") {
-		t.Fatalf("expected auth; got %q", got)
-	}
-	if !strings.Contains(got, "-a") || !strings.Contains(got, magnet) {
-		t.Fatalf("expected add magnet; got %q", got)
+	if !authOK || gotUser != "user" || gotPass != "pass" {
+		t.Fatalf("BasicAuth = (%q, %q, %v), want (user, pass, true)", gotUser, gotPass, authOK)
 	}
 }
 
-func TestAddMagnet_PropagatesCommandFailureWithOutput(t *testing.T) {
-	tmp := t.TempDir()
-	script := writeFailScript(t, tmp)
+func TestAddMagnet_PropagatesRPCError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Transmission-Session-Id") == "" {
+			w.Header().Set("X-Transmission-Session-Id", "test-session-id")
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"result":"something went wrong","arguments":{}}`)
+	}))
+	defer ts.Close()
 
-	c := Client{
-		RemotePath: script,
-		Host:       "localhost:9091",
-	}
-
-	err := c.AddMagnet(context.Background(), "magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+	mag := "magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	c := &Client{Host: hostOf(ts)}
+	err := c.AddMagnet(context.Background(), mag)
 	if err == nil {
-		t.Fatalf("expected error")
+		t.Fatal("expected error")
 	}
-	// Ensure stderr output is present for debugging.
-	if !strings.Contains(err.Error(), "boom from fake transmission-remote") {
-		t.Fatalf("expected stderr in error; got: %v", err)
+	if !strings.Contains(err.Error(), "something went wrong") {
+		t.Fatalf("expected rpc error message in error; got: %v", err)
 	}
 }

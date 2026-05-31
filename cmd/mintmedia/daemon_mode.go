@@ -54,9 +54,8 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 	var tx *transmission.Client
 	if torrentEnabled {
 		tx = &transmission.Client{
-			RemotePath: resolved.TransmissionRemoteAbs,
-			Host:       cfg.Torrent.Host,
-			Auth:       cfg.Torrent.Auth,
+			Host: cfg.Torrent.Host,
+			Auth: cfg.Torrent.Auth,
 		}
 	}
 

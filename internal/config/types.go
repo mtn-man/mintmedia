@@ -105,7 +105,7 @@ type Resolved struct {
 	ShutdownGraceDuration time.Duration
 	ShutdownForceTimeout  time.Duration
 
-	TransmissionRemoteAbs string
+
 
 	ConsoleLogLevel string
 	HistoryLogLevel string

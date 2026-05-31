@@ -146,22 +146,9 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	}
 
 	// Torrent config
-	transRemoteAbs := ""
-
 	torrentOn := cfg.Features.EnableTorrentAutomation && cfg.Torrent.Enabled
 
 	if torrentOn {
-		if strings.TrimSpace(cfg.Torrent.TransmissionRemotePath) == "" {
-			transRemoteAbs = "transmission-remote"
-		} else {
-			transRemoteAbs, err = expandPath(cfg.Torrent.TransmissionRemotePath)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("torrent.transmission_remote_path: %w", err))
-			} else if transRemoteAbs == "" {
-				errs = append(errs, errors.New("torrent.transmission_remote_path is empty after expansion"))
-			}
-		}
-
 		if strings.TrimSpace(cfg.Torrent.Host) == "" {
 			errs = append(errs, errors.New("torrent.host is required when torrent automation is enabled (e.g. \"localhost:9091\")"))
 		}
@@ -205,15 +192,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		}
 	}
 
-	// Optional: validate transmission-remote path if explicitly provided
-	if torrentOn && strings.TrimSpace(cfg.Torrent.TransmissionRemotePath) != "" {
-		st, err := os.Stat(transRemoteAbs)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("torrent.transmission_remote_path: %w", err))
-		} else if st.IsDir() {
-			errs = append(errs, fmt.Errorf("torrent.transmission_remote_path is a directory, expected file: %s", transRemoteAbs))
-		}
-	}
 
 	if len(errs) > 0 {
 		return nil, joinErrors(errs)
@@ -233,8 +211,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		DoneNotificationMode:  doneNotificationMode,
 		ShutdownGraceDuration: shutdownGrace,
 		ShutdownForceTimeout:  shutdownForce,
-
-		TransmissionRemoteAbs: transRemoteAbs,
 
 		ConsoleLogLevel: cfg.Logging.ConsoleLevel,
 		HistoryLogLevel: cfg.Logging.HistoryLevel,

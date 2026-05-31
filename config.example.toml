@@ -113,10 +113,5 @@ auto_cleanup_completed_torrents = false
 # Transmission RPC host (host:port)
 host = "localhost:9091"
 
-# Path to transmission-remote binary.
-# macOS/Homebrew (Apple Silicon): "/opt/homebrew/bin/transmission-remote"
-# Linux: leave empty to use system PATH (typical for package manager installs).
-transmission_remote_path = "/opt/homebrew/bin/transmission-remote"
-
 # Optional authentication (only if required)
 # auth = "user:pass"
