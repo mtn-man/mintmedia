@@ -4,6 +4,9 @@ package processor
 import (
 	"context"
 	"errors"
+	"fmt"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -57,39 +60,27 @@ func (a sortKey) less(b sortKey) bool {
 	return strings.ToLower(a.path) < strings.ToLower(b.path)
 }
 
-// sortKeyForPath calls Plan() for path and derives its sort key.
-// Returns a non-nil error for any condition that should influence the caller's
-// decision about whether to include the path (parse errors, not-media, etc.).
-//
-// Plan() will be called a second time when the path is actually processed.
-// The duplication is acceptable: Plan() is read-only (no filesystem writes),
-// cheap relative to the file moves that follow, and keeping sort logic
-// self-contained avoids coupling the sort key representation to Plan internals.
-func sortKeyForPath(ctx context.Context, proc Processor, path string) (sortKey, error) {
-	plans, err := proc.Plan(ctx, Request{InputPath: path})
-
-	var partial *PartialPlanError
-	if err != nil && !errors.As(err, &partial) {
-		return sortKey{}, err
-	}
-
-	if len(plans) == 0 {
-		if partial != nil && len(partial.Issues) > 0 {
-			return sortKey{}, partial.Issues[0].Err
-		}
-		return sortKey{tier: tierFallback, path: path}, nil
-	}
-
-	// Use plans[0]: plan.go sorts mainPaths via sort.Strings, so for a season
-	// pack directory plans[0] is the lexicographically first episode.
-	pl := plans[0]
-	switch pl.Category {
-	case CategoryMovie:
-		return sortKey{tier: tierMovie, title: pl.MovieTitle, path: path}, nil
+// parseSortKey derives a sort key from the filename or directory name alone.
+// It calls the filename parsers directly with no filesystem I/O.
+func parseSortKey(blacklist []*regexp.Regexp, path string) (sortKey, error) {
+	name := filepath.Base(path)
+	cat := determineCategoryFromNames(name, name)
+	switch cat {
 	case CategoryShow:
-		return sortKey{tier: tierShow, title: pl.ShowName, season: pl.Season, episode: pl.Episode, path: path}, nil
-	default:
-		return sortKey{tier: tierFallback, path: path}, nil
+		showName, _, season, episode, err := parseShowFromName(blacklist, name, name)
+		if err != nil {
+			return sortKey{}, err
+		}
+		return sortKey{tier: tierShow, title: showName, season: season, episode: episode, path: path}, nil
+	default: // CategoryMovie
+		title, year, err := parseMovieFromName(blacklist, name, name)
+		if err != nil {
+			return sortKey{}, err
+		}
+		if year != "" {
+			title = fmt.Sprintf("%s (%s)", title, year)
+		}
+		return sortKey{tier: tierMovie, title: title, path: path}, nil
 	}
 }
 
@@ -100,6 +91,10 @@ func sortKeyForPath(ctx context.Context, proc Processor, path string) (sortKey, 
 // err signals a fatal failure (e.g. context canceled); in that case both sorted
 // and errs are nil.
 func SortCandidates(ctx context.Context, proc Processor, paths []string) ([]string, []SortError, error) {
+	return proc.SortCandidates(ctx, paths)
+}
+
+func (p *processorImpl) SortCandidates(ctx context.Context, paths []string) ([]string, []SortError, error) {
 	if len(paths) == 0 {
 		return nil, nil, nil
 	}
@@ -117,7 +112,15 @@ func SortCandidates(ctx context.Context, proc Processor, paths []string) ([]stri
 			return nil, nil, ctx.Err()
 		}
 
-		key, err := sortKeyForPath(ctx, proc, path)
+		// Files with non-media extensions are silently skipped.
+		// Directories (no extension) are always candidates.
+		if ext := strings.ToLower(filepath.Ext(path)); ext != "" {
+			if !isExtInSet(ext, p.mainExtSet) {
+				continue
+			}
+		}
+
+		key, err := parseSortKey(p.blacklist, path)
 		if err != nil {
 			var pse *ParseShowError
 			var pme *ParseMovieError
@@ -125,11 +128,7 @@ func SortCandidates(ctx context.Context, proc Processor, paths []string) ([]stri
 				errs = append(errs, SortError{Path: path, Err: err})
 				continue
 			}
-			if errors.Is(err, ErrNotMedia) || errors.Is(err, ErrNoMainMediaFound) {
-				continue // not a media file; silently skip
-			}
-			// Unexpected errors (ambiguous show, I/O, etc.): pass through so
-			// Process() can report them with full context.
+			// Unexpected errors: include as fallback so Process() can report them.
 			items = append(items, keyed{path: path, key: sortKey{tier: tierFallback, path: path}})
 			continue
 		}

@@ -25,6 +25,9 @@ func (s *stubRunProcessor) Process(_ context.Context, req Request) error {
 	}
 	return s.err
 }
+func (s *stubRunProcessor) SortCandidates(_ context.Context, paths []string) ([]string, []SortError, error) {
+	return paths, nil, nil
+}
 
 func TestProcessEach_Streaming(t *testing.T) {
 	want := []Result{

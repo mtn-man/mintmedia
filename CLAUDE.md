@@ -102,7 +102,7 @@ type Logger interface { ... }
 
 The daemon uses two independent contexts: `runCtx` (from the caller, cancelled on SIGINT/SIGTERM) and `jobsCtx` (internal, cancelled only after the grace period expires). This separation lets the event loop stop accepting new work immediately while in-flight processing jobs run to completion within the grace window. `internal/shutdown` contains the drain/policy helpers used by both daemon and process-drop modes.
 
-### macOS-Specific Code
+### Platform-Specific Code
 
 - `internal/clipboard/pasteboard_darwin.go` — cgo-based pasteboard polling; `pasteboard_linux.go` — Wayland-based polling via `wl-paste`; `pasteboard_unsupported.go` stubs for all other platforms (build tag: `(!darwin || !cgo) && !linux`).
 - `internal/notify/` — wraps `afplay` (sounds) and `caffeinate` (sleep prevention).

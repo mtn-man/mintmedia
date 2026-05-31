@@ -3,7 +3,6 @@ package processor
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
 )
 
@@ -102,7 +101,10 @@ func TestSortKey_Less(t *testing.T) {
 	}
 }
 
-// --- SortCandidates integration tests (real filesystem via newTestProcessor) ---
+// --- SortCandidates tests ---
+// parseSortKey uses filename parsing only (no filesystem I/O), so paths do not
+// need to exist on disk. newTestProcessor is still needed for the blacklist and
+// extension config.
 
 func TestSortCandidates_EmptyInput(t *testing.T) {
 	t.Parallel()
@@ -117,10 +119,8 @@ func TestSortCandidates_MoviesFirst(t *testing.T) {
 	t.Parallel()
 	p := newTestProcessor(t)
 
-	movie := filepath.Join(p.cfg.DropFolder, "The.Dark.Knight.2008.1080p.BluRay.x265.mkv")
-	show := filepath.Join(p.cfg.DropFolder, "Fallout.S01E01.1080p.x265.mkv")
-	writeFile(t, movie, "dummy")
-	writeFile(t, show, "dummy")
+	movie := "/drop/The.Dark.Knight.2008.1080p.BluRay.x265.mkv"
+	show := "/drop/Fallout.S01E01.1080p.x265.mkv"
 
 	// Pass show first to confirm ordering is by media type, not input order.
 	sorted, errs, err := SortCandidates(context.Background(), p, []string{show, movie})
@@ -145,12 +145,9 @@ func TestSortCandidates_MovieOrder(t *testing.T) {
 	t.Parallel()
 	p := newTestProcessor(t)
 
-	zodiac := filepath.Join(p.cfg.DropFolder, "Zodiac.2007.1080p.BluRay.x265.mkv")
-	aliens := filepath.Join(p.cfg.DropFolder, "Aliens.1986.1080p.BluRay.x265.mkv")
-	madMax := filepath.Join(p.cfg.DropFolder, "Mad.Max.1979.1080p.BluRay.x265.mkv")
-	writeFile(t, zodiac, "dummy")
-	writeFile(t, aliens, "dummy")
-	writeFile(t, madMax, "dummy")
+	zodiac := "/drop/Zodiac.2007.1080p.BluRay.x265.mkv"
+	aliens := "/drop/Aliens.1986.1080p.BluRay.x265.mkv"
+	madMax := "/drop/Mad.Max.1979.1080p.BluRay.x265.mkv"
 
 	sorted, errs, err := SortCandidates(context.Background(), p, []string{zodiac, madMax, aliens})
 	if err != nil {
@@ -171,12 +168,9 @@ func TestSortCandidates_ShowOrder(t *testing.T) {
 	t.Parallel()
 	p := newTestProcessor(t)
 
-	s01e02 := filepath.Join(p.cfg.DropFolder, "Fallout.S01E02.1080p.x265.mkv")
-	s01e01 := filepath.Join(p.cfg.DropFolder, "Fallout.S01E01.1080p.x265.mkv")
-	s02e01 := filepath.Join(p.cfg.DropFolder, "Fallout.S02E01.1080p.x265.mkv")
-	writeFile(t, s01e02, "dummy")
-	writeFile(t, s01e01, "dummy")
-	writeFile(t, s02e01, "dummy")
+	s01e02 := "/drop/Fallout.S01E02.1080p.x265.mkv"
+	s01e01 := "/drop/Fallout.S01E01.1080p.x265.mkv"
+	s02e01 := "/drop/Fallout.S02E01.1080p.x265.mkv"
 
 	sorted, errs, err := SortCandidates(context.Background(), p, []string{s01e02, s02e01, s01e01})
 	if err != nil {
@@ -200,12 +194,9 @@ func TestSortCandidates_MultipleShows(t *testing.T) {
 	// Two shows: Fallout (S01E01) and Breaking Bad (S03E07)
 	// Plus a movie: Aliens
 	// Expected: movie first, then Breaking Bad, then Fallout.
-	aliens := filepath.Join(p.cfg.DropFolder, "Aliens.1986.1080p.BluRay.x265.mkv")
-	fallout := filepath.Join(p.cfg.DropFolder, "Fallout.S01E01.1080p.x265.mkv")
-	bb := filepath.Join(p.cfg.DropFolder, "Breaking.Bad.S03E07.1080p.x265.mkv")
-	writeFile(t, aliens, "dummy")
-	writeFile(t, fallout, "dummy")
-	writeFile(t, bb, "dummy")
+	aliens := "/drop/Aliens.1986.1080p.BluRay.x265.mkv"
+	fallout := "/drop/Fallout.S01E01.1080p.x265.mkv"
+	bb := "/drop/Breaking.Bad.S03E07.1080p.x265.mkv"
 
 	sorted, errs, err := SortCandidates(context.Background(), p, []string{fallout, aliens, bb})
 	if err != nil {
@@ -226,10 +217,8 @@ func TestSortCandidates_NonMediaSilentlySkipped(t *testing.T) {
 	t.Parallel()
 	p := newTestProcessor(t)
 
-	movie := filepath.Join(p.cfg.DropFolder, "Aliens.1986.1080p.BluRay.x265.mkv")
-	nonMedia := filepath.Join(p.cfg.DropFolder, "notes.txt")
-	writeFile(t, movie, "dummy")
-	writeFile(t, nonMedia, "not media")
+	movie := "/drop/Aliens.1986.1080p.BluRay.x265.mkv"
+	nonMedia := "/drop/notes.txt"
 
 	sorted, errs, err := SortCandidates(context.Background(), p, []string{nonMedia, movie})
 	if err != nil {
@@ -248,10 +237,8 @@ func TestSortCandidates_ParseFailureExcluded(t *testing.T) {
 	p := newTestProcessor(t)
 
 	// A file with a media extension but no parseable title.
-	unparseable := filepath.Join(p.cfg.DropFolder, "1080p.x265.mkv")
-	valid := filepath.Join(p.cfg.DropFolder, "Aliens.1986.1080p.BluRay.x265.mkv")
-	writeFile(t, unparseable, "dummy")
-	writeFile(t, valid, "dummy")
+	unparseable := "/drop/1080p.x265.mkv"
+	valid := "/drop/Aliens.1986.1080p.BluRay.x265.mkv"
 
 	sorted, errs, err := SortCandidates(context.Background(), p, []string{unparseable, valid})
 	if err != nil {
@@ -272,13 +259,10 @@ func TestSortCandidates_ContextCanceled(t *testing.T) {
 	t.Parallel()
 	p := newTestProcessor(t)
 
-	valid := filepath.Join(p.cfg.DropFolder, "Aliens.1986.1080p.BluRay.x265.mkv")
-	writeFile(t, valid, "dummy")
-
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // canceled before the call
 
-	sorted, errs, err := SortCandidates(ctx, p, []string{valid})
+	sorted, errs, err := SortCandidates(ctx, p, []string{"/drop/Aliens.1986.1080p.BluRay.x265.mkv"})
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}

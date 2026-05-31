@@ -592,6 +592,10 @@ func (s *processDropStubProcessor) Process(ctx context.Context, req processor.Re
 	return nil
 }
 
+func (s *processDropStubProcessor) SortCandidates(_ context.Context, paths []string) ([]string, []processor.SortError, error) {
+	return paths, nil, nil
+}
+
 func (s *processDropStubProcessor) Calls() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()

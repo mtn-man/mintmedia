@@ -869,6 +869,10 @@ func (s *stubProcessor) Process(ctx context.Context, req processor.Request) erro
 	return nil
 }
 
+func (s *stubProcessor) SortCandidates(_ context.Context, paths []string) ([]string, []processor.SortError, error) {
+	return paths, nil, nil
+}
+
 func waitForPath(t *testing.T, ch <-chan string, timeout time.Duration) string {
 	t.Helper()
 
