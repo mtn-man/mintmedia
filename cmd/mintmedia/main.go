@@ -40,6 +40,7 @@ func main() {
 
 	// One-shot processor harness flags
 	planPath := pflag.String("plan", "", "Compute and print the processing plan for a path (no changes)")
+	pflag.Lookup("plan").NoOptDefVal = "" // makes the path argument optional; no-arg form plans the drop folder
 	processPath := pflag.String("process", "", "Process a path with policy (ignore non-media/no-media dirs)")
 	processDrop := pflag.BoolP("process-drop", "p", false, "Process all paths currently in the drop folder (one-shot)")
 	daemonFlag := pflag.BoolP("daemon", "d", false, "Run the daemon (watch/poll/automations)")
@@ -56,7 +57,7 @@ func main() {
 		}
 		write("Usage: %s [flags]\n\n", filepath.Base(os.Args[0]))
 		writeln("Modes (choose one; default is -p/--process-drop when features.enable_processing=true):")
-		writeln("  --plan <path>        Compute and print the processing plan (no changes)")
+		writeln("  --plan [path]        Preview what would happen (no changes); omit path to preview drop folder")
 		writeln("  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
 		writeln("  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
 		writeln("  -d, --daemon         Run the daemon (watch/poll/automations)")
@@ -81,8 +82,10 @@ func main() {
 		fmt.Printf("No config file found. A default config has been written to: %s\n", resolved.ConfigPathAbs)
 	}
 
+	planDrop := pflag.Lookup("plan").Changed && *planPath == ""
 	mode, err := resolveModePolicy(
 		*planPath,
+		planDrop,
 		*processPath,
 		*processDrop,
 		*daemonFlag,
@@ -130,6 +133,13 @@ func main() {
 			os.Exit(exitError)
 		}
 		PrintPlans(plans)
+		return
+	}
+
+	if mode.PlanDrop {
+		if errCount := planDropFolder(ctx, proc, resolved.DropFolderAbs); errCount > 0 {
+			os.Exit(exitError)
+		}
 		return
 	}
 

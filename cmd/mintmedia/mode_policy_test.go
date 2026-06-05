@@ -9,11 +9,13 @@ func TestResolveModePolicy(t *testing.T) {
 		name             string
 		enableProcessing bool
 		plan             string
+		planDrop         bool
 		process          string
 		processDrop      bool
 		daemon           bool
 		wantErr          error
 		wantPlan         string
+		wantPlanDrop     bool
 		wantProcess      string
 		wantProcessDrop  bool
 		wantDaemon       bool
@@ -52,6 +54,21 @@ func TestResolveModePolicy(t *testing.T) {
 			wantProcessDrop:  false,
 			wantExplicit:     1,
 		},
+		{
+			name:             "plan-drop preserved",
+			enableProcessing: true,
+			planDrop:         true,
+			wantPlanDrop:     true,
+			wantProcessDrop:  false,
+			wantExplicit:     1,
+		},
+		{
+			name:             "plan-drop conflicts with daemon",
+			enableProcessing: true,
+			planDrop:         true,
+			daemon:           true,
+			wantErr:          errConflictingModes,
+		},
 	}
 
 	for _, tt := range tests {
@@ -61,6 +78,7 @@ func TestResolveModePolicy(t *testing.T) {
 
 			got, err := resolveModePolicy(
 				tt.plan,
+				tt.planDrop,
 				tt.process,
 				tt.processDrop,
 				tt.daemon,
@@ -80,6 +98,9 @@ func TestResolveModePolicy(t *testing.T) {
 			}
 			if got.PlanPath != tt.wantPlan {
 				t.Fatalf("PlanPath = %q, want %q", got.PlanPath, tt.wantPlan)
+			}
+			if got.PlanDrop != tt.wantPlanDrop {
+				t.Fatalf("PlanDrop = %v, want %v", got.PlanDrop, tt.wantPlanDrop)
 			}
 			if got.ProcessPath != tt.wantProcess {
 				t.Fatalf("ProcessPath = %q, want %q", got.ProcessPath, tt.wantProcess)

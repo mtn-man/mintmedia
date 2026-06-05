@@ -38,7 +38,7 @@ When mintmedia processes a file or folder, it:
 
 If a subtitle or other accompanying file can't be moved, the main media is still moved and you'll see a warning. The source folder is left in place if anything was left behind.
 
-Use `--plan <path>` to preview what mintmedia would do without touching anything.
+Use `--plan` to preview what mintmedia would do without touching anything. Pass a path to preview a specific item, or omit it to preview the whole drop folder.
 
 ## CLI Reference
 
@@ -53,7 +53,7 @@ With no flags, mintmedia processes everything currently in the drop folder.
 | `--daemon` / `-d` | Run continuously, watching for new files |
 | `-p` / `--process-drop` | Process everything currently in the drop folder (default when no flag is given) |
 | `--process <path>` | Process a path with policy — non-media and empty directories are silently skipped |
-| `--plan <path>` | Preview what would happen — no changes made |
+| `--plan [path]` | Preview what would happen — no changes made; omit path to preview the drop folder |
 | `--config <path>` | Use a different config file |
 | `--verbose` / `-v` | Print config summary at startup |
 | `--help` / `-h` | Show help |
