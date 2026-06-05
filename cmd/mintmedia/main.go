@@ -1,5 +1,4 @@
-// Mintmedia is a macOS drop-folder daemon and CLI for organizing media into Movies/Shows libraries.
-// BETA v1.0: feature-complete for personal use; behavior may change.
+// Mintmedia is a drop-folder daemon and CLI for organizing media into Movies/Shows libraries.
 package main
 
 import (
@@ -41,7 +40,6 @@ func main() {
 
 	// One-shot processor harness flags
 	planPath := pflag.String("plan", "", "Compute and print the processing plan for a path (no changes)")
-	applyPath := pflag.String("apply", "", "Plan and apply changes for a path (filesystem writes)")
 	processPath := pflag.String("process", "", "Process a path with policy (ignore non-media/no-media dirs)")
 	processDrop := pflag.BoolP("process-drop", "p", false, "Process all paths currently in the drop folder (one-shot)")
 	daemonFlag := pflag.BoolP("daemon", "d", false, "Run the daemon (watch/poll/automations)")
@@ -59,7 +57,6 @@ func main() {
 		write("Usage: %s [flags]\n\n", filepath.Base(os.Args[0]))
 		writeln("Modes (choose one; default is -p/--process-drop when features.enable_processing=true):")
 		writeln("  --plan <path>        Compute and print the processing plan (no changes)")
-		writeln("  --apply <path>       Plan and apply changes for a path (filesystem writes)")
 		writeln("  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
 		writeln("  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
 		writeln("  -d, --daemon         Run the daemon (watch/poll/automations)")
@@ -86,7 +83,6 @@ func main() {
 
 	mode, err := resolveModePolicy(
 		*planPath,
-		*applyPath,
 		*processPath,
 		*processDrop,
 		*daemonFlag,
@@ -134,29 +130,6 @@ func main() {
 			os.Exit(exitError)
 		}
 		PrintPlans(plans)
-		return
-	}
-
-	if mode.ApplyPath != "" {
-		plans, err := proc.Plan(ctx, processor.Request{InputPath: mode.ApplyPath})
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitError)
-		}
-		PrintPlans(plans)
-
-		fmt.Println("\n--- APPLY ---")
-		var res []processor.Result
-		err = withCaffeinate(func() error {
-			var runErr error
-			res, runErr = proc.Apply(ctx, plans)
-			return runErr
-		})
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitError)
-		}
-		PrintResults(res)
 		return
 	}
 

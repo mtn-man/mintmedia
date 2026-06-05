@@ -53,7 +53,6 @@ With no flags, mintmedia processes everything currently in the drop folder.
 | `--daemon` / `-d` | Run continuously, watching for new files |
 | `-p` / `--process-drop` | Process everything currently in the drop folder (default when no flag is given) |
 | `--process <path>` | Process a path with policy — non-media and empty directories are silently skipped |
-| `--apply <path>` | Plan then apply a specific path; prints the plan before applying |
 | `--plan <path>` | Preview what would happen — no changes made |
 | `--config <path>` | Use a different config file |
 | `--verbose` / `-v` | Print config summary at startup |

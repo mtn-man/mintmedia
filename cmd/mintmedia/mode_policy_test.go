@@ -9,13 +9,11 @@ func TestResolveModePolicy(t *testing.T) {
 		name             string
 		enableProcessing bool
 		plan             string
-		apply            string
 		process          string
 		processDrop      bool
 		daemon           bool
 		wantErr          error
 		wantPlan         string
-		wantApply        string
 		wantProcess      string
 		wantProcessDrop  bool
 		wantDaemon       bool
@@ -63,7 +61,6 @@ func TestResolveModePolicy(t *testing.T) {
 
 			got, err := resolveModePolicy(
 				tt.plan,
-				tt.apply,
 				tt.process,
 				tt.processDrop,
 				tt.daemon,
@@ -83,9 +80,6 @@ func TestResolveModePolicy(t *testing.T) {
 			}
 			if got.PlanPath != tt.wantPlan {
 				t.Fatalf("PlanPath = %q, want %q", got.PlanPath, tt.wantPlan)
-			}
-			if got.ApplyPath != tt.wantApply {
-				t.Fatalf("ApplyPath = %q, want %q", got.ApplyPath, tt.wantApply)
 			}
 			if got.ProcessPath != tt.wantProcess {
 				t.Fatalf("ProcessPath = %q, want %q", got.ProcessPath, tt.wantProcess)
