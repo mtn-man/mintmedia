@@ -103,9 +103,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 	// History file path (for logger persistence)
 	hf := strings.TrimSpace(cfg.Logging.HistoryFile)
-	if hf == "" {
-		hf = defaultHistoryFile
-	}
 	historyAbs := ""
 	if filepath.IsAbs(hf) || strings.HasPrefix(hf, "~") || strings.Contains(hf, "$") {
 		historyAbs, err = expandPath(hf)
