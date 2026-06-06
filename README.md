@@ -12,12 +12,12 @@ brew install mtn-man/tools/mintmedia
 
 ## Quick Start
 
-1. Run `mintmedia` to get started — a config is created automatically on first run at `~/.config/mintmedia/config.toml` with sensible defaults:
+1. Run `mintmedia`. A default config is written to `~/.config/mintmedia/config.toml` with sensible defaults:
    - **Drop folder**: `~/Downloads/MintDrop`
    - **Movies**: `~/Movies/Movies` (macOS) or `~/Videos/Movies` (Linux)
    - **Shows**: `~/Movies/Shows` (macOS) or `~/Videos/Shows` (Linux)
 
-2. Drop some media into `~/Downloads/MintDrop` and run `mintmedia` to process it.
+2. Drop some media into `~/Downloads/MintDrop`, then run `mintmedia` again to process it.
 
 3. To run continuously in the background, watching for new files as they arrive:
    ```
@@ -40,55 +40,79 @@ If a subtitle or other accompanying file can't be moved, the main media is still
 
 Use `--plan` to preview what mintmedia would do without touching anything. Pass a path to preview a specific item, or omit it to preview the whole drop folder.
 
+### Output naming
+
+Shows are organized by season, with the episode renamed to a clean `Show Name - SxxExx` format:
+
+```
+input:   Stranger.Things.S04E07.2160p.BluRay.x265.mkv
+output:  Shows/Stranger Things/Season 04/Stranger Things - S04E07.mkv
+```
+
+Movies get their own subdirectory named after the title:
+
+```
+input:   Get.Smart.2008.1080p.BluRay.mkv
+output:  Movies/Get Smart (2008)/Get Smart (2008).mkv
+```
+
+Subtitles and other associated files are renamed to match and moved alongside the main file:
+
+```
+Stranger.Things.S04E07.en.srt  →  Stranger Things - S04E07.en.srt
+```
+
+### Library awareness
+
+For shows, mintmedia reads your existing library folder before deciding on a destination. If your Shows directory already has a `Survivor (2000)` folder, a new episode that parses as `Survivor` will be routed there — no duplicate folders, no year guessing. If a name matches more than one existing folder ambiguously, the file is skipped and reported rather than placed incorrectly.
+
 ## CLI Reference
 
 ```
 mintmedia [flags]
 ```
 
-With no flags, mintmedia processes everything currently in the drop folder.
-
 | Flag | Description |
 |------|-------------|
-| `--daemon` / `-d` | Run continuously, watching for new files |
+| `-d` / `--daemon` | Run continuously, watching for new files |
 | `-p` / `--process-drop` | Process everything currently in the drop folder (default when no flag is given) |
-| `--process <path>` | Process a path with policy — non-media and empty directories are silently skipped |
+| `--process <path>` | Process a specific path — non-media and empty directories are silently skipped |
 | `--plan [path]` | Preview what would happen — no changes made; omit path to preview the drop folder |
 | `--config <path>` | Use a different config file |
-| `--verbose` / `-v` | Print config summary at startup |
-| `--help` / `-h` | Show help |
+| `-v` / `--verbose` | Print config summary at startup |
+| `-h` / `--help` | Show help |
 
 ## Configuration
 
-The config file lives at `~/.config/mintmedia/config.toml` and is created automatically on first run. Open it to customize paths, extensions, and behavior. Every option is documented in `config.example.toml`.
+The config file lives at `~/.config/mintmedia/config.toml` and is created automatically on first run. A fully annotated reference is in `config.example.toml`.
 
 **Commonly changed settings:**
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
-| `paths.drop_folder` | `~/Downloads/MintDrop` | Where to look for incoming media |
-| `destinations.dest_dir_movies` | `~/Movies/Movies` (macOS), `~/Videos/Movies` (Linux) | Where processed movies go |
-| `destinations.dest_dir_shows` | `~/Movies/Shows` (macOS), `~/Videos/Shows` (Linux) | Where processed shows go |
-| `system.done_notification_mode` | `per_file` | Sound after processing: `per_file`, `per_job`, or `off` |
-| `watch.drop_settle_duration` | `3s` | How long to wait after a file stops changing before processing it |
-| `logging.console_level` | `INFO` | How much to print: `DEBUG`, `INFO`, `WARN`, or `ERROR` |
+| `drop_folder` | `~/Downloads/MintDrop` | Where to look for incoming media |
+| `dest_dir_movies` | `~/Movies/Movies` (macOS), `~/Videos/Movies` (Linux) | Where processed movies go |
+| `dest_dir_shows` | `~/Movies/Shows` (macOS), `~/Videos/Shows` (Linux) | Where processed shows go |
+| `done_notification_mode` | `per_file` | Sound after processing: `per_file`, `per_job`, or `off` |
+| `drop_settle_duration` | `3s` | How long to wait after a file stops changing before processing it |
+| `console_level` | `INFO` | How much to print: `DEBUG`, `INFO`, `WARN`, or `ERROR` |
 
 **A few things worth knowing:**
 - Movies and Shows destinations must be different directories — one can't be inside the other.
-- With `system.defer_destination_checks = true` (the default), the daemon starts even if your destinations aren't mounted yet. Anything that arrives while they're unavailable is queued and processed once they come back online — handy for NAS or Tailscale-mounted shares.
+- `defer_destination_checks = true` (the default) lets the daemon start before your library destinations are mounted. Files that arrive while they're unavailable are queued and processed once they come back — useful for NAS or Tailscale-mounted shares.
 
 ## Logs
 
-Mintmedia keeps a structured log of everything it does. The default location depends on your platform:
+Mintmedia keeps a structured JSONL log of everything it does. The default location depends on your platform:
 
 - **macOS**: `~/Library/Application Support/mintmedia/history.jsonl`
 - **Linux**: `~/.local/state/mintmedia/history.jsonl`
 
-If a file ended up somewhere unexpected, or a subtitle was left behind, that's the first place to look.
+If a file ended up somewhere unexpected, or a subtitle was left behind, that's the first place to look. The log location is controlled by `history_file` in your config (relative paths resolve under `state_dir`).
 
 ## Transmission Integration
 
-When the daemon is running, mintmedia watches the clipboard for magnet links. Copy one and it's automatically added to Transmission. When the download finishes, mintmedia organizes the files and removes the completed torrent — nothing left to do.
+With Transmission integration enabled, the whole workflow — from magnet link to organized library — is hands-free. The daemon watches your clipboard for magnet links; copy one and it's queued in Transmission automatically. When the download finishes, mintmedia organizes the files and removes the completed torrent.
 
 To enable, add this to your config:
 
@@ -105,8 +129,4 @@ host = "localhost:9091"
 auto_cleanup_completed_torrents = true
 ```
 
-Clipboard monitoring requires macOS (cgo-enabled build) or Linux with a Wayland session and `wl-clipboard` installed (`wl-paste` must be on PATH).
-
-## Roadmap
-
-**Batch preview for `--process-drop`** — Currently each item is planned and applied one at a time. A future release will plan all candidates first and then apply, so you can see the full move list before anything changes.
+Clipboard monitoring requires macOS (cgo-enabled build) or Linux with a Wayland session and `wl-clipboard` installed (`wl-paste` must be on PATH). The Transmission RPC endpoint is reached directly over HTTP — no `transmission-remote` binary required.
