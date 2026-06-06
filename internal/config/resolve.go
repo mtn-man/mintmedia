@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/mtn-man/mintmedia/internal/logging"
-	"github.com/mtn-man/mintmedia/internal/notify"
 )
 
 func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
@@ -29,11 +28,15 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		cfg.Logging.HistoryLevel = string(historyLevel)
 	}
 
-	doneNotificationMode, err := notify.NormalizeDoneNotificationMode(cfg.System.DoneNotificationMode)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("system.done_notification_mode: %w", err))
-	} else {
+	doneNotificationMode := strings.ToLower(strings.TrimSpace(cfg.System.DoneNotificationMode))
+	switch doneNotificationMode {
+	case "per_file", "per_job", "off":
 		cfg.System.DoneNotificationMode = doneNotificationMode
+	default:
+		errs = append(errs, fmt.Errorf(
+			"system.done_notification_mode: invalid value %q (allowed: \"per_file\", \"per_job\", \"off\")",
+			cfg.System.DoneNotificationMode,
+		))
 	}
 
 	// Durations
