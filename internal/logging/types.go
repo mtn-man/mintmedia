@@ -2,8 +2,6 @@ package logging
 
 import (
 	"fmt"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -21,15 +19,12 @@ const (
 	LevelError Level = "ERROR"
 )
 
-var (
-	dotCaseEventRe = regexp.MustCompile(`^[a-z0-9]+(?:\.[a-z0-9]+)*$`)
-	levelRank      = map[Level]int{
-		LevelDebug: 0,
-		LevelInfo:  1,
-		LevelWarn:  2,
-		LevelError: 3,
-	}
-)
+var levelRank = map[Level]int{
+	LevelDebug: 0,
+	LevelInfo:  1,
+	LevelWarn:  2,
+	LevelError: 3,
+}
 
 // ParseLevel normalizes and validates a string level.
 func ParseLevel(raw string) (Level, error) {
@@ -87,49 +82,6 @@ type Logger interface {
 	HistoryInfo(component string, event Event, fields Fields)
 	HistoryWarn(component string, event Event, err error, fields Fields)
 	HistoryError(component string, event Event, err error, fields Fields)
-}
-
-func normalizeFields(fields Fields) Fields {
-	if len(fields) == 0 {
-		return nil
-	}
-	out := make(Fields, len(fields))
-	for k, v := range fields {
-		key := strings.TrimSpace(k)
-		if key == "" {
-			continue
-		}
-		if isReservedPathField(key) {
-			out[key] = normalizePathValue(v)
-			continue
-		}
-		out[key] = v
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func normalizePathValue(v any) any {
-	s, ok := v.(string)
-	if !ok {
-		return v
-	}
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return s
-	}
-	p := filepath.Clean(s)
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		return p
-	}
-	return filepath.Clean(abs)
-}
-
-func validEventName(event Event) bool {
-	return dotCaseEventRe.MatchString(strings.TrimSpace(string(event)))
 }
 
 // ErrorFieldFrom converts a Go error into the canonical structured error field.

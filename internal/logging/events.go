@@ -35,24 +35,6 @@ const (
 	EventProcessorMoviePackSkipUnparseable       Event = "processor.movie.pack.skip.unparseable"
 )
 
-var reservedPathFields = map[string]struct{}{
-	"path":         {},
-	"src":          {},
-	"dst":          {},
-	"input_path":   {},
-	"source_path":  {},
-	"dest_path":    {},
-	"drop_folder":  {},
-	"movies_dir":   {},
-	"shows_dir":    {},
-	"history_file": {},
-}
-
-func isReservedPathField(key string) bool {
-	_, ok := reservedPathFields[key]
-	return ok
-}
-
 // AllOperationalEvents returns the complete set of production event constants.
 func AllOperationalEvents() []Event {
 	return []Event{

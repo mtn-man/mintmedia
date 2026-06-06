@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -311,4 +313,71 @@ func (l *RuntimeLogger) fallbackError(err error) {
 		return
 	}
 	_, _ = fmt.Fprintf(l.stderr, "LOGGING ERROR: %v\n", err)
+}
+
+// --- normalization helpers --------------------------------------------------
+
+var (
+	dotCaseEventRe = regexp.MustCompile(`^[a-z0-9]+(?:\.[a-z0-9]+)*$`)
+
+	reservedPathFields = map[string]struct{}{
+		"path":         {},
+		"src":          {},
+		"dst":          {},
+		"input_path":   {},
+		"source_path":  {},
+		"dest_path":    {},
+		"drop_folder":  {},
+		"movies_dir":   {},
+		"shows_dir":    {},
+		"history_file": {},
+	}
+)
+
+func validEventName(event Event) bool {
+	return dotCaseEventRe.MatchString(strings.TrimSpace(string(event)))
+}
+
+func isReservedPathField(key string) bool {
+	_, ok := reservedPathFields[key]
+	return ok
+}
+
+func normalizeFields(fields Fields) Fields {
+	if len(fields) == 0 {
+		return nil
+	}
+	out := make(Fields, len(fields))
+	for k, v := range fields {
+		key := strings.TrimSpace(k)
+		if key == "" {
+			continue
+		}
+		if isReservedPathField(key) {
+			out[key] = normalizePathValue(v)
+			continue
+		}
+		out[key] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func normalizePathValue(v any) any {
+	s, ok := v.(string)
+	if !ok {
+		return v
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	p := filepath.Clean(s)
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return p
+	}
+	return filepath.Clean(abs)
 }
