@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"sync"
 	"syscall"
 )
@@ -30,26 +29,6 @@ type Caffeinate struct {
 // On unsupported platforms, Start() returns nil immediately.
 func NewCaffeinate() *Caffeinate {
 	return &Caffeinate{}
-}
-
-// inhibitCmd returns the platform-specific command that prevents idle sleep,
-// or nil if unsupported. Uses exec.Command (not CommandContext) so Stop() owns
-// the process lifecycle exclusively — context cancellation must not race with SIGTERM.
-func inhibitCmd() *exec.Cmd {
-	switch runtime.GOOS {
-	case "darwin":
-		return exec.Command("caffeinate", "-i")
-	case "linux":
-		return exec.Command("systemd-inhibit",
-			"--what=idle:sleep",
-			"--who=mintmedia",
-			"--why=processing media",
-			"--mode=delay",
-			"sleep", "infinity",
-		)
-	default:
-		return nil
-	}
 }
 
 // Start launches the platform sleep-inhibit command in the background if not already running.
