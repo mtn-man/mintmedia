@@ -32,7 +32,7 @@ The compiled binary is `mintmedia`. Default config path is `~/.config/mintmedia/
 
 `main.go` dispatches into one of two paths after config load and processor wiring:
 
-- **One-shot**: `--plan`, `--apply`, `--process`, `--process-drop` — run, print results, exit.
+- **One-shot**: `--plan [path]`, `--process <path>`, `--process-drop` — run, print results, exit.
 - **Daemon**: `--daemon` — long-running watch/poll loop managed by `internal/daemon`.
 
 ### Config: Two-Struct Design
@@ -53,14 +53,14 @@ All dependency wiring happens in `main.go` before mode dispatch:
 The processor (`internal/processor`) splits work into two phases:
 - `Plan()` — deterministic, no filesystem writes, inspects paths and returns `[]Plan`
 - `Apply()` — executes the plans (file moves, trash), writes history log entries
-- `Process()` — calls both with policy (silently ignores non-media/no-main-media cases)
-- `ProcessEach()` — helper that calls `Process()` and invokes a callback per result; handles both the streaming (`OnResult`) and batch return paths transparently. Daemon and process-drop use this.
+- `Process()` — calls both with policy (silently ignores non-media/no-main-media cases); streams results via `req.OnResult`; returns `error` only
+- `ProcessEach()` — convenience wrapper that wires `onResult` into `req.OnResult` and calls `Process()`. Daemon and process-drop use this.
 
 This enables the `--plan` dry-run mode and also makes `Plan()` straightforwardly testable without mocks.
 
 ### Media-Aware Ordering
 
-`processor.SortCandidates()` sorts a batch of paths before processing: movies first (alphabetical by title), then shows (by name → season → episode), then unparseable fallbacks. The daemon wires this into the watcher's settle batch via `Watcher.SetSortFunc`; process-drop calls it directly. `Plan()` is called twice per path (once for sorting, once for processing) — this is intentional since `Plan()` is read-only and cheap relative to the moves that follow.
+`processor.SortCandidates()` sorts a batch of paths before processing: movies first (alphabetical by title), then shows (by name → season → episode), then unparseable fallbacks. The daemon wires this into the watcher's settle batch via `Watcher.SetSortFunc`; process-drop calls it directly. Sorting uses `parseSortKey()` — filename-only parsing with no `Plan()` calls and no filesystem I/O.
 
 ### Logging Boundary
 
@@ -80,7 +80,8 @@ The boundary is enforced: daemon/processor code must not cross it (e.g., no cons
 type Processor interface {
     Plan(ctx context.Context, req Request) ([]Plan, error)
     Apply(ctx context.Context, plans []Plan) ([]Result, error)
-    Process(ctx context.Context, req Request) ([]Result, error)
+    Process(ctx context.Context, req Request) error
+    SortCandidates(ctx context.Context, paths []string) ([]string, []SortError, error)
 }
 
 // internal/processor/types.go
