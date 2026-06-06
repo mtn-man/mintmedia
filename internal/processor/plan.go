@@ -165,41 +165,6 @@ func normalizeCategory(c Category) Category {
 	}
 }
 
-func determineCategoryFromName(name string) Category {
-	if hasShowSeasonSignal(name) && hasShowEpisodeSignal(name) {
-		return CategoryShow
-	}
-	return CategoryMovie
-}
-
-func hasShowSeasonSignal(name string) bool {
-	return reSeasonEpisode.MatchString(name) ||
-		reSeasonRange.MatchString(name) ||
-		reSeasonWordRange.MatchString(name) ||
-		reSeasonWord.MatchString(name)
-}
-
-func hasShowEpisodeSignal(name string) bool {
-	return reSeasonEpisode.MatchString(name) ||
-		reEpisodeWord.MatchString(name)
-}
-
-func determineCategoryFromNames(inputName, mainName string) Category {
-	if determineCategoryFromName(inputName) == CategoryShow {
-		return CategoryShow
-	}
-	if determineCategoryFromName(mainName) == CategoryShow {
-		return CategoryShow
-	}
-	if hasShowSeasonSignal(inputName) && hasShowEpisodeSignal(mainName) {
-		return CategoryShow
-	}
-	if hasShowSeasonSignal(mainName) && hasShowEpisodeSignal(inputName) {
-		return CategoryShow
-	}
-	return CategoryMovie
-}
-
 type showHint struct {
 	name string
 	year string

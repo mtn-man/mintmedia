@@ -37,6 +37,43 @@ var lowerTitleWords = map[string]struct{}{
 // processor package (e.g., reSeasonEpisode, reBracketedTag, and reYear).
 // If you later remove those declarations from other files, move them here.
 
+// --- categorization ---------------------------------------------------------
+
+func determineCategoryFromName(name string) Category {
+	if hasShowSeasonSignal(name) && hasShowEpisodeSignal(name) {
+		return CategoryShow
+	}
+	return CategoryMovie
+}
+
+func hasShowSeasonSignal(name string) bool {
+	return reSeasonEpisode.MatchString(name) ||
+		reSeasonRange.MatchString(name) ||
+		reSeasonWordRange.MatchString(name) ||
+		reSeasonWord.MatchString(name)
+}
+
+func hasShowEpisodeSignal(name string) bool {
+	return reSeasonEpisode.MatchString(name) ||
+		reEpisodeWord.MatchString(name)
+}
+
+func determineCategoryFromNames(inputName, mainName string) Category {
+	if determineCategoryFromName(inputName) == CategoryShow {
+		return CategoryShow
+	}
+	if determineCategoryFromName(mainName) == CategoryShow {
+		return CategoryShow
+	}
+	if hasShowSeasonSignal(inputName) && hasShowEpisodeSignal(mainName) {
+		return CategoryShow
+	}
+	if hasShowSeasonSignal(mainName) && hasShowEpisodeSignal(inputName) {
+		return CategoryShow
+	}
+	return CategoryMovie
+}
+
 func parseShowFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear string, season, episode int, err error) {
 	if sn, sy, s, e, ok := parseShowOnce(blacklist, baseName); ok {
 		return sn, sy, s, e, nil
