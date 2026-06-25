@@ -47,6 +47,7 @@ func main() {
 	processDrop := pflag.BoolP("process-drop", "p", false, "Process all paths currently in the drop folder (one-shot)")
 	daemonFlag := pflag.BoolP("daemon", "d", false, "Run the daemon (watch/poll/automations)")
 	statusFlag := pflag.BoolP("status", "s", false, "Check whether the daemon is running")
+	stopFlag := pflag.BoolP("stop", "S", false, "Gracefully stop the running daemon")
 	verbose := pflag.BoolP("verbose", "v", false, "Verbose startup output (prints config summary)")
 	help := pflag.BoolP("help", "h", false, "Show help")
 
@@ -66,6 +67,7 @@ func main() {
 		writeln("  -d, --daemon         Run the daemon (watch/poll/automations)")
 		writeln("\nDaemon control:")
 		writeln("  -s, --status         Check whether the daemon is running (exit 0 = running, exit 3 = stopped)")
+		writeln("  -S, --stop           Gracefully stop the running daemon (exit 0 = stopped or not running, exit 1 = error)")
 		writeln("\nOther flags:")
 		writeln("  --config <path>      Path to config.toml (default: ~/.config/mintmedia/config.toml)")
 		writeln("  -v, --verbose        Verbose startup output (prints config summary)")
@@ -84,10 +86,6 @@ func main() {
 		os.Exit(exitError)
 	}
 	if *statusFlag {
-		if bootstrapped {
-			fmt.Println("daemon not running")
-			os.Exit(exitNotRunning)
-		}
 		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
 		info, running, err := state.CheckLock(lockPath)
 		if err != nil {
@@ -104,6 +102,42 @@ func main() {
 			uptime := time.Since(info.Started).Truncate(time.Second)
 			fmt.Printf("daemon running (pid=%d, uptime %s)\n", info.PID, uptime)
 		}
+		return
+	}
+
+	if *stopFlag {
+		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
+		info, running, err := state.CheckLock(lockPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(exitError)
+		}
+		if !running {
+			fmt.Println("daemon not running")
+			return
+		}
+		p, err := os.FindProcess(info.PID)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(exitError)
+		}
+		if err := p.Signal(syscall.SIGTERM); err != nil {
+			// Process exited in the window between CheckLock and Signal — already stopped.
+			if errors.Is(err, syscall.ESRCH) {
+				fmt.Println("daemon stopped")
+				return
+			}
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(exitError)
+		}
+		timeout := resolved.ShutdownGraceDuration + resolved.ShutdownForceTimeout + 5*time.Second
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		if err := state.WaitUntilReleased(ctx, lockPath, info, 250*time.Millisecond); err != nil {
+			fmt.Fprintf(os.Stderr, "timed out waiting for daemon to stop (pid=%d)\n", info.PID)
+			os.Exit(exitError)
+		}
+		fmt.Println("daemon stopped")
 		return
 	}
 

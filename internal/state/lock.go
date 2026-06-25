@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -69,6 +70,35 @@ func parseLockContents(b []byte) (LockInfo, error) {
 		return LockInfo{}, fmt.Errorf("pid not found in lock file")
 	}
 	return info, nil
+}
+
+// WaitUntilReleased polls lockPath until it disappears or ctx is cancelled.
+// It checks immediately before starting the ticker so a fast exit is detected
+// without waiting a full poll cycle. If the lock file persists but the process
+// in info is no longer alive (e.g. SIGKILL or crash before cleanup), it returns
+// nil immediately rather than waiting out the full timeout.
+func WaitUntilReleased(ctx context.Context, lockPath string, info LockInfo, pollInterval time.Duration) error {
+	released := func() bool {
+		if _, err := os.Stat(lockPath); errors.Is(err, os.ErrNotExist) {
+			return true
+		}
+		return !isProcessAlive(info.PID)
+	}
+	if released() {
+		return nil
+	}
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if released() {
+				return nil
+			}
+		}
+	}
 }
 
 // AcquireLock attempts to acquire an exclusive lock by creating lockPath atomically.
