@@ -19,8 +19,10 @@ import (
 	"github.com/mtn-man/mintmedia/internal/watch"
 )
 
+const lockFilename = "mintmedia.lock"
+
 func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor.Processor, logger logging.Logger) (bool, error) {
-	lockPath := filepath.Join(resolved.StateDirAbs, "mintmedia.lock")
+	lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
 	releaseLock, err := state.AcquireLock(lockPath)
 	if err != nil {
 		return false, err

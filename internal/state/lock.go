@@ -19,6 +19,58 @@ var (
 	ErrAlreadyRunning = errors.New("another instance is already running")
 )
 
+// LockInfo holds the parsed contents of a lock file.
+type LockInfo struct {
+	PID     int
+	Started time.Time // zero value if not present in the lock file
+}
+
+// CheckLock reports whether the lock at lockPath is held by a live process.
+// Returns the lock contents and true when the daemon is running.
+// Returns (LockInfo{}, false, nil) for a stale or absent lock.
+// Returns an error if the lock file exists but cannot be parsed.
+func CheckLock(lockPath string) (LockInfo, bool, error) {
+	b, err := os.ReadFile(lockPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return LockInfo{}, false, nil
+		}
+		return LockInfo{}, false, fmt.Errorf("read lock file: %w", err)
+	}
+	info, err := parseLockContents(b)
+	if err != nil {
+		return LockInfo{}, false, err
+	}
+	return info, isProcessAlive(info.PID), nil
+}
+
+// parseLockContents parses the key=value contents of a lock file.
+// A missing or malformed pid= line is a hard error; started= is optional.
+func parseLockContents(b []byte) (LockInfo, error) {
+	var info LockInfo
+	for ln := range strings.SplitSeq(string(b), "\n") {
+		ln = strings.TrimSpace(ln)
+		if v, ok := strings.CutPrefix(ln, "pid="); ok {
+			pid, err := strconv.Atoi(v)
+			if err != nil {
+				return LockInfo{}, fmt.Errorf("parse PID from lock file: %w", err)
+			}
+			if pid <= 0 {
+				return LockInfo{}, fmt.Errorf("parse PID from lock file: non-positive value %d", pid)
+			}
+			info.PID = pid
+		} else if v, ok := strings.CutPrefix(ln, "started="); ok {
+			if t, err := time.Parse(time.RFC3339, v); err == nil {
+				info.Started = t
+			}
+		}
+	}
+	if info.PID == 0 {
+		return LockInfo{}, fmt.Errorf("pid not found in lock file")
+	}
+	return info, nil
+}
+
 // AcquireLock attempts to acquire an exclusive lock by creating lockPath atomically.
 // lockPath should be a file path (e.g. <state_dir>/mintmedia.lock).
 //
@@ -50,7 +102,7 @@ func AcquireLock(lockPath string) (ReleaseFunc, error) {
 
 	// Lock file exists: check staleness.
 	pid, readErr := readPIDFromLock(lockPath)
-	if readErr != nil || pid <= 0 {
+	if readErr != nil {
 		// If we can't confidently read the lock, fail closed.
 		return nil, fmt.Errorf("%w: lock=%s", ErrAlreadyRunning, lockPath)
 	}
@@ -68,7 +120,7 @@ func AcquireLock(lockPath string) (ReleaseFunc, error) {
 	if errors.Is(err, os.ErrExist) {
 		// Race: someone else acquired it after we removed/while retrying.
 		pid, readErr := readPIDFromLock(lockPath)
-		if readErr == nil && pid > 0 && isProcessAlive(pid) {
+		if readErr == nil && isProcessAlive(pid) {
 			return nil, fmt.Errorf("%w: pid=%d lock=%s", ErrAlreadyRunning, pid, lockPath)
 		}
 		return nil, fmt.Errorf("%w: lock=%s", ErrAlreadyRunning, lockPath)
@@ -108,31 +160,11 @@ func readPIDFromLock(lockPath string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("read lock file: %w", err)
 	}
-	lines := strings.Split(string(b), "\n")
-	for _, ln := range lines {
-		ln = strings.TrimSpace(ln)
-		if ln == "" {
-			continue
-		}
-		if strings.HasPrefix(ln, "pid=") {
-			s := strings.TrimSpace(strings.TrimPrefix(ln, "pid="))
-			pid, err := strconv.Atoi(s)
-			if err != nil {
-				return 0, fmt.Errorf("parse PID from lock file: %w", err)
-			}
-			return pid, nil
-		}
+	info, err := parseLockContents(b)
+	if err != nil {
+		return 0, err
 	}
-
-	// Fallback: allow lockfile that contains only a PID on the first line.
-	first := strings.TrimSpace(lines[0])
-	if first != "" {
-		if pid, err := strconv.Atoi(first); err == nil {
-			return pid, nil
-		}
-	}
-
-	return 0, fmt.Errorf("pid not found in lock file")
+	return info.PID, nil
 }
 
 // isProcessAlive returns true if a process with pid appears to be running.

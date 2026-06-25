@@ -17,12 +17,14 @@ import (
 	"github.com/mtn-man/mintmedia/internal/daemon"
 	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/state"
 	"github.com/mtn-man/mintmedia/internal/transfer"
 )
 
 const (
 	exitError       = 1
 	exitUsage       = 2
+	exitNotRunning  = 3
 	exitInterrupted = 130
 
 	defaultMagnetTimeout   = 10 * time.Second
@@ -44,6 +46,7 @@ func main() {
 	processPath := pflag.String("process", "", "Process a path with policy (ignore non-media/no-media dirs)")
 	processDrop := pflag.BoolP("process-drop", "p", false, "Process all paths currently in the drop folder (one-shot)")
 	daemonFlag := pflag.BoolP("daemon", "d", false, "Run the daemon (watch/poll/automations)")
+	statusFlag := pflag.BoolP("status", "s", false, "Check whether the daemon is running")
 	verbose := pflag.BoolP("verbose", "v", false, "Verbose startup output (prints config summary)")
 	help := pflag.BoolP("help", "h", false, "Show help")
 
@@ -61,6 +64,8 @@ func main() {
 		writeln("  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
 		writeln("  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
 		writeln("  -d, --daemon         Run the daemon (watch/poll/automations)")
+		writeln("\nDaemon control:")
+		writeln("  -s, --status         Check whether the daemon is running (exit 0 = running, exit 3 = stopped)")
 		writeln("\nOther flags:")
 		writeln("  --config <path>      Path to config.toml (default: ~/.config/mintmedia/config.toml)")
 		writeln("  -v, --verbose        Verbose startup output (prints config summary)")
@@ -78,6 +83,30 @@ func main() {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(exitError)
 	}
+	if *statusFlag {
+		if bootstrapped {
+			fmt.Println("daemon not running")
+			os.Exit(exitNotRunning)
+		}
+		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
+		info, running, err := state.CheckLock(lockPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(exitError)
+		}
+		if !running {
+			fmt.Println("daemon not running")
+			os.Exit(exitNotRunning)
+		}
+		if info.Started.IsZero() {
+			fmt.Printf("daemon running (pid=%d)\n", info.PID)
+		} else {
+			uptime := time.Since(info.Started).Truncate(time.Second)
+			fmt.Printf("daemon running (pid=%d, uptime %s)\n", info.PID, uptime)
+		}
+		return
+	}
+
 	if bootstrapped {
 		fmt.Printf("No config file found. A default config has been written to: %s\n", resolved.ConfigPathAbs)
 	}
