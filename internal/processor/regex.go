@@ -39,4 +39,9 @@ var (
 	// e.g. "www.UIndex.org - " or "EZTVx.to - ". Requires a dash-style separator
 	// after the domain to avoid false positives on show names with dotted tokens.
 	reWebsitePrefix = regexp.MustCompile(`(?i)^(?:www\.)?[a-z0-9][a-z0-9-]*\.[a-z]{2,10}(?:\.[a-z]{2,3})?\s*[-–—]+\s*`)
+
+	// Matches a hyphen flanked by word characters on both sides (e.g. "X-Men",
+	// "Spider-Man"). Used to preserve compound-word hyphens while stripping
+	// separator hyphens during release-name cleaning.
+	reWordHyphen = regexp.MustCompile(`\b-\b`)
 )

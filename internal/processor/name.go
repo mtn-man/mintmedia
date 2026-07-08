@@ -343,8 +343,14 @@ func cleanReleaseName(blacklist []*regexp.Regexp, raw string) string {
 	// Strip website prefix like "www.UIndex.org - " before dots are replaced.
 	s = reWebsitePrefix.ReplaceAllLiteralString(s, "")
 
-	// Replace separators with spaces
-	s = strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(s)
+	// Replace separators with spaces, but preserve hyphens between word characters
+	// (e.g. "X-Men", "Spider-Man"). In torrent release names, hyphens within the
+	// title portion are compound-word punctuation; dots/underscores are the actual
+	// word separators. Placeholder avoids the need for lookaheads (RE2 limitation).
+	s = strings.NewReplacer(".", " ", "_", " ").Replace(s)
+	s = reWordHyphen.ReplaceAllLiteralString(s, "\x00")
+	s = strings.ReplaceAll(s, "-", " ")
+	s = strings.ReplaceAll(s, "\x00", "-")
 
 	// Apply blacklist removals
 	for _, re := range blacklist {
@@ -394,26 +400,29 @@ func titleCaseSimple(s string) string {
 
 	for i := range parts {
 		tok := parts[i]
-		up := strings.ToUpper(tok)
+		prefix, core, suffix := tokenParts(tok)
+		coreUp := strings.ToUpper(core)
 
-		// Preserve roman numerals (e.g. II, IV, VIII, X)
-		if len(up) >= 2 && reRomanNumeral.MatchString(up) {
-			parts[i] = up
+		// Preserve roman numerals (e.g. II, IV, VIII, X).
+		// tokenParts strips surrounding punctuation so "(IV)" is recognized as "IV".
+		if len(coreUp) >= 2 && reRomanNumeral.MatchString(coreUp) {
+			parts[i] = prefix + coreUp + suffix
 			continue
 		}
 
 		// Preserve "US" only if explicitly uppercase in source, or if it appears
 		// as a trailing suffix token (e.g. "Hells Kitchen us" => "Hells Kitchen US").
-		if up == "US" {
-			if tok == up || i == len(parts)-1 {
-				parts[i] = up
+		// Also handles parenthesized form: "(US)" => "(US)".
+		if coreUp == "US" {
+			if core == coreUp || i == len(parts)-1 {
+				parts[i] = prefix + "US" + suffix
 				continue
 			}
 		}
 
 		// Preserve allowlisted acronyms regardless of case.
-		if _, ok := acronyms[up]; ok {
-			parts[i] = up
+		if _, ok := acronyms[coreUp]; ok {
+			parts[i] = prefix + coreUp + suffix
 			continue
 		}
 
@@ -447,6 +456,29 @@ func isAllLetters(s string) bool {
 		return false
 	}
 	return true
+}
+
+// tokenParts splits tok into its surrounding non-alphanumeric punctuation and
+// its inner alphanumeric core. E.g. "(US)" → ("(", "US", ")").
+// When tok has no surrounding punctuation, prefix and suffix are empty.
+func tokenParts(tok string) (prefix, core, suffix string) {
+	start := 0
+	for start < len(tok) {
+		r := rune(tok[start])
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			break
+		}
+		start++
+	}
+	end := len(tok)
+	for end > start {
+		r := rune(tok[end-1])
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			break
+		}
+		end--
+	}
+	return tok[:start], tok[start:end], tok[end:]
 }
 
 func padEpisode(ep int) string {

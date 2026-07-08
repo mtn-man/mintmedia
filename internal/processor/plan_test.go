@@ -1059,6 +1059,105 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowFile_Hyphen_Preserve_XMen97",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "X-Men.97.S01E01.720p.DSNP.WEBRip.x264-GalaxyTV.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "X-Men 97" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "X-Men 97")
+				}
+				if pl.Season != 1 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 1/1", pl.Season, pl.Episode)
+				}
+			},
+		},
+		{
+			name: "ShowFile_AcronymUS_Preserved_InParens",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Ghosts (US) (2021) - S04E01 - Patience.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Ghosts (US)" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Ghosts (US)")
+				}
+				if pl.ShowYear != "2021" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2021")
+				}
+				if pl.Season != 4 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 4/1", pl.Season, pl.Episode)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_YearPack_WithExistingNoYearFolder_Rule1_DropsYear",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				// Simulate a prior season (no year in filename) having created Ghosts/ already.
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Ghosts"))
+
+				// Season pack folder with year embedded in folder name (common eztv pattern).
+				root := filepath.Join(p.cfg.DropFolder, "Ghosts.2021.S02.1080p.WEBRip.x265")
+				writeFile(t, filepath.Join(root, "Ghosts.2021.S02E01.1080p.WEBRip.x265.mp4"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+				pl := plans[0]
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Ghosts" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Ghosts")
+				}
+				// Rule 1 must fire: existing no-year folder takes precedence.
+				if pl.ShowYear != "" {
+					t.Fatalf("ShowYear = %q, want empty (Rule 1: no-year folder exists)", pl.ShowYear)
+				}
+				if pl.DestRadix != "Ghosts - S02E01" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Ghosts - S02E01")
+				}
+				wantDir := filepath.Join(p.cfg.ShowsDir, "Ghosts", "Season 02")
+				if !strings.Contains(pl.DestDir, wantDir) {
+					t.Fatalf("DestDir = %q, expected to contain %q", pl.DestDir, wantDir)
+				}
+			},
+		},
+		{
 			name: "ShowFile_ExistingFolder_TheLastOfUs_UsesFolderCasingInDestRadix",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
@@ -1153,7 +1252,7 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "TODO_MovieFile_Hyphen_Preserve",
+			name: "MovieFile_Hyphen_Preserve_SpiderMan",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
 
@@ -1165,12 +1264,15 @@ func TestPlan_TableDriven(t *testing.T) {
 			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
 				t.Helper()
 
-				t.Skip("TODO: decide whether to preserve hyphens; current sanitizer replaces '-' with space")
-
-				_ = p
-				_ = inputPath
-				_ = pl
-				_ = err
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryMovie {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryMovie)
+				}
+				if pl.MovieTitle != "Spider-Man No Way Home (2021)" {
+					t.Fatalf("MovieTitle = %q, want %q", pl.MovieTitle, "Spider-Man No Way Home (2021)")
+				}
 			},
 		},
 		{
