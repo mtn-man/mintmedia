@@ -19,6 +19,34 @@ confirm() {
   [[ "$reply" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 1; }
 }
 
+# sha256_files <file...> — portable sha256 checksum, in the same output
+# format as `shasum -a 256` / `sha256sum` (hash <two-spaces> filename).
+sha256_files() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$@"
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$@"
+  elif command -v sha256 >/dev/null 2>&1; then
+    # FreeBSD/macOS `sha256` prints "SHA256 (file) = hash"; reformat to match.
+    for f in "$@"; do
+      sha256 -r "$f"
+    done
+  else
+    err "No sha256 tool found (need sha256sum, shasum, or sha256)"
+  fi
+}
+
+# sed_inplace <file> <sed-args...> — in-place edit that works with both
+# GNU sed (Linux) and BSD sed (macOS/FreeBSD), which take -i differently.
+sed_inplace() {
+  local file="$1"
+  shift
+  local tmp
+  tmp="$(mktemp)"
+  sed "$@" "$file" > "$tmp"
+  mv "$tmp" "$file"
+}
+
 # ---------------------------------------------------------------------------
 # Argument + format validation
 # ---------------------------------------------------------------------------
@@ -41,9 +69,11 @@ info "Running pre-flight checks"
 [[ -f "go.mod" ]] || err "Must be run from the repository root"
 
 # Required tools
-for tool in go gh shasum git tar jq; do
+for tool in go gh git tar jq; do
   command -v "$tool" >/dev/null 2>&1 || err "'$tool' not found in PATH"
 done
+command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || command -v sha256 >/dev/null 2>&1 \
+  || err "No sha256 tool found (need sha256sum, shasum, or sha256)"
 
 # Must be on main branch
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -119,18 +149,28 @@ info "Smoke testing local binary"
 
 LOCAL_OS="$(uname -s)"
 LOCAL_ARCH="$(uname -m)"
-[[ "$LOCAL_OS" == "Darwin" ]] || err "Smoke test only supported on macOS (got: $LOCAL_OS)"
-case "$LOCAL_ARCH" in
-  x86_64)  HOST_BIN="${DIST_DIR}/mintmedia_darwin_amd64" ;;
-  arm64)   HOST_BIN="${DIST_DIR}/mintmedia_darwin_arm64" ;;
-  *)       err "Unrecognised host architecture: $LOCAL_ARCH" ;;
+
+case "$LOCAL_OS" in
+  Darwin) HOST_GOOS="darwin" ;;
+  Linux)  HOST_GOOS="linux" ;;
+  *)      HOST_GOOS="" ;;  # e.g. FreeBSD — no build target, smoke test is skipped
 esac
 
-VERSION_OUTPUT="$("$HOST_BIN" --version)"
-[[ "$VERSION_OUTPUT" == "mintmedia ${VERSION}" ]] \
-  || err "Smoke test failed: expected 'mintmedia ${VERSION}', got '${VERSION_OUTPUT}'"
+case "$LOCAL_ARCH" in
+  x86_64|amd64)   HOST_GOARCH="amd64" ;;
+  arm64|aarch64)  HOST_GOARCH="arm64" ;;
+  *)              HOST_GOARCH="" ;;
+esac
 
-success "Smoke test passed: $VERSION_OUTPUT"
+if [[ -n "$HOST_GOOS" && -n "$HOST_GOARCH" ]]; then
+  HOST_BIN="${DIST_DIR}/mintmedia_${HOST_GOOS}_${HOST_GOARCH}"
+  VERSION_OUTPUT="$("$HOST_BIN" --version)"
+  [[ "$VERSION_OUTPUT" == "mintmedia ${VERSION}" ]] \
+    || err "Smoke test failed: expected 'mintmedia ${VERSION}', got '${VERSION_OUTPUT}'"
+  success "Smoke test passed: $VERSION_OUTPUT"
+else
+  printf '\033[1;33mWarning:\033[0m Skipping smoke test — no build target for host %s/%s.\n' "$LOCAL_OS" "$LOCAL_ARCH"
+fi
 
 # ---------------------------------------------------------------------------
 # Package
@@ -153,7 +193,7 @@ done
 
 info "Generating checksums"
 
-shasum -a 256 mintmedia_"${VERSION}"_*.tar.gz > checksums.txt
+sha256_files mintmedia_"${VERSION}"_*.tar.gz > checksums.txt
 cat checksums.txt
 
 cd - >/dev/null
@@ -247,14 +287,13 @@ OLD_DARWIN_ARM64_SHA="$(grep -A1 'darwin_arm64' "$FORMULA" | grep -oE '[0-9a-f]{
 OLD_LINUX_AMD64_SHA="$(grep -A1 'linux_amd64'  "$FORMULA" | grep -oE '[0-9a-f]{64}|PLACEHOLDER_[A-Z0-9_]+')"
 OLD_LINUX_ARM64_SHA="$(grep -A1 'linux_arm64'  "$FORMULA" | grep -oE '[0-9a-f]{64}|PLACEHOLDER_[A-Z0-9_]+')"
 
-sed -i '' \
+sed_inplace "$FORMULA" \
   -e "s/version \"${OLD_BARE_VERSION}\"/version \"${BARE_VERSION}\"/" \
   -e "s/v${OLD_BARE_VERSION}/v${BARE_VERSION}/g" \
   -e "s/${OLD_DARWIN_AMD64_SHA}/${DARWIN_AMD64_SHA}/" \
   -e "s/${OLD_DARWIN_ARM64_SHA}/${DARWIN_ARM64_SHA}/" \
   -e "s/${OLD_LINUX_AMD64_SHA}/${LINUX_AMD64_SHA}/" \
-  -e "s/${OLD_LINUX_ARM64_SHA}/${LINUX_ARM64_SHA}/" \
-  "$FORMULA"
+  -e "s/${OLD_LINUX_ARM64_SHA}/${LINUX_ARM64_SHA}/"
 
 success "Homebrew formula updated: $FORMULA"
 
