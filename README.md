@@ -4,6 +4,8 @@
 
 With the daemon running and Transmission integration enabled, the full workflow is hands-free: copy a magnet link, and mintmedia handles the rest — queuing the download, organizing the files when it finishes, and dropping them into a library structure ready for Plex, Infuse, Jellyfin, or any other player.
 
+> **Beta software.** Mintmedia is pre-1.0 — CLI flags, config format, and defaults may still change between releases. Back up any media libraries before pointing mintmedia at them, and check release notes before upgrading.
+
 ## Installation
 
 ```
