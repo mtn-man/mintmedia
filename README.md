@@ -130,3 +130,7 @@ auto_cleanup_completed_torrents = true
 ```
 
 Clipboard monitoring requires macOS (cgo-enabled build) or Linux with a Wayland session and `wl-clipboard` installed (`wl-paste` must be on PATH). The Transmission RPC endpoint is reached directly over HTTP — no `transmission-remote` binary required.
+
+## License
+
+Mintmedia is licensed under the [GNU General Public License v3.0](LICENSE.txt).
