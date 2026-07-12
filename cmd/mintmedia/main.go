@@ -49,6 +49,7 @@ func main() {
 	statusFlag := pflag.BoolP("status", "s", false, "Check whether the daemon is running")
 	stopFlag := pflag.BoolP("stop", "S", false, "Gracefully stop the running daemon")
 	verbose := pflag.BoolP("verbose", "v", false, "Verbose startup output (prints config summary)")
+	versionFlag := pflag.BoolP("version", "V", false, "Show version and exit")
 	help := pflag.BoolP("help", "h", false, "Show help")
 
 	pflag.Usage = func() {
@@ -71,12 +72,17 @@ func main() {
 		writeln("\nOther flags:")
 		writeln("  --config <path>      Path to config.toml (default: ~/.config/mintmedia/config.toml)")
 		writeln("  -v, --verbose        Verbose startup output (prints config summary)")
+		writeln("  -V, --version        Show version and exit")
 		writeln("  -h, --help           Show help")
 	}
 
 	pflag.Parse()
 	if *help {
 		pflag.Usage()
+		return
+	}
+	if *versionFlag {
+		fmt.Print(formatVersionLine(resolveVersion(version, mainModuleVersion())))
 		return
 	}
 
