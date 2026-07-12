@@ -7,7 +7,7 @@ With the daemon running and Transmission integration enabled, the full workflow 
 ## Installation
 
 ```
-brew install mtn-man/tools/mintmedia
+brew install mtn-man/tap/mintmedia
 ```
 
 ## Quick Start
