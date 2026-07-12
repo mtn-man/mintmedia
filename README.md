@@ -12,6 +12,18 @@ With the daemon running and Transmission integration enabled, the full workflow 
 brew install mtn-man/tap/mintmedia
 ```
 
+### Linux without Homebrew
+
+If Homebrew isn't available (or you'd rather not add a tap), install directly with Go:
+
+```
+go install github.com/mtn-man/mintmedia/cmd/mintmedia@latest
+```
+
+This requires Go 1.25.5 or newer, and installs to `$(go env GOPATH)/bin` (or `$GOBIN` if set) — make sure that directory is on your `PATH`. To pin to a specific release instead of the latest commit on `main`, use a tag in place of `@latest`, e.g. `@v0.1.0`.
+
+Clipboard-based magnet link detection additionally requires a Wayland session with `wl-clipboard` installed (`wl-paste` must be on `PATH`) — see [Transmission Integration](#transmission-integration) below.
+
 ## Quick Start
 
 1. Run `mintmedia`. A default config is written to `~/.config/mintmedia/config.toml` with sensible defaults:
