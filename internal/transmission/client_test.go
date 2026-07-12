@@ -53,7 +53,7 @@ func TestRPCURL(t *testing.T) {
 		want string
 	}{
 		{"localhost:9091", "http://localhost:9091/transmission/rpc"},
-		{"100.106.45.25:9091", "http://100.106.45.25:9091/transmission/rpc"},
+		{"192.0.2.10:9091", "http://192.0.2.10:9091/transmission/rpc"},
 		// path accidentally included — must be stripped
 		{"localhost:9091/transmission/rpc", "http://localhost:9091/transmission/rpc"},
 		{"localhost:9091/", "http://localhost:9091/transmission/rpc"},
