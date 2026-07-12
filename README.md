@@ -1,10 +1,10 @@
 # mintmedia
 
-**Mintmedia** is a lightweight automation tool for organizing downloaded media — a simpler, local alternative to heavier media automation tools for setups that don't need a full media server stack. Drop a file or folder into the watch folder and mintmedia figures out what it is, renames it cleanly, and moves it to your Movies or Shows library. No web UI, no database, no infrastructure — just a binary that runs on macOS or Linux.
+**mintmedia** is a lightweight automation tool for organizing downloaded media — a simpler, local alternative to heavier media automation tools for setups that don't need a full media server stack. Drop a file or folder into the watch folder and mintmedia figures out what it is, renames it cleanly, and moves it to your Movies or Shows library. No web UI, no database, no infrastructure — just a binary that runs on macOS or Linux.
 
 With the daemon running and Transmission integration enabled, the full workflow is hands-free: copy a magnet link, and mintmedia handles the rest — queuing the download, organizing the files when it finishes, and dropping them into a library structure ready for Plex, Infuse, Jellyfin, or any other player.
 
-> **Beta software.** Mintmedia is pre-1.0 — CLI flags, config format, and defaults may still change between releases. Back up any media libraries before pointing mintmedia at them, and check release notes before upgrading.
+> **Beta software.** mintmedia is pre-1.0 — CLI flags, config format, and defaults may still change between releases. Back up any media libraries before pointing mintmedia at them, and check release notes before upgrading.
 
 ## Installation
 
@@ -105,7 +105,7 @@ The config file lives at `~/.config/mintmedia/config.toml` and is created automa
 
 ## Logs
 
-Mintmedia keeps a structured JSONL log of everything it does. The default location depends on your platform:
+mintmedia keeps a structured JSONL log of everything it does. The default location depends on your platform:
 
 - **macOS**: `~/Library/Application Support/mintmedia/history.jsonl`
 - **Linux**: `~/.local/state/mintmedia/history.jsonl`
@@ -135,4 +135,4 @@ Clipboard monitoring requires macOS (cgo-enabled build) or Linux with a Wayland 
 
 ## License
 
-Mintmedia is licensed under the [GNU General Public License v3.0](LICENSE.txt).
+mintmedia is licensed under the [GNU General Public License v3.0](LICENSE.txt).
