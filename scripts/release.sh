@@ -1,0 +1,264 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# release.sh — builds, packages, and publishes a versioned mintmedia release.
+#
+# Usage: ./scripts/release.sh <version>
+# Example: ./scripts/release.sh v0.1.0
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+info()    { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+success() { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
+err()     { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
+confirm() {
+  printf '\n\033[1;33m%s\033[0m [y/N] ' "$*"
+  read -r reply
+  [[ "$reply" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 1; }
+}
+
+# ---------------------------------------------------------------------------
+# Argument + format validation
+# ---------------------------------------------------------------------------
+
+[[ $# -eq 1 ]] || err "Usage: $0 <version>  (e.g. $0 v0.1.0)"
+
+VERSION="$1"
+[[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+  || err "Version must be in the format vX.Y.Z (got: $VERSION)"
+
+DIST_DIR="dist/${VERSION}"
+
+# ---------------------------------------------------------------------------
+# Pre-flight checks
+# ---------------------------------------------------------------------------
+
+info "Running pre-flight checks"
+
+# Must be run from repo root
+[[ -f "go.mod" ]] || err "Must be run from the repository root"
+
+# Required tools
+for tool in go gh shasum git tar jq; do
+  command -v "$tool" >/dev/null 2>&1 || err "'$tool' not found in PATH"
+done
+
+# Must be on main branch
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+[[ "$CURRENT_BRANCH" == "main" ]] \
+  || err "Must be on main branch (currently on: $CURRENT_BRANCH)"
+
+# Working tree must be clean
+[[ -z "$(git status --porcelain)" ]] \
+  || err "Working tree is not clean — commit or stash changes before releasing"
+
+# Tag must not already exist
+git tag | grep -qx "$VERSION" \
+  && err "Tag $VERSION already exists"
+
+# dist dir must not contain existing build artifacts
+[[ ! -f "${DIST_DIR}/checksums.txt" ]] \
+  || err "${DIST_DIR}/checksums.txt already exists — remove dist dir to re-run"
+
+success "Pre-flight checks passed"
+
+# ---------------------------------------------------------------------------
+# CI status check
+# ---------------------------------------------------------------------------
+
+info "Verifying CI status for the current commit"
+
+git fetch origin main --quiet
+
+LOCAL_SHA="$(git rev-parse HEAD)"
+REMOTE_SHA="$(git rev-parse origin/main)"
+[[ "$LOCAL_SHA" == "$REMOTE_SHA" ]] \
+  || err "Local main ($LOCAL_SHA) is not in sync with origin/main ($REMOTE_SHA) — push your commits first"
+
+CI_RUNS_JSON="$(gh run list --workflow ci.yml --branch main --event push --commit "$LOCAL_SHA" --json status,conclusion,url -L 10)"
+[[ "$CI_RUNS_JSON" != "[]" ]] \
+  || err "No CI runs found for commit $LOCAL_SHA — has it finished running yet?"
+
+if jq -e 'any(.[]; .status != "completed" or .conclusion != "success")' <<< "$CI_RUNS_JSON" >/dev/null; then
+  err "CI has not passed for commit $LOCAL_SHA — check: gh run list --commit $LOCAL_SHA"
+fi
+
+success "CI passed for $LOCAL_SHA"
+
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
+
+info "Building binaries for $VERSION"
+
+mkdir -p "$DIST_DIR"
+
+TARGETS=(
+  "darwin  amd64  1"
+  "darwin  arm64  1"
+  "linux   amd64  0"
+  "linux   arm64  0"
+)
+
+for target in "${TARGETS[@]}"; do
+  read -r GOOS GOARCH CGO_ENABLED <<< "$target"
+  BIN="${DIST_DIR}/mintmedia_${GOOS}_${GOARCH}"
+  GOOS="$GOOS" GOARCH="$GOARCH" CGO_ENABLED="$CGO_ENABLED" go build \
+    -ldflags "-X main.version=${VERSION}" \
+    -o "$BIN" ./cmd/mintmedia/
+  success "Built $BIN"
+done
+
+# ---------------------------------------------------------------------------
+# Smoke test
+# ---------------------------------------------------------------------------
+
+info "Smoke testing local binary"
+
+LOCAL_OS="$(uname -s)"
+LOCAL_ARCH="$(uname -m)"
+[[ "$LOCAL_OS" == "Darwin" ]] || err "Smoke test only supported on macOS (got: $LOCAL_OS)"
+case "$LOCAL_ARCH" in
+  x86_64)  HOST_BIN="${DIST_DIR}/mintmedia_darwin_amd64" ;;
+  arm64)   HOST_BIN="${DIST_DIR}/mintmedia_darwin_arm64" ;;
+  *)       err "Unrecognised host architecture: $LOCAL_ARCH" ;;
+esac
+
+VERSION_OUTPUT="$("$HOST_BIN" --version)"
+[[ "$VERSION_OUTPUT" == "mintmedia ${VERSION}" ]] \
+  || err "Smoke test failed: expected 'mintmedia ${VERSION}', got '${VERSION_OUTPUT}'"
+
+success "Smoke test passed: $VERSION_OUTPUT"
+
+# ---------------------------------------------------------------------------
+# Package
+# ---------------------------------------------------------------------------
+
+info "Packaging archives"
+
+cd "$DIST_DIR"
+
+for target in "${TARGETS[@]}"; do
+  read -r GOOS GOARCH _ <<< "$target"
+  ARCHIVE="mintmedia_${VERSION}_${GOOS}_${GOARCH}.tar.gz"
+  tar -czf "$ARCHIVE" "mintmedia_${GOOS}_${GOARCH}"
+  success "Packaged $ARCHIVE"
+done
+
+# ---------------------------------------------------------------------------
+# Checksums
+# ---------------------------------------------------------------------------
+
+info "Generating checksums"
+
+shasum -a 256 mintmedia_"${VERSION}"_*.tar.gz > checksums.txt
+cat checksums.txt
+
+cd - >/dev/null
+
+success "checksums.txt written to $DIST_DIR"
+
+# ---------------------------------------------------------------------------
+# Confirmation gate before remote operations
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "  Version : $VERSION"
+echo "  Dist dir: $DIST_DIR"
+echo "  Commits will be tagged and pushed to origin/main."
+echo "  A GitHub release will be created with the above artifacts."
+echo "  The Homebrew formula will be updated and committed (not pushed)."
+echo ""
+
+# Determine release notes file
+NOTES_FILE="${DIST_DIR}/release-note-${VERSION}.md"
+if [[ -f "$NOTES_FILE" ]]; then
+  info "Release notes: $NOTES_FILE"
+else
+  NOTES_FILE=""
+  printf '\033[1;33mWarning:\033[0m No release notes file found at %s — release will have no body.\n' \
+    "${DIST_DIR}/release-note-${VERSION}.md"
+fi
+
+confirm "Proceed with tagging, pushing, and publishing the GitHub release?"
+
+# ---------------------------------------------------------------------------
+# Tag + push
+# ---------------------------------------------------------------------------
+
+info "Tagging $VERSION"
+git tag "$VERSION"
+
+info "Pushing commits and tag to origin"
+git push origin main
+git push origin "$VERSION"
+
+success "Tag $VERSION pushed"
+
+# ---------------------------------------------------------------------------
+# GitHub release
+# ---------------------------------------------------------------------------
+
+info "Creating GitHub release $VERSION"
+
+ARTIFACTS=(
+  "${DIST_DIR}/mintmedia_${VERSION}_darwin_amd64.tar.gz"
+  "${DIST_DIR}/mintmedia_${VERSION}_darwin_arm64.tar.gz"
+  "${DIST_DIR}/mintmedia_${VERSION}_linux_amd64.tar.gz"
+  "${DIST_DIR}/mintmedia_${VERSION}_linux_arm64.tar.gz"
+  "${DIST_DIR}/checksums.txt"
+)
+
+GH_ARGS=(release create "$VERSION" --title "$VERSION")
+if [[ -n "$NOTES_FILE" ]]; then
+  GH_ARGS+=(--notes-file "$NOTES_FILE")
+else
+  GH_ARGS+=(--notes "")
+fi
+GH_ARGS+=("${ARTIFACTS[@]}")
+
+gh "${GH_ARGS[@]}"
+
+success "GitHub release $VERSION published"
+
+# ---------------------------------------------------------------------------
+# Update Homebrew formula
+# ---------------------------------------------------------------------------
+
+DARWIN_AMD64_SHA="$(awk '/darwin_amd64/ {print $1}' "${DIST_DIR}/checksums.txt")"
+DARWIN_ARM64_SHA="$(awk '/darwin_arm64/ {print $1}' "${DIST_DIR}/checksums.txt")"
+LINUX_AMD64_SHA="$(awk '/linux_amd64/  {print $1}' "${DIST_DIR}/checksums.txt")"
+LINUX_ARM64_SHA="$(awk '/linux_arm64/  {print $1}' "${DIST_DIR}/checksums.txt")"
+
+FORMULA_REPO="$HOME/dev/homebrew-tap"
+FORMULA="$FORMULA_REPO/Formula/mintmedia.rb"
+
+info "Updating Homebrew formula"
+
+[[ -f "$FORMULA" ]] || err "Homebrew formula not found: $FORMULA"
+
+BARE_VERSION="${VERSION#v}"
+OLD_BARE_VERSION="$(grep -m1 'version "' "$FORMULA" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+
+OLD_DARWIN_AMD64_SHA="$(grep -A1 'darwin_amd64' "$FORMULA" | grep -oE '[0-9a-f]{64}|PLACEHOLDER_[A-Z0-9_]+')"
+OLD_DARWIN_ARM64_SHA="$(grep -A1 'darwin_arm64' "$FORMULA" | grep -oE '[0-9a-f]{64}|PLACEHOLDER_[A-Z0-9_]+')"
+OLD_LINUX_AMD64_SHA="$(grep -A1 'linux_amd64'  "$FORMULA" | grep -oE '[0-9a-f]{64}|PLACEHOLDER_[A-Z0-9_]+')"
+OLD_LINUX_ARM64_SHA="$(grep -A1 'linux_arm64'  "$FORMULA" | grep -oE '[0-9a-f]{64}|PLACEHOLDER_[A-Z0-9_]+')"
+
+sed -i '' \
+  -e "s/version \"${OLD_BARE_VERSION}\"/version \"${BARE_VERSION}\"/" \
+  -e "s/v${OLD_BARE_VERSION}/v${BARE_VERSION}/g" \
+  -e "s/${OLD_DARWIN_AMD64_SHA}/${DARWIN_AMD64_SHA}/" \
+  -e "s/${OLD_DARWIN_ARM64_SHA}/${DARWIN_ARM64_SHA}/" \
+  -e "s/${OLD_LINUX_AMD64_SHA}/${LINUX_AMD64_SHA}/" \
+  -e "s/${OLD_LINUX_ARM64_SHA}/${LINUX_ARM64_SHA}/" \
+  "$FORMULA"
+
+success "Homebrew formula updated: $FORMULA"
+
+git -C "$FORMULA_REPO" add "$FORMULA"
+git -C "$FORMULA_REPO" commit -m "mintmedia: update formula to ${VERSION}"
+
+success "Homebrew formula committed (not pushed)"
