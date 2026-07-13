@@ -626,9 +626,13 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 		return
 	}
 	if removed > 0 {
+		noun := "torrents"
+		if removed == 1 {
+			noun = "torrent"
+		}
 		d.logConsoleInfo(
 			logging.EventDaemonTxCleanupRemoved,
-			fmt.Sprintf("REMOVED  %d completed torrent(s)", removed),
+			fmt.Sprintf("REMOVED  %d completed %s", removed, noun),
 			logging.Fields{"removed": removed},
 		)
 		d.logHistoryInfo(logging.EventDaemonTxCleanupRemoved, logging.Fields{
