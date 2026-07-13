@@ -1116,6 +1116,79 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowFile_TheOffice_NoYear_SingleQualifiedFolder_UsesBestEffortMatch",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "The Office (UK)"))
+
+				name := "The.Office.S03E01.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (UK)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (UK)"))
+				}
+			},
+		},
+		{
+			name: "ShowFile_TheOffice_NoYear_MultipleQualifiedFolders_Ambiguous",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "The Office (UK)"))
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "The Office (US)"))
+
+				name := "The.Office.S03E01.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if err != ErrAmbiguousShow {
+					t.Fatalf("error = %v, want ErrAmbiguousShow", err)
+				}
+			},
+		},
+		{
+			name: "ShowFile_TheOffice_WithYear_QualifiedFolderPreferredOverNewYearFolder",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "The Office (UK)"))
+
+				name := "The.Office.2019.S03E01.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (UK)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (UK)"))
+				}
+				if strings.Contains(pl.DestDir, "2019") {
+					t.Fatalf("DestDir = %q, should not have created a new (2019) folder", pl.DestDir)
+				}
+			},
+		},
+		{
 			name: "ShowFolder_YearPack_WithExistingNoYearFolder_Rule1_DropsYear",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()

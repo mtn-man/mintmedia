@@ -9,7 +9,10 @@ import (
 	"github.com/mtn-man/mintmedia/internal/logging"
 )
 
-var reShowFolderYear = regexp.MustCompile(`^(?i)(.+?)\s*\((19\d{2}|20\d{2})\)\s*$`)
+var (
+	reShowFolderQualifier = regexp.MustCompile(`^(?i)(.+?)\s*\((.+?)\)\s*$`)
+	reFourDigitYear       = regexp.MustCompile(`^(19\d{2}|20\d{2})$`)
+)
 
 type showFolderMatch struct {
 	name string
@@ -31,10 +34,11 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 	}
 
 	var (
-		noYearFolder      string
-		exactYearFolder   string
-		yearFolders       []showFolderMatch
-		matchedYearFolder []string
+		noYearFolder          string
+		exactYearFolder       string
+		yearFolders           []showFolderMatch
+		matchedYearFolder     []string
+		otherQualifiedFolders []string
 	)
 
 	for _, entry := range entries {
@@ -54,7 +58,7 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 			continue
 		}
 
-		base, year, ok := parseShowFolderYear(name)
+		base, qualifier, ok := parseShowFolderQualifier(name)
 		if !ok {
 			continue
 		}
@@ -62,6 +66,12 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 			continue
 		}
 
+		if !reFourDigitYear.MatchString(qualifier) {
+			otherQualifiedFolders = append(otherQualifiedFolders, name)
+			continue
+		}
+
+		year := qualifier
 		yearFolders = append(yearFolders, showFolderMatch{name: name, year: year})
 		matchedYearFolder = append(matchedYearFolder, name)
 
@@ -75,10 +85,14 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 		return noYearFolder, "", nil
 	}
 
-	// Rule 2: If input has a year, match exact year folder or create a new one.
+	// Rule 2: If input has a year, match exact year folder, fall back to a
+	// qualified-folder guess, or create a new one.
 	if showYear != "" {
 		if exactYearFolder != "" {
 			return exactYearFolder, showYear, nil
+		}
+		if folder, err, ok := tryQualifiedFallback(p, showsDir, showName, otherQualifiedFolders); ok {
+			return folder, "", err
 		}
 		return fmt.Sprintf("%s (%s)", showName, showYear), showYear, nil
 	}
@@ -96,16 +110,60 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 		return "", "", ErrAmbiguousShow
 	}
 
-	// Rule 4: No matches; fall back to the plain show name.
+	// Rule 4: No year-based match; fall back to a qualified-folder guess.
+	if folder, err, ok := tryQualifiedFallback(p, showsDir, showName, otherQualifiedFolders); ok {
+		return folder, "", err
+	}
+
+	// Rule 5: No matches at all; fall back to the plain show name.
 	return showName, "", nil
 }
 
-func parseShowFolderYear(folder string) (base string, year string, ok bool) {
-	m := reShowFolderYear.FindStringSubmatch(folder)
+// tryQualifiedFallback resolves against existing folders that share this
+// show's base name but carry a qualifier resolveShowFolder doesn't otherwise
+// recognize (e.g. "The Office (UK)"), used only when nothing else matched.
+// ok is false when there was nothing to fall back to, in which case the
+// caller proceeds to its own default. When ok is true, err is non-nil only
+// for the ambiguous (multiple-candidate) case.
+func tryQualifiedFallback(p *processorImpl, showsDir, showName string, otherQualifiedFolders []string) (folder string, err error, ok bool) {
+	switch len(otherQualifiedFolders) {
+	case 0:
+		return "", nil, false
+	case 1:
+		folder = otherQualifiedFolders[0]
+		logWarn(p, logging.EventProcessorShowFolderQualifiedGuess,
+			fmt.Sprintf("using best-effort match for %q: existing folder %q has an unrecognized qualifier", showName, folder),
+			nil, logging.Fields{"path": showsDir, "folder": folder})
+		return folder, nil, true
+	default:
+		msg := fmt.Sprintf("WARNING  multiple show folders match %q with unrecognized qualifiers: %s; skipping", showName, strings.Join(otherQualifiedFolders, ", "))
+		logConsoleWarn(p, logging.EventProcessorInputSkippedParseError, msg, ErrAmbiguousShow, logging.Fields{
+			"path":   showsDir,
+			"reason": ErrAmbiguousShow.Error(),
+		})
+		return "", ErrAmbiguousShow, true
+	}
+}
+
+func parseShowFolderQualifier(folder string) (base string, qualifier string, ok bool) {
+	m := reShowFolderQualifier.FindStringSubmatch(folder)
 	if len(m) != 3 {
 		return "", "", false
 	}
 	return strings.TrimSpace(m[1]), m[2], true
+}
+
+// parseShowFolderYear is like parseShowFolderQualifier but only recognizes a
+// trailing 4-digit year, not an arbitrary qualifier — used where the caller
+// needs to strip a year specifically (year is tracked and re-appended
+// separately) without also stripping identity-bearing qualifiers like
+// country tags.
+func parseShowFolderYear(folder string) (base string, year string, ok bool) {
+	base, qualifier, ok := parseShowFolderQualifier(folder)
+	if !ok || !reFourDigitYear.MatchString(qualifier) {
+		return "", "", false
+	}
+	return base, qualifier, true
 }
 
 func normalizeFolderKey(s string) string {
