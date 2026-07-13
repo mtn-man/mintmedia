@@ -78,7 +78,9 @@ Stranger.Things.S04E07.en.srt  →  Stranger Things - S04E07.en.srt
 
 ### Library awareness
 
-For shows, mintmedia reads your existing library folder before deciding on a destination. If your Shows directory already has a `Survivor (2000)` folder, a new episode that parses as `Survivor` will be routed there — no duplicate folders, no year guessing. If a name matches more than one existing folder ambiguously, the file is skipped and reported rather than placed incorrectly.
+For shows, mintmedia reads your existing library folder before deciding on a destination. If your Shows directory already has a `Survivor (2000)` folder, a new episode that parses as `Survivor` will be routed there -- no duplicate folders, no year guessing.
+
+mintmedia uses a few heuristics to match an incoming episode to the right existing folder. If it doesn't find a match, it creates a new folder for the show. If it's ever unsure which folder is correct, it won't guess -- it skips the file and reports it so you can sort it manually. See [Show folder matching](show-folder-matching.md) for the exact rules.
 
 ## CLI Reference
 
