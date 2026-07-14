@@ -12,12 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/notify"
 	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/shutdown"
 	"github.com/mtn-man/mintmedia/internal/transmission"
 	"github.com/mtn-man/mintmedia/internal/watch"
 )
@@ -625,7 +627,7 @@ func TestDaemon_ProcessPathAsync_CleansCompletedWhenEnabled(t *testing.T) {
 		SoundDone:                    "",
 	}
 
-	d.processPath(context.Background(), "/tmp/input.mkv", "/tmp/input.mkv")
+	d.processPath(context.Background(), shutdown.ResolvePolicy(0, 0), shutdown.Hooks{}, "/tmp/input.mkv", "/tmp/input.mkv")
 
 	mu.Lock()
 	ids := removedIDs
@@ -688,7 +690,7 @@ func TestDaemon_ProcessPathAsync_DoneNotificationModes(t *testing.T) {
 				AutoCleanupCompletedTorrents: false,
 			}
 
-			d.processPath(context.Background(), "/tmp/input.mkv", "/tmp/input.mkv")
+			d.processPath(context.Background(), shutdown.ResolvePolicy(0, 0), shutdown.Hooks{}, "/tmp/input.mkv", "/tmp/input.mkv")
 
 			waitForSoundCount(t, soundCalls, tc.want, 2*time.Second)
 			assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
@@ -750,11 +752,72 @@ func TestDaemon_ProcessPathAsync_DoneNotificationModes_StreamedResults(t *testin
 				AutoCleanupCompletedTorrents: false,
 			}
 
-			d.processPath(context.Background(), "/tmp/input.mkv", "/tmp/input.mkv")
+			d.processPath(context.Background(), shutdown.ResolvePolicy(0, 0), shutdown.Hooks{}, "/tmp/input.mkv", "/tmp/input.mkv")
 
 			waitForSoundCount(t, soundCalls, tc.want, 2*time.Second)
 			assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
 		})
+	}
+}
+
+// TestDaemon_RunWorkerCancelDuringQueue_DrainsOnlyCurrentItem guards against a
+// regression where runWorker's unbiased select between <-runCtx.Done() and
+// <-queue could, after cancellation, keep dequeuing additional already-queued
+// items (each independently re-entering jobrunner.Run's own grace/force drain
+// and re-firing shutdown hooks) instead of stopping after the item that was
+// in flight when shutdown began.
+func TestDaemon_RunWorkerCancelDuringQueue_DrainsOnlyCurrentItem(t *testing.T) {
+	block := make(chan struct{})
+	proc := &stubProcessor{
+		started: make(chan string, 3),
+		block:   block,
+	}
+
+	d := &Daemon{Proc: proc}
+	d.inFlightMu.Lock()
+	d.inFlight = make(map[string]struct{})
+	d.inFlightMu.Unlock()
+
+	queue := make(chan workItem, 3)
+	queue <- workItem{path: "/tmp/a.mkv", inFlightKey: "/tmp/a.mkv"}
+	queue <- workItem{path: "/tmp/b.mkv", inFlightKey: "/tmp/b.mkv"}
+	queue <- workItem{path: "/tmp/c.mkv", inFlightKey: "/tmp/c.mkv"}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var waitStarts int32
+	hooks := shutdown.Hooks{
+		OnWaitStart: func(time.Duration) { atomic.AddInt32(&waitStarts, 1) },
+	}
+	policy := shutdown.Policy{Grace: 2 * time.Second, Force: 2 * time.Second}
+
+	outcome := make(chan workerOutcome, 1)
+	go d.runWorker(ctx, policy, hooks, queue, outcome)
+
+	first := waitForPath(t, proc.started, 3*time.Second)
+	if first != "/tmp/a.mkv" {
+		t.Fatalf("first item processed = %q, want /tmp/a.mkv", first)
+	}
+
+	// Shutdown fires while items b and c are still sitting in queue.
+	cancel()
+	close(block)
+
+	select {
+	case <-outcome:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("runWorker did not stop after cancellation")
+	}
+
+	proc.mu.Lock()
+	calls := append([]string(nil), proc.calls...)
+	proc.mu.Unlock()
+
+	if len(calls) != 1 {
+		t.Fatalf("Process called %d times (%v), want 1 -- items b/c must not be dequeued after shutdown", len(calls), calls)
+	}
+	if got := atomic.LoadInt32(&waitStarts); got != 1 {
+		t.Fatalf("OnWaitStart called %d times, want 1 -- shutdown must bound to one grace+force window regardless of queue depth", got)
 	}
 }
 

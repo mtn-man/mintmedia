@@ -101,7 +101,7 @@ type Logger interface { ... }
 
 ### Daemon Shutdown Model
 
-The daemon uses two independent contexts: `runCtx` (from the caller, cancelled on SIGINT/SIGTERM) and `jobsCtx` (internal, cancelled only after the grace period expires). This separation lets the event loop stop accepting new work immediately while in-flight processing jobs run to completion within the grace window. `internal/shutdown` contains the drain/policy helpers used by both daemon and process-drop modes.
+`Daemon.Run()`'s event loop stops accepting new work as soon as its caller-supplied `ctx` (`runCtx`) is cancelled (SIGINT/SIGTERM), then waits for `runWorker` to fully stop before returning. `runWorker` dequeues one `workItem` at a time and runs it via `internal/jobrunner.Run`, which owns the actual graceful-then-forced drain: it lets the in-flight item keep running on its own detached, per-item context for up to `policy.Grace`, then cancels that item's context and waits up to `policy.Force` before giving up. `runWorker` checks `runCtx.Done()` with priority before dequeuing another item, so this grace/force window is bounded to the single item that was in flight when shutdown began, not repeated per queued item. `internal/shutdown` contains the generic drain/policy primitives (`Policy`, `Drain`, `Hooks`) that `internal/jobrunner.Run` builds on; both daemon and process-drop modes call `jobrunner.Run` directly rather than each hand-rolling their own drain loop.
 
 ### Platform-Specific Code
 
