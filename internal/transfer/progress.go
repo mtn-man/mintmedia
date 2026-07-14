@@ -161,7 +161,10 @@ func (r *terminalReporter) renderClassicCopyingLine(name string, s Snapshot) str
 			humanBytes(s.Total),
 			s.RateMBps,
 		)
-		return colorizeCopyingLine(line)
+		if r.inPlace {
+			return colorizeCopyingLine(line)
+		}
+		return line
 	}
 
 	line := fmt.Sprintf(
@@ -170,7 +173,10 @@ func (r *terminalReporter) renderClassicCopyingLine(name string, s Snapshot) str
 		humanBytes(s.Copied),
 		s.RateMBps,
 	)
-	return colorizeCopyingLine(line)
+	if r.inPlace {
+		return colorizeCopyingLine(line)
+	}
+	return line
 }
 
 func (r *terminalReporter) renderBarLine(name string, s Snapshot) string {

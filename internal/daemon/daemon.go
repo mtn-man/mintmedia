@@ -531,7 +531,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 			}
 			d.logConsoleInfo(
 				logging.EventProcessorMoveMainApplied,
-				fmt.Sprintf("SORTED   %s\n    %s   %s%s", filepath.Base(r.Plan.MainSourcePath), console.Colorize("->", console.Green), r.Plan.DestMainPath, durSuffix),
+				fmt.Sprintf("SORTED   %s\n    %s   %s%s", filepath.Base(r.Plan.MainSourcePath), console.ColorizeOut("->", console.Green), r.Plan.DestMainPath, durSuffix),
 				logging.Fields{"path": pth, "dest_path": r.Plan.DestMainPath, "duration": dur.String()},
 			)
 			playCount := planner.OnAppliedMain()

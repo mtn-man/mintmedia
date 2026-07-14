@@ -60,7 +60,7 @@ func printPlanBody(pl processor.Plan) {
 // PrintResults writes result output to stdout.
 func PrintResults(results []processor.Result) {
 	for _, res := range results {
-		fmt.Println(console.ColorizePrefix(processDropCompactLine(res, 0)))
+		fmt.Println(console.ColorizePrefixOut(processDropCompactLine(res, 0)))
 	}
 }
 
@@ -80,23 +80,23 @@ func PrintProcessDropCandidates(count int) {
 
 // PrintProcessDropStatError writes a process-drop stat error to stderr.
 func PrintProcessDropStatError(path string, err error) {
-	fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    stat %s: %v", path, err)))
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("ERROR    stat %s: %v", path, err)))
 }
 
 // PrintProcessDropSortError writes a process-drop sort parse error to stderr.
 func PrintProcessDropSortError(path string, err error) {
-	fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    cannot sort %s: %v", path, err)))
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("ERROR    cannot sort %s: %v", path, err)))
 }
 
 // PrintProcessDropDestinationError writes a process-drop destination unavailable error to stderr.
 func PrintProcessDropDestinationError(dir string) {
-	fmt.Fprintln(os.Stderr, console.ColorizePrefix(
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(
 		fmt.Sprintf("ERROR    destination unavailable: %s (directory missing or not yet mounted)", dir)))
 }
 
 // PrintProcessDropItemError writes a process-drop item error to stderr.
 func PrintProcessDropItemError(path string, err error) {
-	fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("ERROR    %s: %v", path, err)))
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("ERROR    %s: %v", path, err)))
 }
 
 // PrintProcessDropResults writes process-drop results to stdout.
@@ -106,7 +106,7 @@ func PrintProcessDropResults(results []processor.Result, verbose bool, dur time.
 	}
 	if !verbose {
 		for _, res := range results {
-			fmt.Println(console.ColorizePrefix(processDropCompactLine(res, dur)))
+			fmt.Println(console.ColorizePrefixOut(processDropCompactLine(res, dur)))
 		}
 		return
 	}
@@ -142,7 +142,7 @@ func processDropCompactLine(res processor.Result, dur time.Duration) string {
 		if dest == "" {
 			return fmt.Sprintf("SORTED   %s%s", name, durSuffix)
 		}
-		return fmt.Sprintf("SORTED   %s\n    %s   %s%s", name, console.Colorize("->", console.Green), dest, durSuffix)
+		return fmt.Sprintf("SORTED   %s\n    %s   %s%s", name, console.ColorizeOut("->", console.Green), dest, durSuffix)
 	}
 
 	ref := strings.TrimSpace(res.Plan.InputPath)
