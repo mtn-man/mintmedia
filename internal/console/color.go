@@ -13,8 +13,15 @@ const (
 	Cyan   = "\033[36m"
 )
 
-// colorEnabled is true when stdout is a terminal.
-var colorEnabled = IsTerminal(os.Stdout)
+// stdoutEnabled/stderrEnabled are true when the respective stream is a
+// terminal. WARNING/ERROR console lines are written to stderr while
+// everything else goes to stdout (see logging.ConsoleSink.Write), so
+// colorization must be decided per stream: redirecting one without the
+// other must not leak raw ANSI escapes into whichever stream is redirected.
+var (
+	stdoutEnabled = IsTerminal(os.Stdout)
+	stderrEnabled = IsTerminal(os.Stderr)
+)
 
 // IsTerminal reports whether f is an interactive terminal.
 func IsTerminal(f *os.File) bool {
@@ -43,19 +50,39 @@ var prefixColors = []struct {
 	{"TORRENT  ", Cyan},
 }
 
-// Colorize wraps text in the given ANSI color if color is enabled.
-func Colorize(text, color string) string {
-	if !colorEnabled {
+// ColorizeOut wraps text in the given ANSI color if stdout is a terminal.
+// Use for text that will be written to stdout.
+func ColorizeOut(text, color string) string {
+	return colorize(stdoutEnabled, text, color)
+}
+
+// ColorizeErr wraps text in the given ANSI color if stderr is a terminal.
+// Use for text that will be written to stderr.
+func ColorizeErr(text, color string) string {
+	return colorize(stderrEnabled, text, color)
+}
+
+func colorize(enabled bool, text, color string) string {
+	if !enabled {
 		return text
 	}
 	return color + text + Reset
 }
 
-// ColorizePrefix detects a known label prefix at the start of line
-// and wraps it in the appropriate ANSI color. Returns the line
-// unchanged if color is disabled or no prefix matches.
-func ColorizePrefix(line string) string {
-	if !colorEnabled {
+// ColorizePrefixOut detects a known label prefix at the start of line and
+// wraps it in the appropriate ANSI color, for text written to stdout.
+// Returns the line unchanged if stdout isn't a terminal or no prefix matches.
+func ColorizePrefixOut(line string) string {
+	return colorizePrefix(stdoutEnabled, line)
+}
+
+// ColorizePrefixErr is ColorizePrefixOut for text written to stderr.
+func ColorizePrefixErr(line string) string {
+	return colorizePrefix(stderrEnabled, line)
+}
+
+func colorizePrefix(enabled bool, line string) string {
+	if !enabled {
 		return line
 	}
 	// Strip leading newlines, colorize the prefix, then re-prepend them.

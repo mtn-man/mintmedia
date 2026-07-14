@@ -18,7 +18,7 @@ func (d *Daemon) logConsoleInfo(event logging.Event, msg string, fields logging.
 	if d == nil || d.Logger == nil {
 		return
 	}
-	d.Logger.ConsoleInfo(componentForEvent(event), event, console.ColorizePrefix(msg), fields)
+	d.Logger.ConsoleInfo(componentForEvent(event), event, console.ColorizePrefixOut(msg), fields)
 }
 
 func (d *Daemon) logHistoryWarn(event logging.Event, err error, fields logging.Fields) {
@@ -32,7 +32,7 @@ func (d *Daemon) logConsoleWarn(event logging.Event, msg string, err error, fiel
 	if d == nil || d.Logger == nil {
 		return
 	}
-	d.Logger.ConsoleWarn(componentForEvent(event), event, console.ColorizePrefix(msg), err, fields)
+	d.Logger.ConsoleWarn(componentForEvent(event), event, console.ColorizePrefixErr(msg), err, fields)
 }
 
 func (d *Daemon) logHistoryError(event logging.Event, err error, fields logging.Fields) {
@@ -46,7 +46,7 @@ func (d *Daemon) logConsoleError(event logging.Event, msg string, err error, fie
 	if d == nil || d.Logger == nil {
 		return
 	}
-	d.Logger.ConsoleError(componentForEvent(event), event, console.ColorizePrefix(msg), err, fields)
+	d.Logger.ConsoleError(componentForEvent(event), event, console.ColorizePrefixErr(msg), err, fields)
 }
 
 func (d *Daemon) logSortParseError(path string, err error) {

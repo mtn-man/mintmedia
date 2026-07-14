@@ -18,7 +18,7 @@ func withCaffeinate(fn func() error) error {
 	caff := newMainCaffeinate()
 	if caff != nil {
 		if err := caff.Start(caffCtx); err != nil {
-			fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("WARNING  caffeinate: %v", err)))
+			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate: %v", err)))
 		}
 	}
 	defer func() {
@@ -27,7 +27,7 @@ func withCaffeinate(fn func() error) error {
 			return
 		}
 		if err := caff.Stop(); err != nil {
-			fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("WARNING  caffeinate stop: %v", err)))
+			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate stop: %v", err)))
 		}
 	}()
 
