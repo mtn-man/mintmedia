@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/mtn-man/mintmedia/internal/console"
 	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/resultformat"
 )
 
 // --- Printing helpers -------------------------------------------------------
@@ -136,35 +136,13 @@ func PrintProcessDropSummary(s ProcessDropSummary) {
 }
 
 func processDropCompactLine(res processor.Result, dur time.Duration) string {
-	if res.Applied {
-		dest := strings.TrimSpace(res.Plan.DestMainPath)
-		name := filepath.Base(strings.TrimSpace(res.Plan.MainSourcePath))
-		if name == "." || name == string(os.PathSeparator) || strings.TrimSpace(name) == "" {
-			name = "(unknown)"
+	ref := res.Plan.MainSourcePath
+	if !res.Applied {
+		if in := strings.TrimSpace(res.Plan.InputPath); in != "" {
+			ref = in
 		}
-		durSuffix := ""
-		if dur >= time.Second {
-			durSuffix = fmt.Sprintf("  (%s)", dur)
-		}
-		if dest == "" {
-			return fmt.Sprintf("SORTED   %s%s", name, durSuffix)
-		}
-		return fmt.Sprintf("SORTED   %s\n    %s   %s%s", name, console.ColorizeOut("->", console.Green), dest, durSuffix)
 	}
-
-	ref := strings.TrimSpace(res.Plan.InputPath)
-	if ref == "" {
-		ref = strings.TrimSpace(res.Plan.MainSourcePath)
-	}
-	name := filepath.Base(ref)
-	if name == "." || name == string(os.PathSeparator) || strings.TrimSpace(name) == "" {
-		name = "(unknown)"
-	}
-	reason := strings.TrimSpace(res.Reason)
-	if reason == "" {
-		reason = "not applied"
-	}
-	return fmt.Sprintf("SKIPPED  %s — %s", name, reason)
+	return resultformat.CompactLine(res, resultformat.CleanName(ref), dur)
 }
 
 func processDropSummaryLine(s ProcessDropSummary) string {
