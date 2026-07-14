@@ -56,7 +56,7 @@ func planDropFolder(ctx context.Context, proc processor.Processor, dropRoot stri
 		}
 		plans, err := proc.Plan(ctx, processor.Request{InputPath: p})
 		if err != nil {
-			PrintProcessDropItemError(p, err)
+			PrintProcessDropItemError(p, err, 0)
 			errCount++
 			continue
 		}

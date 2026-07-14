@@ -88,5 +88,6 @@ func DefaultHistoryInfoAllowlist() []Event {
 		EventProcessorInputSkippedParseError,
 		EventDaemonMagnetAdded,
 		EventDaemonTxCleanupRemoved,
+		EventDaemonPathDuplicate,
 	}
 }

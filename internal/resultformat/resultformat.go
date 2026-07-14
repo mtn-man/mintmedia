@@ -50,3 +50,37 @@ func CompactLine(res processor.Result, name string, dur time.Duration) string {
 	}
 	return fmt.Sprintf("SKIPPED  %s — %s", name, reason)
 }
+
+// Pluralize returns singular when n == 1, plural otherwise.
+func Pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
+}
+
+// ShutdownWaitMessage renders the console WARNING line used for
+// shutdown.Hooks.OnWaitStart, so the CLI and daemon shutdown paths share
+// identical wording. noun names the in-flight work (e.g. "item", "jobs").
+func ShutdownWaitMessage(noun string, grace time.Duration) string {
+	return fmt.Sprintf("WARNING  shutdown requested. Waiting up to %s for in-flight %s.", shutdown.FormatDurationCompact(grace), noun)
+}
+
+// ShutdownGraceElapsedMessage renders the console WARNING line used for
+// shutdown.Hooks.OnGraceElapsed, so the CLI and daemon shutdown paths share
+// identical wording. noun names the in-flight work (e.g. "item", "jobs").
+func ShutdownGraceElapsedMessage(noun string, force time.Duration) string {
+	return fmt.Sprintf("WARNING  shutdown grace elapsed. Canceling in-flight %s (timeout=%s).", noun, shutdown.FormatDurationCompact(force))
+}
+
+// ErrorLine renders an item-level failure in the tool's ERROR voice. The line
+// is unprefixed and uncolorized apart from the destination arrow convention
+// used elsewhere — callers still apply console.ColorizePrefixErr themselves.
+// dur is omitted from the line when it's under a second, matching CompactLine.
+func ErrorLine(path string, err error, dur time.Duration) string {
+	durSuffix := ""
+	if dur >= time.Second {
+		durSuffix = fmt.Sprintf("  (%s)", shutdown.FormatDurationCompact(dur))
+	}
+	return fmt.Sprintf("ERROR    %s — %v%s", path, err, durSuffix)
+}

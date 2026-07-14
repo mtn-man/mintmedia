@@ -12,6 +12,7 @@ import (
 	"github.com/mtn-man/mintmedia/internal/jobrunner"
 	"github.com/mtn-man/mintmedia/internal/notify"
 	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/resultformat"
 	"github.com/mtn-man/mintmedia/internal/shutdown"
 	"github.com/mtn-man/mintmedia/internal/watch"
 )
@@ -169,10 +170,10 @@ func processDropFolder(
 
 	hooks := shutdown.Hooks{
 		OnWaitStart: func(grace time.Duration) {
-			fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefixErr(fmt.Sprintf("WARNING  shutdown requested. Waiting up to %s for in-flight item.", grace))+"\n")
+			fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefixErr(resultformat.ShutdownWaitMessage("item", grace))+"\n")
 		},
 		OnGraceElapsed: func(force time.Duration) {
-			fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefixErr(fmt.Sprintf("WARNING  shutdown grace elapsed. Canceling in-flight item, waiting up to %s.", force))+"\n")
+			fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefixErr(resultformat.ShutdownGraceElapsedMessage("item", force))+"\n")
 		},
 	}
 
@@ -219,7 +220,7 @@ func processDropFolder(
 		}
 
 		if runErr != nil {
-			PrintProcessDropItemError(item.path, runErr)
+			PrintProcessDropItemError(item.path, runErr, time.Since(itemStart).Round(time.Second))
 			errCount++
 		}
 
