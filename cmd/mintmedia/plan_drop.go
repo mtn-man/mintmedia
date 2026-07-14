@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -13,7 +12,7 @@ import (
 func planDropFolder(ctx context.Context, proc processor.Processor, dropRoot string) int {
 	entries, err := os.ReadDir(dropRoot)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+		PrintFatalError(err)
 		return 1
 	}
 
@@ -57,7 +56,7 @@ func planDropFolder(ctx context.Context, proc processor.Processor, dropRoot stri
 		}
 		plans, err := proc.Plan(ctx, processor.Request{InputPath: p})
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "plan %s: %v\n", p, err)
+			PrintProcessDropItemError(p, err)
 			errCount++
 			continue
 		}

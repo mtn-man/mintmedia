@@ -33,6 +33,15 @@ const (
 	defaultReportEvery = 250 * time.Millisecond
 )
 
+// die prints err in the tool's standard labeled/colorized error voice and
+// exits with code. Every fatal one-shot CLI error goes through this instead
+// of a bare fmt.Fprintln(os.Stderr, err.Error()) so nothing reaches the user
+// as an unstyled raw Go error chain.
+func die(err error, code int) {
+	PrintFatalError(err)
+	os.Exit(code)
+}
+
 func main() {
 	configPath := pflag.String(
 		"config",
@@ -88,15 +97,13 @@ func main() {
 
 	cfg, resolved, bootstrapped, err := config.Load(*configPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(exitError)
+		die(err, exitError)
 	}
 	if *statusFlag {
 		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
 		info, running, err := state.CheckLock(lockPath)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitError)
+			die(err, exitError)
 		}
 		if !running {
 			fmt.Println("daemon not running")
@@ -115,8 +122,7 @@ func main() {
 		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
 		info, running, err := state.CheckLock(lockPath)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitError)
+			die(err, exitError)
 		}
 		if !running {
 			fmt.Println("daemon not running")
@@ -124,8 +130,7 @@ func main() {
 		}
 		p, err := os.FindProcess(info.PID)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitError)
+			die(err, exitError)
 		}
 		if err := p.Signal(syscall.SIGTERM); err != nil {
 			// Process exited in the window between CheckLock and Signal — already stopped.
@@ -133,15 +138,13 @@ func main() {
 				fmt.Println("daemon stopped")
 				return
 			}
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitError)
+			die(err, exitError)
 		}
 		timeout := resolved.ShutdownGraceDuration + resolved.ShutdownForceTimeout + 5*time.Second
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		if err := state.WaitUntilReleased(ctx, lockPath, info, 250*time.Millisecond); err != nil {
-			fmt.Fprintf(os.Stderr, "timed out waiting for daemon to stop (pid=%d)\n", info.PID)
-			os.Exit(exitError)
+			die(fmt.Errorf("timed out waiting for daemon to stop (pid=%d)", info.PID), exitError)
 		}
 		fmt.Println("daemon stopped")
 		return
@@ -161,8 +164,7 @@ func main() {
 		cfg.Features.EnableProcessing,
 	)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(exitUsage)
+		die(err, exitUsage)
 	}
 
 	if *verbose {
@@ -183,14 +185,12 @@ func main() {
 		HistoryInfoAllowlist: logging.DefaultHistoryInfoAllowlist(),
 	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(exitError)
+		die(err, exitError)
 	}
 
 	proc, err := newGoProcessor(resolved, logger)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(exitError)
+		die(err, exitError)
 	}
 
 	// One-shot modes short-circuit daemon.
@@ -198,8 +198,7 @@ func main() {
 	if mode.PlanPath != "" {
 		plans, err := proc.Plan(ctx, processor.Request{InputPath: mode.PlanPath})
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitError)
+			die(err, exitError)
 		}
 		PrintPlans(plans)
 		return
@@ -221,8 +220,7 @@ func main() {
 			})
 		})
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitError)
+			die(err, exitError)
 		}
 		PrintResults(res)
 		return
@@ -256,12 +254,11 @@ func main() {
 	// ---- Daemon mode ---------------------------------------------------------
 	interrupted, err := runDaemonMode(cfg, resolved, proc, logger)
 	if err != nil {
+		code := exitError
 		if errors.Is(err, daemon.ErrShutdownTimedOut) {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(exitInterrupted)
+			code = exitInterrupted
 		}
-		fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(exitError)
+		die(err, code)
 	}
 	if interrupted {
 		os.Exit(exitInterrupted)
