@@ -9,6 +9,7 @@ package config
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,6 +51,23 @@ const (
 	defaultHistoryLevel = "WARN"
 )
 
+// tomlSyntaxError reports a TOML syntax error with the config path and the
+// library's line/column-annotated snippet, while still wrapping the
+// underlying error so errors.As(err, &toml.ParseError{}) keeps working.
+type tomlSyntaxError struct {
+	cfgPathAbs string
+	err        error
+	display    string
+}
+
+func (e *tomlSyntaxError) Error() string {
+	return fmt.Sprintf("config error in %s:\n%s", e.cfgPathAbs, e.display)
+}
+
+func (e *tomlSyntaxError) Unwrap() error {
+	return e.err
+}
+
 // Load reads TOML from disk, applies defaults, expands paths/env vars,
 // validates, and returns both the raw Config and a Resolved view.
 // The bool return value is true when no config file was found at the default
@@ -85,16 +103,20 @@ func Load(configPath string) (*Config, *Resolved, bool, error) {
 	var cfg Config
 	md, err := toml.DecodeFile(cfgPathAbs, &cfg)
 	if err != nil {
-		return nil, nil, false, fmt.Errorf("parse TOML (%s): %w", cfgPathAbs, err)
+		var parseErr toml.ParseError
+		if errors.As(err, &parseErr) {
+			return nil, nil, false, &tomlSyntaxError{cfgPathAbs: cfgPathAbs, err: err, display: parseErr.ErrorWithPosition()}
+		}
+		return nil, nil, false, formatConfigError(cfgPathAbs, err)
 	}
 	if md.IsDefined("processing", "history_file") {
-		return nil, nil, false, fmt.Errorf("config validation failed: processing.history_file has been removed; use logging.history_file")
+		return nil, nil, false, formatConfigError(cfgPathAbs, errors.New("processing.history_file has been removed; use logging.history_file"))
 	}
 	if md.IsDefined("processing") {
-		return nil, nil, false, fmt.Errorf("config validation failed: [processing] section has been removed; use [logging]")
+		return nil, nil, false, formatConfigError(cfgPathAbs, errors.New("[processing] section has been removed; use [logging]"))
 	}
 	if unknown := formatUndecodedKeys(md.Undecoded()); len(unknown) > 0 {
-		return nil, nil, false, fmt.Errorf("config validation failed: unknown config key(s): %s", strings.Join(unknown, ", "))
+		return nil, nil, false, formatConfigError(cfgPathAbs, fmt.Errorf("unknown config key(s): %s", strings.Join(unknown, ", ")))
 	}
 
 	applyDefaults(&cfg)

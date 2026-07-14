@@ -34,38 +34,30 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		cfg.System.DoneNotificationMode = doneNotificationMode
 	default:
 		errs = append(errs, fmt.Errorf(
-			"system.done_notification_mode: invalid value %q (allowed: \"per_file\", \"per_job\", \"off\")",
-			cfg.System.DoneNotificationMode,
+			"system.done_notification_mode: invalid value %q (allowed: %q, %q, %q)",
+			cfg.System.DoneNotificationMode, "per_file", "per_job", "off",
 		))
 	}
 
 	// Durations
-	settle, err := time.ParseDuration(strings.TrimSpace(cfg.Watch.DropSettleDuration))
-	if err != nil {
-		errs = append(errs, fmt.Errorf("watch.drop_settle_duration invalid: %w", err))
-	} else if settle < 500*time.Millisecond {
-		errs = append(errs, fmt.Errorf("watch.drop_settle_duration too small (%s)", settle))
+	settle, settleOK := parseDurationField(&errs, "watch.drop_settle_duration", cfg.Watch.DropSettleDuration, "3s")
+	if settleOK && settle < 500*time.Millisecond {
+		errs = append(errs, fmt.Errorf("watch.drop_settle_duration: %s is too small (minimum 500ms)", settle))
 	}
 
-	poll, err := time.ParseDuration(strings.TrimSpace(cfg.Clipboard.PollInterval))
-	if err != nil {
-		errs = append(errs, fmt.Errorf("clipboard.poll_interval invalid: %w", err))
-	} else if poll < 250*time.Millisecond {
-		errs = append(errs, fmt.Errorf("clipboard.poll_interval too small (%s)", poll))
+	poll, pollOK := parseDurationField(&errs, "clipboard.poll_interval", cfg.Clipboard.PollInterval, "1s")
+	if pollOK && poll < 250*time.Millisecond {
+		errs = append(errs, fmt.Errorf("clipboard.poll_interval: %s is too small (minimum 250ms)", poll))
 	}
 
-	shutdownGrace, err := time.ParseDuration(strings.TrimSpace(cfg.System.ShutdownGraceDuration))
-	if err != nil {
-		errs = append(errs, fmt.Errorf("system.shutdown_grace_duration invalid: %w", err))
-	} else if shutdownGrace <= 0 {
-		errs = append(errs, fmt.Errorf("system.shutdown_grace_duration must be > 0 (got %s)", shutdownGrace))
+	shutdownGrace, shutdownGraceOK := parseDurationField(&errs, "system.shutdown_grace_duration", cfg.System.ShutdownGraceDuration, "10m")
+	if shutdownGraceOK && shutdownGrace <= 0 {
+		errs = append(errs, fmt.Errorf("system.shutdown_grace_duration: must be > 0 (got %s)", shutdownGrace))
 	}
 
-	shutdownForce, err := time.ParseDuration(strings.TrimSpace(cfg.System.ShutdownForceTimeout))
-	if err != nil {
-		errs = append(errs, fmt.Errorf("system.shutdown_force_timeout invalid: %w", err))
-	} else if shutdownForce <= 0 {
-		errs = append(errs, fmt.Errorf("system.shutdown_force_timeout must be > 0 (got %s)", shutdownForce))
+	shutdownForce, shutdownForceOK := parseDurationField(&errs, "system.shutdown_force_timeout", cfg.System.ShutdownForceTimeout, "15s")
+	if shutdownForceOK && shutdownForce <= 0 {
+		errs = append(errs, fmt.Errorf("system.shutdown_force_timeout: must be > 0 (got %s)", shutdownForce))
 	}
 
 	// Required base paths
@@ -73,14 +65,14 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	if err != nil {
 		errs = append(errs, fmt.Errorf("paths.drop_folder: %w", err))
 	} else if dropAbs == "" {
-		errs = append(errs, errors.New("paths.drop_folder is required"))
+		errs = append(errs, errors.New("paths.drop_folder is required (e.g. \"~/Downloads/mintmedia-drop\")"))
 	}
 
 	stateAbs, err := expandPath(cfg.Paths.StateDir)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("paths.state_dir: %w", err))
 	} else if stateAbs == "" {
-		errs = append(errs, errors.New("paths.state_dir is required"))
+		errs = append(errs, errors.New("paths.state_dir is required (e.g. \"~/.local/state/mintmedia\")"))
 	}
 
 	// Destinations (required)
@@ -88,13 +80,13 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	if err != nil {
 		errs = append(errs, fmt.Errorf("destinations.dest_dir_movies: %w", err))
 	} else if moviesAbs == "" {
-		errs = append(errs, errors.New("destinations.dest_dir_movies is required"))
+		errs = append(errs, errors.New("destinations.dest_dir_movies is required (e.g. \"~/Movies\")"))
 	}
 	showsAbs, err := expandPath(cfg.Destinations.DestDirShows)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("destinations.dest_dir_shows: %w", err))
 	} else if showsAbs == "" {
-		errs = append(errs, errors.New("destinations.dest_dir_shows is required"))
+		errs = append(errs, errors.New("destinations.dest_dir_shows is required (e.g. \"~/TV Shows\")"))
 	}
 
 	// Destinations must not overlap.
@@ -134,7 +126,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 				continue
 			}
 			if !strings.HasPrefix(ext, ".") {
-				errs = append(errs, fmt.Errorf("%s[%d] must start with '.' (got %q)", fieldName, i, ext))
+				errs = append(errs, fmt.Errorf("%s[%d]: %q must start with a dot (e.g. \".mkv\")", fieldName, i, ext))
 			}
 		}
 	}
@@ -156,7 +148,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 	// Fail early if parsing/expansion produced errors.
 	if len(errs) > 0 {
-		return nil, joinErrors(errs)
+		return nil, formatConfigError(cfgPathAbs, errs...)
 	}
 
 	// Directory creation / existence checks
@@ -167,12 +159,12 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		}
 		for _, dir := range dirs {
 			if err := os.MkdirAll(dir, 0o755); err != nil {
-				errs = append(errs, fmt.Errorf("failed to create directory '%s': %w", dir, err))
+				errs = append(errs, fmt.Errorf("failed to create directory %q: %w", dir, err))
 			}
 		}
 		if historyAbs != "" {
 			if err := os.MkdirAll(filepath.Dir(historyAbs), 0o755); err != nil {
-				errs = append(errs, fmt.Errorf("failed to create history directory '%s': %w", filepath.Dir(historyAbs), err))
+				errs = append(errs, fmt.Errorf("failed to create history directory %q: %w", filepath.Dir(historyAbs), err))
 			}
 		}
 	} else {
@@ -181,7 +173,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 			if err != nil {
 				errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			} else if !st.IsDir() {
-				errs = append(errs, fmt.Errorf("%s is not a directory: %s", name, dir))
+				errs = append(errs, fmt.Errorf("%s is not a directory: %q", name, dir))
 			}
 		}
 		checkDir("paths.drop_folder", dropAbs)
@@ -194,7 +186,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 
 	if len(errs) > 0 {
-		return nil, joinErrors(errs)
+		return nil, formatConfigError(cfgPathAbs, errs...)
 	}
 
 	return &Resolved{
@@ -240,6 +232,19 @@ func validateDestinationSeparation(moviesAbs, showsAbs string) error {
 	return nil
 }
 
+// parseDurationField parses a duration-valued config field, appending a
+// hinted error to errs and returning ok=false on failure. Callers still need
+// to check field-specific bounds (minimum interval, must-be-positive, etc.)
+// themselves, since those bounds and their messages differ per field.
+func parseDurationField(errs *[]error, field, raw, example string) (d time.Duration, ok bool) {
+	d, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil {
+		*errs = append(*errs, fmt.Errorf("%s: invalid duration %q (e.g. %q): %w", field, raw, example, err))
+		return 0, false
+	}
+	return d, true
+}
+
 func expandPath(p string) (string, error) {
 	p = strings.TrimSpace(p)
 	if p == "" {
@@ -270,12 +275,37 @@ func expandPath(p string) (string, error) {
 	return abs, nil
 }
 
-func joinErrors(errs []error) error {
+// configError is a user-facing error that names the config file the problem
+// was found in, so a raw error printed straight to stderr still tells the
+// reader which file to open. A single error is inlined; multiple errors are
+// rendered as a bulleted list so each is easy to scan. It implements
+// Unwrap() []error so errors.Is/errors.As can still reach the underlying
+// errors, matching what a single wrapped error would provide.
+type configError struct {
+	cfgPathAbs string
+	errs       []error
+}
+
+func (e *configError) Error() string {
+	if len(e.errs) == 1 {
+		return fmt.Sprintf("config error in %s: %s", e.cfgPathAbs, e.errs[0])
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "config error in %s:", e.cfgPathAbs)
+	for _, err := range e.errs {
+		fmt.Fprintf(&b, "\n  - %s", err)
+	}
+	return b.String()
+}
+
+func (e *configError) Unwrap() []error {
+	return e.errs
+}
+
+// formatConfigError builds a configError; see its docs for the rendering.
+func formatConfigError(cfgPathAbs string, errs ...error) error {
 	if len(errs) == 0 {
 		return nil
 	}
-	if len(errs) == 1 {
-		return fmt.Errorf("config validation failed: %w", errs[0])
-	}
-	return fmt.Errorf("config validation failed: %w", errors.Join(errs...))
+	return &configError{cfgPathAbs: cfgPathAbs, errs: errs}
 }
