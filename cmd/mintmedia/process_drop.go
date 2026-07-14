@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/mtn-man/mintmedia/internal/console"
+	"github.com/mtn-man/mintmedia/internal/jobrunner"
 	"github.com/mtn-man/mintmedia/internal/notify"
 	"github.com/mtn-man/mintmedia/internal/processor"
 	"github.com/mtn-man/mintmedia/internal/shutdown"
@@ -166,6 +167,15 @@ func processDropFolder(
 	interrupted := false
 	timedOut := false
 
+	hooks := shutdown.Hooks{
+		OnWaitStart: func(grace time.Duration) {
+			fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefix(fmt.Sprintf("WARNING  shutdown requested. Waiting up to %s for in-flight item.", grace))+"\n")
+		},
+		OnGraceElapsed: func(force time.Duration) {
+			fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("WARNING  shutdown grace elapsed. Canceling in-flight item, waiting up to %s.", force)))
+		},
+	}
+
 	for _, item := range candidates {
 		if ctx.Err() != nil {
 			if !interrupted {
@@ -174,23 +184,13 @@ func processDropFolder(
 			break
 		}
 
-		itemCtx, cancelItem := context.WithCancel(context.Background())
-		done := make(chan error, 1)
-		resultEvents := make(chan processor.Result)
-		itemClosed := make(chan struct{})
-		var closeItemClosedOnce sync.Once
-		closeItemClosed := func() {
-			closeItemClosedOnce.Do(func() {
-				close(itemClosed)
-			})
-		}
 		planner := notify.NewDoneSoundPlanner(doneNotificationMode)
 		playDoneCount := func(count int) {
 			for i := 0; i < count; i++ {
 				_ = playDoneSound(context.WithoutCancel(ctx), soundDone)
 			}
 		}
-		var itemStart time.Time
+		itemStart := time.Now()
 		recordResult := func(r processor.Result) {
 			if processor.IsSuppressedResult(r) {
 				return
@@ -205,81 +205,16 @@ func processDropFolder(
 			}
 			summary.Skipped++
 		}
-		itemStart = time.Now()
 
-		go func(path string) {
-			err := processor.ProcessEach(itemCtx, proc, processor.Request{InputPath: path},
-				func(r processor.Result) {
-					select {
-					case resultEvents <- r:
-					case <-itemClosed:
-					}
-				})
-			done <- err
-		}(item.path)
+		runErr, _ := jobrunner.Run(ctx, policy, hooks, proc, item.path, recordResult)
 
-		var (
-			runErr   error
-			gotFinal bool
-		)
-
-		waitForResult := func(timeout time.Duration) bool {
-			if gotFinal {
-				return true
-			}
-			timer := time.NewTimer(timeout)
-			defer timer.Stop()
-
-			for !gotFinal {
-				select {
-				case r := <-resultEvents:
-					recordResult(r)
-				case runErr = <-done:
-					gotFinal = true
-					return true
-				case <-timer.C:
-					return false
-				}
-			}
-			return true
+		if ctx.Err() != nil && !interrupted {
+			interrupted = true
 		}
-
-		for !gotFinal && !timedOut {
-			select {
-			case r := <-resultEvents:
-				recordResult(r)
-			case runErr = <-done:
-				gotFinal = true
-			case <-ctx.Done():
-				if !interrupted {
-					interrupted = true
-				}
-
-				drain := shutdown.Drain(
-					policy,
-					true,
-					waitForResult,
-					cancelItem,
-					shutdown.Hooks{
-						OnWaitStart: func(grace time.Duration) {
-							fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefix(fmt.Sprintf("WARNING  shutdown requested. Waiting up to %s for in-flight item.", grace))+"\n")
-						},
-						OnGraceElapsed: func(force time.Duration) {
-							fmt.Fprintln(os.Stderr, console.ColorizePrefix(fmt.Sprintf("WARNING  shutdown grace elapsed. Canceling in-flight item, waiting up to %s.", force)))
-						},
-					},
-				)
-				if drain.TimedOut {
-					timedOut = true
-					errCount++
-					closeItemClosed()
-					fmt.Fprintln(os.Stderr, console.ColorizePrefix("ERROR    shutdown timed out while waiting for in-flight item."))
-				}
-			}
-		}
-		cancelItem()
-
-		if timedOut {
+		if errors.Is(runErr, jobrunner.ErrAbandoned) {
+			timedOut = true
+			errCount++
+			fmt.Fprintln(os.Stderr, console.ColorizePrefix("ERROR    shutdown timed out while waiting for in-flight item."))
 			break
 		}
 
@@ -290,7 +225,6 @@ func processDropFolder(
 
 		playCount := planner.OnJobComplete()
 		playDoneCount(playCount)
-		closeItemClosed()
 
 		if interrupted {
 			break

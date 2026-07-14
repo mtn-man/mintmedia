@@ -9,11 +9,11 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/mtn-man/mintmedia/internal/clipboard"
 	"github.com/mtn-man/mintmedia/internal/console"
+	"github.com/mtn-man/mintmedia/internal/jobrunner"
 	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/magnet"
 	"github.com/mtn-man/mintmedia/internal/notify"
@@ -78,11 +78,6 @@ type Daemon struct {
 	cleanupMu     sync.Mutex
 	lastCleanupAt time.Time
 
-	// internal: tracks in-flight media processing jobs so we can drain on shutdown
-	jobsWg sync.WaitGroup
-	// internal: current number of in-flight media processing jobs
-	jobsInFlight int64
-
 	// internal: tracks in-flight paths to suppress duplicate processing
 	inFlightMu sync.Mutex
 	inFlight   map[string]struct{}
@@ -144,10 +139,36 @@ func (d *Daemon) Run(ctx context.Context) error {
 	d.ShutdownGraceDuration = policy.Grace
 	d.ShutdownForceTimeout = policy.Force
 
-	// jobsCtx is intentionally independent from the run context so shutdown can
-	// first attempt a graceful drain, then force-cancel only if grace expires.
-	jobsCtx, cancelJobs := context.WithCancel(context.Background())
-	defer cancelJobs()
+	hooks := shutdown.Hooks{
+		OnWaitStart: func(grace time.Duration) {
+			d.logConsoleWarn(
+				logging.EventSystemShutdownRequested,
+				fmt.Sprintf(
+					"\nWARNING  shutdown requested. Waiting up to %s for in-flight jobs.",
+					shutdown.FormatDurationCompact(grace),
+				),
+				nil,
+				logging.Fields{"grace": shutdown.FormatDurationCompact(grace)},
+			)
+			d.logHistoryInfo(logging.EventSystemShutdownRequested, logging.Fields{
+				"grace": shutdown.FormatDurationCompact(grace),
+			})
+		},
+		OnGraceElapsed: func(force time.Duration) {
+			d.logConsoleWarn(
+				logging.EventSystemShutdownGraceElapsed,
+				fmt.Sprintf(
+					"WARNING  shutdown grace elapsed. Canceling in-flight jobs (timeout=%s).",
+					shutdown.FormatDurationCompact(force),
+				),
+				nil,
+				logging.Fields{"force": shutdown.FormatDurationCompact(force)},
+			)
+			d.logHistoryWarn(logging.EventSystemShutdownGraceElapsed, nil, logging.Fields{
+				"force": shutdown.FormatDurationCompact(force),
+			})
+		},
+	}
 
 	d.inFlightMu.Lock()
 	d.inFlight = make(map[string]struct{})
@@ -185,7 +206,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 
 	workQueue := make(chan workItem, 128)
-	go d.runWorker(ctx, jobsCtx, workQueue)
+	outcome := make(chan workerOutcome, 1)
+	go d.runWorker(ctx, policy, hooks, workQueue, outcome)
 
 	d.logConsoleInfo(logging.EventSystemStartup, "STARTED  mintmedia daemon", nil)
 	switch {
@@ -424,68 +446,14 @@ runLoop:
 		}
 	}
 
-	// Drain: wait for in-flight processing jobs with a bounded graceful shutdown.
-	drain := shutdown.Drain(
-		shutdown.Policy{
-			Grace: d.ShutdownGraceDuration,
-			Force: d.ShutdownForceTimeout,
-		},
-		atomic.LoadInt64(&d.jobsInFlight) > 0,
-		func(timeout time.Duration) bool {
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-				d.jobsWg.Wait()
-			}()
+	// Wait for runWorker to fully stop. jobrunner.Run (invoked per item inside
+	// processPath) guarantees runWorker returns within policy.Grace+policy.Force
+	// of ctx being canceled, even if the underlying processor ignores
+	// cancellation entirely, so this wait is bounded in practice despite having
+	// no explicit timeout here.
+	result := <-outcome
 
-			if timeout <= 0 {
-				<-done
-				return true
-			}
-
-			timer := time.NewTimer(timeout)
-			defer timer.Stop()
-
-			select {
-			case <-done:
-				return true
-			case <-timer.C:
-				return false
-			}
-		},
-		cancelJobs,
-		shutdown.Hooks{
-			OnWaitStart: func(grace time.Duration) {
-				d.logConsoleWarn(
-					logging.EventSystemShutdownRequested,
-					fmt.Sprintf(
-						"\nWARNING  shutdown requested. Waiting up to %s for in-flight jobs.",
-						shutdown.FormatDurationCompact(grace),
-					),
-					nil,
-					logging.Fields{"grace": shutdown.FormatDurationCompact(grace)},
-				)
-				d.logHistoryInfo(logging.EventSystemShutdownRequested, logging.Fields{
-					"grace": shutdown.FormatDurationCompact(grace),
-				})
-			},
-			OnGraceElapsed: func(force time.Duration) {
-				d.logConsoleWarn(
-					logging.EventSystemShutdownGraceElapsed,
-					fmt.Sprintf(
-						"WARNING  shutdown grace elapsed. Canceling in-flight jobs (timeout=%s).",
-						shutdown.FormatDurationCompact(force),
-					),
-					nil,
-					logging.Fields{"force": shutdown.FormatDurationCompact(force)},
-				)
-				d.logHistoryWarn(logging.EventSystemShutdownGraceElapsed, nil, logging.Fields{
-					"force": shutdown.FormatDurationCompact(force),
-				})
-			},
-		},
-	)
-	if !drain.TimedOut {
+	if !result.lastItemTimedOut {
 		d.logConsoleInfo(logging.EventSystemShutdownComplete, "\nShutdown complete.", nil)
 		d.logHistoryInfo(logging.EventSystemShutdownComplete, nil)
 		return nil
@@ -503,27 +471,52 @@ runLoop:
 	)
 }
 
-func (d *Daemon) runWorker(runCtx, jobsCtx context.Context, queue <-chan workItem) {
+// workerOutcome reports how runWorker's item processing ended.
+type workerOutcome struct {
+	// lastItemTimedOut is true when the item runWorker was processing gave up
+	// per its shutdown.Policy (see jobrunner.Run).
+	lastItemTimedOut bool
+}
+
+func (d *Daemon) runWorker(runCtx context.Context, policy shutdown.Policy, hooks shutdown.Hooks, queue <-chan workItem, outcome chan<- workerOutcome) {
 	for {
+		// Give runCtx cancellation priority over dequeuing another item: once
+		// shutdown has been observed, stop pulling from queue entirely rather
+		// than racing the two select cases below. Without this, a canceled
+		// runCtx and a non-empty queue are both permanently ready, so plain
+		// select could keep "choosing" queue across iterations and run
+		// jobrunner.Run's grace/force drain (and its hooks) again for every
+		// additional item, instead of bounding the whole shutdown to one
+		// grace+force window.
 		select {
 		case <-runCtx.Done():
+			outcome <- workerOutcome{}
+			return
+		default:
+		}
+
+		select {
+		case <-runCtx.Done():
+			outcome <- workerOutcome{}
 			return
 		case item, ok := <-queue:
 			if !ok {
+				outcome <- workerOutcome{}
 				return
 			}
-			d.jobsWg.Add(1)
-			atomic.AddInt64(&d.jobsInFlight, 1)
-			func() {
-				defer d.jobsWg.Done()
-				defer atomic.AddInt64(&d.jobsInFlight, -1)
-				d.processPath(jobsCtx, item.path, item.inFlightKey)
-			}()
+			if d.processPath(runCtx, policy, hooks, item.path, item.inFlightKey) {
+				outcome <- workerOutcome{lastItemTimedOut: true}
+				return
+			}
 		}
 	}
 }
 
-func (d *Daemon) processPath(ctx context.Context, pth string, inFlightKey string) {
+// processPath runs one item through jobrunner.Run, applying policy/hooks so
+// shutdown of the daemon's run context (ctx) is handled with a bounded
+// graceful-then-forced drain. It reports timedOut=true when the item was
+// abandoned per policy (see jobrunner.Run's late-callback-dropping guarantee).
+func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks shutdown.Hooks, pth string, inFlightKey string) (timedOut bool) {
 	defer d.clearInFlight(inFlightKey)
 
 	start := time.Now()
@@ -556,7 +549,11 @@ func (d *Daemon) processPath(ctx context.Context, pth string, inFlightKey string
 			logging.Fields{"path": pth, "reason": r.Reason, "duration": dur.String()},
 		)
 	}
-	err := processor.ProcessEach(ctx, d.Proc, processor.Request{InputPath: pth}, emit)
+
+	err, _ := jobrunner.Run(ctx, policy, hooks, d.Proc, pth, emit)
+	if errors.Is(err, jobrunner.ErrAbandoned) {
+		return true
+	}
 
 	dur := time.Since(start).Round(time.Second)
 
@@ -571,7 +568,7 @@ func (d *Daemon) processPath(ctx context.Context, pth string, inFlightKey string
 			"path":     pth,
 			"duration": dur.String(),
 		})
-		return
+		return false
 	}
 
 	playCount := planner.OnJobComplete()
@@ -582,6 +579,7 @@ func (d *Daemon) processPath(ctx context.Context, pth string, inFlightKey string
 	if planner.HasAppliedMain() {
 		d.cleanupCompletedTorrents(jobCtx)
 	}
+	return false
 }
 
 func (d *Daemon) playSoundAsync(ctx context.Context, soundPath string) {
