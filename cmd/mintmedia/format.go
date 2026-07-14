@@ -78,6 +78,13 @@ func PrintProcessDropCandidates(count int) {
 	fmt.Printf("INFO     Discovered %d %s.\n\n", count, noun)
 }
 
+// PrintFatalError writes a labeled, colorized error line to stderr, matching
+// the ERROR/WARNING console voice used elsewhere, instead of a bare
+// err.Error() dump. Used for one-shot CLI failures that abort the process.
+func PrintFatalError(err error) {
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("ERROR    %v", err)))
+}
+
 // PrintProcessDropStatError writes a process-drop stat error to stderr.
 func PrintProcessDropStatError(path string, err error) {
 	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("ERROR    stat %s: %v", path, err)))
