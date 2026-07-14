@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"github.com/mtn-man/mintmedia/internal/clipboard"
-	"github.com/mtn-man/mintmedia/internal/console"
 	"github.com/mtn-man/mintmedia/internal/jobrunner"
 	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/magnet"
 	"github.com/mtn-man/mintmedia/internal/notify"
 	"github.com/mtn-man/mintmedia/internal/processor"
+	"github.com/mtn-man/mintmedia/internal/resultformat"
 	"github.com/mtn-man/mintmedia/internal/shutdown"
 	"github.com/mtn-man/mintmedia/internal/transmission"
 	"github.com/mtn-man/mintmedia/internal/watch"
@@ -525,13 +525,9 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 	emit := func(r processor.Result) {
 		dur := time.Since(start).Round(time.Second)
 		if r.Applied {
-			durSuffix := ""
-			if dur >= time.Second {
-				durSuffix = fmt.Sprintf("  (%s)", dur)
-			}
 			d.logConsoleInfo(
 				logging.EventProcessorMoveMainApplied,
-				fmt.Sprintf("SORTED   %s\n    %s   %s%s", filepath.Base(r.Plan.MainSourcePath), console.ColorizeOut("->", console.Green), r.Plan.DestMainPath, durSuffix),
+				resultformat.CompactLine(r, resultformat.CleanName(r.Plan.MainSourcePath), dur),
 				logging.Fields{"path": pth, "dest_path": r.Plan.DestMainPath, "duration": dur.String()},
 			)
 			playCount := planner.OnAppliedMain()
@@ -545,7 +541,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 		}
 		d.logConsoleInfo(
 			logging.EventProcessorInputSkippedParseError,
-			fmt.Sprintf("SKIPPED  %s — %s", filepath.Base(pth), r.Reason),
+			resultformat.CompactLine(r, resultformat.CleanName(pth), dur),
 			logging.Fields{"path": pth, "reason": r.Reason, "duration": dur.String()},
 		)
 	}
