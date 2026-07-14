@@ -143,10 +143,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		OnWaitStart: func(grace time.Duration) {
 			d.logConsoleWarn(
 				logging.EventSystemShutdownRequested,
-				fmt.Sprintf(
-					"\nWARNING  shutdown requested. Waiting up to %s for in-flight jobs.",
-					shutdown.FormatDurationCompact(grace),
-				),
+				"\n"+resultformat.ShutdownWaitMessage("jobs", grace),
 				nil,
 				logging.Fields{"grace": shutdown.FormatDurationCompact(grace)},
 			)
@@ -157,10 +154,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		OnGraceElapsed: func(force time.Duration) {
 			d.logConsoleWarn(
 				logging.EventSystemShutdownGraceElapsed,
-				fmt.Sprintf(
-					"\nWARNING  shutdown grace elapsed. Canceling in-flight jobs (timeout=%s).",
-					shutdown.FormatDurationCompact(force),
-				),
+				"\n"+resultformat.ShutdownGraceElapsedMessage("jobs", force),
 				nil,
 				logging.Fields{"force": shutdown.FormatDurationCompact(force)},
 			)
@@ -268,10 +262,7 @@ runLoop:
 				}
 				fileCount += len(plans)
 			}
-			noun := "files"
-			if fileCount == 1 {
-				noun = "file"
-			}
+			noun := resultformat.Pluralize(fileCount, "file", "files")
 			d.logConsoleInfo(
 				logging.EventSystemDestinationsReady,
 				fmt.Sprintf("INFO     destinations ready; processing %d pending %s.", fileCount, noun),
@@ -553,7 +544,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 	if err != nil {
 		d.logConsoleError(
 			logging.EventDaemonProcessError,
-			fmt.Sprintf("ERROR    %s — %v  (%s)", pth, err, dur),
+			resultformat.ErrorLine(pth, err, dur),
 			err,
 			logging.Fields{"path": pth, "duration": dur.String()},
 		)
@@ -617,10 +608,7 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 		return
 	}
 	if removed > 0 {
-		noun := "torrents"
-		if removed == 1 {
-			noun = "torrent"
-		}
+		noun := resultformat.Pluralize(removed, "torrent", "torrents")
 		d.logConsoleInfo(
 			logging.EventDaemonTxCleanupRemoved,
 			fmt.Sprintf("REMOVED  %d completed %s", removed, noun),
@@ -735,4 +723,3 @@ func truncateForLog(s string, max int) string {
 	}
 	return string(rs[:max-3]) + "..."
 }
-

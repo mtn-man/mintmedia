@@ -71,10 +71,7 @@ func PrintProcessDropNoFiles() {
 
 // PrintProcessDropCandidates writes process-drop candidate discovery output.
 func PrintProcessDropCandidates(count int) {
-	noun := "files"
-	if count == 1 {
-		noun = "file"
-	}
+	noun := resultformat.Pluralize(count, "file", "files")
 	fmt.Printf("INFO     Discovered %d %s.\n\n", count, noun)
 }
 
@@ -102,8 +99,8 @@ func PrintProcessDropDestinationError(dir string) {
 }
 
 // PrintProcessDropItemError writes a process-drop item error to stderr.
-func PrintProcessDropItemError(path string, err error) {
-	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("ERROR    %s: %v", path, err)))
+func PrintProcessDropItemError(path string, err error, dur time.Duration) {
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(resultformat.ErrorLine(path, err, dur)))
 }
 
 // PrintProcessDropResults writes process-drop results to stdout.
@@ -147,10 +144,7 @@ func processDropCompactLine(res processor.Result, dur time.Duration) string {
 
 func processDropSummaryLine(s ProcessDropSummary) string {
 	total := s.Applied + s.Skipped + s.Errors
-	noun := "files"
-	if total == 1 {
-		noun = "file"
-	}
+	noun := resultformat.Pluralize(total, "file", "files")
 	elapsed := s.Elapsed.Round(time.Second)
 
 	parts := []string{fmt.Sprintf("%d sorted", s.Applied)}
