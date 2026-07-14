@@ -172,7 +172,7 @@ func processDropFolder(
 			fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefixErr(fmt.Sprintf("WARNING  shutdown requested. Waiting up to %s for in-flight item.", grace))+"\n")
 		},
 		OnGraceElapsed: func(force time.Duration) {
-			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  shutdown grace elapsed. Canceling in-flight item, waiting up to %s.", force)))
+			fmt.Fprint(os.Stderr, "\n"+console.ColorizePrefixErr(fmt.Sprintf("WARNING  shutdown grace elapsed. Canceling in-flight item, waiting up to %s.", force))+"\n")
 		},
 	}
 

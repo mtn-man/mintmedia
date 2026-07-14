@@ -158,7 +158,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 			d.logConsoleWarn(
 				logging.EventSystemShutdownGraceElapsed,
 				fmt.Sprintf(
-					"WARNING  shutdown grace elapsed. Canceling in-flight jobs (timeout=%s).",
+					"\nWARNING  shutdown grace elapsed. Canceling in-flight jobs (timeout=%s).",
 					shutdown.FormatDurationCompact(force),
 				),
 				nil,
@@ -209,7 +209,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	outcome := make(chan workerOutcome, 1)
 	go d.runWorker(ctx, policy, hooks, workQueue, outcome)
 
-	d.logConsoleInfo(logging.EventSystemStartup, "STARTED  mintmedia daemon", nil)
+	d.logConsoleInfo(logging.EventSystemStartup, "STARTED  mintmedia daemon\n", nil)
 	switch {
 	case d.Poller == nil:
 		d.logConsoleInfo(logging.EventSystemStartup, "Clipboard polling disabled.", nil)
@@ -287,13 +287,12 @@ runLoop:
 					return fmt.Errorf("empty in-flight key for path: %s", pth)
 				}
 				if !d.tryMarkInFlight(key) {
-					d.logConsoleWarn(
+					d.logConsoleInfo(
 						logging.EventDaemonPathDuplicate,
-						fmt.Sprintf("WARNING  already in-flight, skipping: %s", pth),
-						nil,
+						fmt.Sprintf("INFO     already in-flight, skipping: %s", pth),
 						logging.Fields{"path": pth},
 					)
-					d.logHistoryWarn(logging.EventDaemonPathDuplicate, nil, logging.Fields{"path": pth})
+					d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": pth})
 					continue
 				}
 				select {
@@ -330,13 +329,12 @@ runLoop:
 
 			if d.DeferDestinationChecks && !d.destinationsReady() {
 				if d.isInFlight(key) {
-					d.logConsoleWarn(
+					d.logConsoleInfo(
 						logging.EventDaemonPathDuplicate,
-						fmt.Sprintf("WARNING  already in-flight, skipping: %s", path),
-						nil,
+						fmt.Sprintf("INFO     already in-flight, skipping: %s", path),
 						logging.Fields{"path": path},
 					)
-					d.logHistoryWarn(logging.EventDaemonPathDuplicate, nil, logging.Fields{"path": path})
+					d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": path})
 					continue
 				}
 				pending[path] = time.Now()
@@ -355,13 +353,12 @@ runLoop:
 			}
 
 			if !d.tryMarkInFlight(key) {
-				d.logConsoleWarn(
+				d.logConsoleInfo(
 					logging.EventDaemonPathDuplicate,
-					fmt.Sprintf("WARNING  already in-flight, skipping: %s", path),
-					nil,
+					fmt.Sprintf("INFO     already in-flight, skipping: %s", path),
 					logging.Fields{"path": path},
 				)
-				d.logHistoryWarn(logging.EventDaemonPathDuplicate, nil, logging.Fields{"path": path})
+				d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": path})
 				continue
 			}
 			select {

@@ -14,6 +14,7 @@ import (
 	pflag "github.com/spf13/pflag"
 
 	"github.com/mtn-man/mintmedia/internal/config"
+	"github.com/mtn-man/mintmedia/internal/console"
 	"github.com/mtn-man/mintmedia/internal/daemon"
 	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/processor"
@@ -106,14 +107,14 @@ func main() {
 			die(err, exitError)
 		}
 		if !running {
-			fmt.Println("daemon not running")
+			fmt.Println(console.ColorizePrefixOut("STATUS   daemon not running"))
 			os.Exit(exitNotRunning)
 		}
 		if info.Started.IsZero() {
-			fmt.Printf("daemon running (pid=%d)\n", info.PID)
+			fmt.Println(console.ColorizePrefixOut(fmt.Sprintf("STATUS   daemon running (pid=%d)", info.PID)))
 		} else {
 			uptime := time.Since(info.Started).Truncate(time.Second)
-			fmt.Printf("daemon running (pid=%d, uptime %s)\n", info.PID, uptime)
+			fmt.Println(console.ColorizePrefixOut(fmt.Sprintf("STATUS   daemon running (pid=%d, uptime %s)", info.PID, uptime)))
 		}
 		return
 	}
@@ -125,7 +126,7 @@ func main() {
 			die(err, exitError)
 		}
 		if !running {
-			fmt.Println("daemon not running")
+			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr("WARNING  daemon not running"))
 			return
 		}
 		p, err := os.FindProcess(info.PID)
@@ -135,7 +136,7 @@ func main() {
 		if err := p.Signal(syscall.SIGTERM); err != nil {
 			// Process exited in the window between CheckLock and Signal — already stopped.
 			if errors.Is(err, syscall.ESRCH) {
-				fmt.Println("daemon stopped")
+				fmt.Println(console.ColorizePrefixOut("STOPPED  daemon"))
 				return
 			}
 			die(err, exitError)
@@ -146,7 +147,7 @@ func main() {
 		if err := state.WaitUntilReleased(ctx, lockPath, info, 250*time.Millisecond); err != nil {
 			die(fmt.Errorf("timed out waiting for daemon to stop (pid=%d)", info.PID), exitError)
 		}
-		fmt.Println("daemon stopped")
+		fmt.Println(console.ColorizePrefixOut("STOPPED  daemon"))
 		return
 	}
 
