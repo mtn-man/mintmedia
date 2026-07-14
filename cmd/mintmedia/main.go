@@ -292,7 +292,7 @@ func newGoProcessor(res *config.Resolved, logger logging.Logger) (processor.Proc
 }
 
 func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
-	fmt.Println("Mintmedia config loaded successfully.")
+	fmt.Println(console.ColorizePrefixOut("STARTED       mintmedia"))
 	fmt.Printf("Version:      mintmedia %s\n", resolveVersion(version, mainModuleVersion()))
 	fmt.Printf("Config file:  %s\n\n", resolved.ConfigPathAbs)
 

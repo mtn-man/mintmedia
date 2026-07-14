@@ -40,25 +40,10 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	}
 
 	// Durations
-	settle, settleOK := parseDurationField(&errs, "watch.drop_settle_duration", cfg.Watch.DropSettleDuration, "3s")
-	if settleOK && settle < 500*time.Millisecond {
-		errs = append(errs, fmt.Errorf("watch.drop_settle_duration: %s is too small (minimum 500ms)", settle))
-	}
-
-	poll, pollOK := parseDurationField(&errs, "clipboard.poll_interval", cfg.Clipboard.PollInterval, "1s")
-	if pollOK && poll < 250*time.Millisecond {
-		errs = append(errs, fmt.Errorf("clipboard.poll_interval: %s is too small (minimum 250ms)", poll))
-	}
-
-	shutdownGrace, shutdownGraceOK := parseDurationField(&errs, "system.shutdown_grace_duration", cfg.System.ShutdownGraceDuration, "10m")
-	if shutdownGraceOK && shutdownGrace <= 0 {
-		errs = append(errs, fmt.Errorf("system.shutdown_grace_duration: must be > 0 (got %s)", shutdownGrace))
-	}
-
-	shutdownForce, shutdownForceOK := parseDurationField(&errs, "system.shutdown_force_timeout", cfg.System.ShutdownForceTimeout, "15s")
-	if shutdownForceOK && shutdownForce <= 0 {
-		errs = append(errs, fmt.Errorf("system.shutdown_force_timeout: must be > 0 (got %s)", shutdownForce))
-	}
+	settle, _ := parseDurationFieldMin(&errs, "watch.drop_settle_duration", cfg.Watch.DropSettleDuration, "3s", 500*time.Millisecond)
+	poll, _ := parseDurationFieldMin(&errs, "clipboard.poll_interval", cfg.Clipboard.PollInterval, "1s", 250*time.Millisecond)
+	shutdownGrace, _ := parseDurationFieldPositive(&errs, "system.shutdown_grace_duration", cfg.System.ShutdownGraceDuration, "10m")
+	shutdownForce, _ := parseDurationFieldPositive(&errs, "system.shutdown_force_timeout", cfg.System.ShutdownForceTimeout, "15s")
 
 	// Required base paths
 	dropAbs, err := expandPath(cfg.Paths.DropFolder)
@@ -233,14 +218,42 @@ func validateDestinationSeparation(moviesAbs, showsAbs string) error {
 }
 
 // parseDurationField parses a duration-valued config field, appending a
-// hinted error to errs and returning ok=false on failure. Callers still need
-// to check field-specific bounds (minimum interval, must-be-positive, etc.)
-// themselves, since those bounds and their messages differ per field.
+// hinted error to errs and returning ok=false on failure. Prefer
+// parseDurationFieldMin/parseDurationFieldPositive below when the field also
+// has a bound; use this directly only for fields with no bound to check.
 func parseDurationField(errs *[]error, field, raw, example string) (d time.Duration, ok bool) {
 	d, err := time.ParseDuration(strings.TrimSpace(raw))
 	if err != nil {
 		*errs = append(*errs, fmt.Errorf("%s: invalid duration %q (e.g. %q): %w", field, raw, example, err))
 		return 0, false
+	}
+	return d, true
+}
+
+// parseDurationFieldMin is parseDurationField plus a minimum-value check,
+// appending a single "too small" error when the parsed duration is below min.
+func parseDurationFieldMin(errs *[]error, field, raw, example string, min time.Duration) (d time.Duration, ok bool) {
+	d, ok = parseDurationField(errs, field, raw, example)
+	if !ok {
+		return d, false
+	}
+	if d < min {
+		*errs = append(*errs, fmt.Errorf("%s: %s is too small (minimum %s)", field, d, min))
+		return d, false
+	}
+	return d, true
+}
+
+// parseDurationFieldPositive is parseDurationField plus a must-be-positive
+// check, appending a single error when the parsed duration is <= 0.
+func parseDurationFieldPositive(errs *[]error, field, raw, example string) (d time.Duration, ok bool) {
+	d, ok = parseDurationField(errs, field, raw, example)
+	if !ok {
+		return d, false
+	}
+	if d <= 0 {
+		*errs = append(*errs, fmt.Errorf("%s: must be > 0 (got %s)", field, d))
+		return d, false
 	}
 	return d, true
 }
