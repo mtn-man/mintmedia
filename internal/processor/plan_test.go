@@ -1623,4 +1623,3 @@ func TestPlan_TableDriven(t *testing.T) {
 		})
 	}
 }
-

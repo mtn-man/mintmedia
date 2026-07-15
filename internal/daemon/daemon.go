@@ -534,7 +534,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 		)
 	}
 
-	err, _ := jobrunner.Run(ctx, policy, hooks, d.Proc, pth, emit)
+	_, err := jobrunner.Run(ctx, policy, hooks, d.Proc, pth, emit)
 	if errors.Is(err, jobrunner.ErrAbandoned) {
 		return true
 	}

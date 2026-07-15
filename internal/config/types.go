@@ -103,8 +103,6 @@ type Resolved struct {
 	ShutdownGraceDuration time.Duration
 	ShutdownForceTimeout  time.Duration
 
-
-
 	ConsoleLogLevel string
 	HistoryLogLevel string
 	HistoryFileAbs  string

@@ -50,7 +50,7 @@ func Run(
 	proc processor.Processor,
 	path string,
 	onResult func(processor.Result),
-) (err error, drain shutdown.Result) {
+) (drain shutdown.Result, err error) {
 	itemCtx, cancelItem := context.WithCancel(context.Background())
 	defer cancelItem()
 
@@ -112,7 +112,7 @@ func Run(
 			drain = shutdown.Drain(policy, true, waitForResult, cancelItem, hooks)
 			if drain.TimedOut {
 				closeItemClosed()
-				return ErrAbandoned, drain
+				return drain, ErrAbandoned
 			}
 			// Grace or force wait succeeded: waitForResult already set
 			// runErr/gotFinal via the "done" case above.
@@ -120,5 +120,5 @@ func Run(
 	}
 
 	closeItemClosed()
-	return runErr, drain
+	return drain, runErr
 }
