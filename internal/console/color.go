@@ -41,6 +41,7 @@ var prefixColors = []struct {
 	color  string
 }{
 	{"STARTED  ", Green},
+	{"CREATED  ", Green},
 	{"SORTED   ", Green},
 	{"REMOVED  ", Green},
 	{"STATUS   ", Green},

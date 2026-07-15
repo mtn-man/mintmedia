@@ -2,16 +2,19 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
 	pflag "github.com/spf13/pflag"
+	"golang.org/x/term"
 
 	"github.com/mtn-man/mintmedia/internal/config"
 	"github.com/mtn-man/mintmedia/internal/console"
@@ -151,8 +154,8 @@ func main() {
 		return
 	}
 
-	if bootstrapped {
-		fmt.Printf("No config file found. A default config has been written to: %s\n", resolved.ConfigPathAbs)
+	for _, dir := range resolved.CreatedDirs {
+		fmt.Println(console.ColorizePrefixOut(fmt.Sprintf("CREATED  %s", dir)))
 	}
 
 	planDrop := pflag.Lookup("plan").Changed && *planPath == ""
@@ -168,7 +171,24 @@ func main() {
 		die(err, exitUsage)
 	}
 
-	if *verbose {
+	if bootstrapped {
+		fmt.Println(console.ColorizePrefixOut("CREATED  config file"))
+		printConfigSummary(cfg, resolved)
+		switch {
+		case mode.ExplicitCount == 0:
+			if !confirmProcessDrop(resolved.DropFolderAbs) {
+				fmt.Println("Review the paths above -- especially destinations.dest_dir_movies/dest_dir_shows if you have an existing library -- then re-run with -p/--process-drop or -d/--daemon when ready.")
+				return
+			}
+			fmt.Println()
+		case mode.Daemon:
+			if isInteractiveStdin() && !confirmDaemonStart(resolved.DropFolderAbs) {
+				fmt.Println("Review the paths above -- especially destinations.dest_dir_movies/dest_dir_shows if you have an existing library -- then re-run with -d/--daemon when ready.")
+				return
+			}
+			fmt.Println()
+		}
+	} else if *verbose {
 		printConfigSummary(cfg, resolved)
 	}
 
@@ -289,6 +309,59 @@ func newGoProcessor(res *config.Resolved, logger logging.Logger) (processor.Proc
 	})
 
 	return processor.New(pcfg, xfer, logger)
+}
+
+// isInteractiveStdin reports whether stdin is an interactive terminal.
+// term.IsTerminal (not console.IsTerminal's char-device heuristic) is
+// required for gating a blocking read: /dev/null is itself a character
+// device, so the cheap heuristic would misreport it as a terminal and block
+// (or print an unanswerable prompt into logs) on a systemd unit or script
+// whose stdin defaults to /dev/null.
+func isInteractiveStdin() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
+// promptYesNo prints prompt and reads a line from stdin, treating "y"/"yes"
+// (case-insensitive) as acceptance and everything else -- including empty
+// input or EOF -- as decline. Callers are responsible for only invoking this
+// when isInteractiveStdin() is true; it does not check itself, since the
+// safe non-interactive default differs by call site (see confirmProcessDrop
+// vs. the daemon bootstrap confirmation).
+func promptYesNo(prompt string) bool {
+	fmt.Print(prompt)
+	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil && line == "" {
+		return false
+	}
+	answer := strings.ToLower(strings.TrimSpace(line))
+	return answer == "y" || answer == "yes"
+}
+
+// confirmProcessDrop asks the user, on a bare first-run bootstrap, whether
+// to go ahead and process the drop folder using the freshly-written default
+// paths. A non-interactive stdin (systemd unit, script, CI) means there's no
+// one to answer, so it declines rather than blocking -- matching this call
+// site's existing bootstrap behavior of stopping and printing next steps
+// when no explicit mode flag was given. This is unreviewed config; silence
+// must never be read as consent to move files.
+func confirmProcessDrop(dropFolder string) bool {
+	if !isInteractiveStdin() {
+		return false
+	}
+	return promptYesNo(fmt.Sprintf("Process the drop folder (%s) using these destinations now? [y/N] ", dropFolder))
+}
+
+// confirmDaemonStart asks the user, on a bare first-run bootstrap with an
+// explicit -d/--daemon flag, whether to start the daemon now against the
+// freshly-written default paths. Unlike confirmProcessDrop, a non-interactive
+// stdin must NOT decline here -- callers only invoke this after already
+// checking isInteractiveStdin(), so daemon startup under systemd (stdin from
+// /dev/null) proceeds unprompted exactly as it did before this confirmation
+// existed. The daemon is long-running and unattended, so an interactive first
+// start still deserves a chance to bail before it silently organizes files
+// on unreviewed paths indefinitely.
+func confirmDaemonStart(dropFolder string) bool {
+	return promptYesNo(fmt.Sprintf("Start the daemon now, watching %s and organizing into these destinations? [y/N] ", dropFolder))
 }
 
 func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
