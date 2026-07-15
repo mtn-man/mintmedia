@@ -81,8 +81,9 @@ type Media struct {
 }
 
 type Naming struct {
-	// Regex patterns (strings) used by the Go processor to strip junk tags from release names.
-	// Example: ["2160p","1080p","x265","h\\.264","web[- ]?dl", ...]
+	// Additional regex patterns (strings) to strip from release names, on top
+	// of mintmedia's built-in defaults (resolution/codec/source tags). This
+	// list is additive, not a replacement -- see resolveMediaTagBlacklist.
 	MediaTagBlacklist []string `toml:"media_tag_blacklist"`
 }
 

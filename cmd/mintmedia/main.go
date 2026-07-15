@@ -317,7 +317,7 @@ func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
 		fmt.Printf("  History file:       %s\n", resolved.HistoryFileAbs)
 		fmt.Printf("  Main extensions:    %d\n", len(resolved.MainMediaExtensions))
 		fmt.Printf("  Assoc extensions:   %d\n", len(resolved.AssociatedFileExtensions))
-		fmt.Printf("  Blacklist patterns: %d\n", len(resolved.MediaTagBlacklist))
+		fmt.Printf("  Blacklist:          %d\n", len(cfg.Naming.MediaTagBlacklist))
 	} else {
 		fmt.Println("Processing: disabled")
 	}

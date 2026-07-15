@@ -79,22 +79,12 @@ associated_file_extensions = [".srt", ".sub", ".ass", ".idx", ".vtt"]
 
 
 [naming]
-# Patterns/tags to strip from names (resolution, codec, source tags, etc.)
-# These are typically treated as regex patterns.
-media_tag_blacklist = [
-  "2160p",
-  "1080p",
-  "720p",
-  "x265",
-  "x264",
-  "hevc",
-  "h\\.264",
-  "h\\.265",
-  "web[- ]?dl",
-  "webrip",
-  "bluray",
-  "elite",
-]
+# mintmedia always strips a built-in set of resolution/codec/source tags
+# (2160p, 1080p, x265, WEB-DL, etc.) when deriving a clean title -- that's
+# not configurable here. Add regex patterns below only for tags the built-in
+# list doesn't already cover; they're merged on top of the defaults, not a
+# replacement for them.
+media_tag_blacklist = []
 
 [torrent]
 # Keep the section present for discoverability, but default it OFF.

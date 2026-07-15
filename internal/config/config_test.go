@@ -78,6 +78,100 @@ associated_file_extensions = [".srt"]
 	}
 }
 
+func TestLoad_MediaTagBlacklist_DefaultsWhenOmitted(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	tomlStr := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+defer_destination_checks = false
+
+[media]
+main_media_extensions = [".mkv"]
+associated_file_extensions = [".srt"]
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, tomlStr)
+	_, res, _, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if len(res.MediaTagBlacklist) != len(defaultMediaTagBlacklist) {
+		t.Fatalf("MediaTagBlacklist = %v, want built-in defaults %v", res.MediaTagBlacklist, defaultMediaTagBlacklist)
+	}
+}
+
+func TestLoad_MediaTagBlacklist_MergesUserPatternsWithDefaults(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	tomlStr := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+enable_torrent_automation = false
+
+[system]
+auto_create_missing_dirs = true
+defer_destination_checks = false
+
+[media]
+main_media_extensions = [".mkv"]
+associated_file_extensions = [".srt"]
+
+[naming]
+media_tag_blacklist = ["proper", "repack"]
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, tomlStr)
+	_, res, _, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	wantLen := len(defaultMediaTagBlacklist) + 2
+	if len(res.MediaTagBlacklist) != wantLen {
+		t.Fatalf("MediaTagBlacklist len = %d, want %d (defaults + user patterns): %v", len(res.MediaTagBlacklist), wantLen, res.MediaTagBlacklist)
+	}
+	for _, pat := range defaultMediaTagBlacklist {
+		if !sliceContains(res.MediaTagBlacklist, pat) {
+			t.Fatalf("MediaTagBlacklist missing built-in default %q: %v", pat, res.MediaTagBlacklist)
+		}
+	}
+	for _, pat := range []string{"proper", "repack"} {
+		if !sliceContains(res.MediaTagBlacklist, pat) {
+			t.Fatalf("MediaTagBlacklist missing user pattern %q: %v", pat, res.MediaTagBlacklist)
+		}
+	}
+}
+
 func TestLoad_LoggingConfigOverridesDefaults(t *testing.T) {
 	root := t.TempDir()
 	drop := filepath.Join(root, "drop")
