@@ -123,7 +123,6 @@ type SortError struct {
 	Err  error
 }
 
-
 // Processor is the core media decision+execution engine.
 // Plan should be deterministic and side-effect free except for filesystem reads (stat/list).
 // Apply performs the actual filesystem modifications (moves, logging events).

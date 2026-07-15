@@ -48,7 +48,6 @@ func TestDaemon_RunProcessesDropEvents(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-
 		SoundInput: "",
 		SoundDone:  "",
 
@@ -113,7 +112,6 @@ func TestDaemon_RunWaitsForInFlightJobsOnShutdown(t *testing.T) {
 
 		MoviesDir: movies,
 		ShowsDir:  shows,
-
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -194,7 +192,6 @@ func TestDaemon_RunCaffeinateStaysActiveDuringShutdownDrain(t *testing.T) {
 
 		MoviesDir: movies,
 		ShowsDir:  shows,
-
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -277,7 +274,6 @@ func TestDaemon_RunForceCancelsInFlightAfterGrace(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-
 		SoundInput: "",
 		SoundDone:  "",
 
@@ -347,7 +343,6 @@ func TestDaemon_RunReturnsShutdownTimeoutWhenJobsIgnoreCancel(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-
 		SoundInput: "",
 		SoundDone:  "",
 
@@ -408,7 +403,6 @@ func TestDaemon_RunSkipsWaitingLogWhenNoInFlightJobs(t *testing.T) {
 
 		MoviesDir: movies,
 		ShowsDir:  shows,
-
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -476,7 +470,6 @@ func TestDaemon_RunWaitingLogStartsOnNewLineForInFlightJobs(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-
 		SoundInput: "",
 		SoundDone:  "",
 
@@ -540,7 +533,6 @@ func TestDaemon_DeferDestinationChecks(t *testing.T) {
 
 		MoviesDir: movies,
 		ShowsDir:  shows,
-
 
 		SoundInput: "",
 		SoundDone:  "",
@@ -972,7 +964,6 @@ func assertNoExtraSoundCalls(t *testing.T, ch <-chan struct{}, wait time.Duratio
 	case <-timer.C:
 	}
 }
-
 
 func newRuntimeLoggerForTest(t *testing.T, stdout, stderr io.Writer) logging.Logger {
 	t.Helper()

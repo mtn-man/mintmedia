@@ -207,7 +207,7 @@ func processDropFolder(
 			summary.Skipped++
 		}
 
-		runErr, _ := jobrunner.Run(ctx, policy, hooks, proc, item.path, recordResult)
+		_, runErr := jobrunner.Run(ctx, policy, hooks, proc, item.path, recordResult)
 
 		if ctx.Err() != nil && !interrupted {
 			interrupted = true

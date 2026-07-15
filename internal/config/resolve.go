@@ -219,7 +219,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		}
 	}
 
-
 	if len(errs) > 0 {
 		return nil, formatConfigError(cfgPathAbs, errs...)
 	}

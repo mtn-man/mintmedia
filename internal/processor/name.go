@@ -384,18 +384,18 @@ func titleCaseSimple(s string) string {
 	// "US" is handled separately so we can avoid forcing uppercase in the middle
 	// of regular titles like "All of Us Strangers".
 	acronyms := map[string]struct{}{
-		"AI":  {},
-		"CIA": {},
-		"DEA": {},
-		"EU":  {},
-		"FBI": {},
+		"AI":   {},
+		"CIA":  {},
+		"DEA":  {},
+		"EU":   {},
+		"FBI":  {},
 		"NASA": {},
-		"NYC": {},
-		"UAE": {},
-		"UFC": {},
-		"UK":  {},
-		"USA": {},
-		"WWE": {},
+		"NYC":  {},
+		"UAE":  {},
+		"UFC":  {},
+		"UK":   {},
+		"USA":  {},
+		"WWE":  {},
 	}
 
 	for i := range parts {

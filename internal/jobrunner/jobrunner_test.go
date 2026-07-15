@@ -66,7 +66,7 @@ func TestRun_CompletesNormally_NoShutdown(t *testing.T) {
 	}
 
 	var collector resultCollector
-	err, drain := jobrunner.Run(context.Background(), shutdown.Policy{}, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
+	drain, err := jobrunner.Run(context.Background(), shutdown.Policy{}, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
 
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
@@ -91,7 +91,7 @@ func TestRun_StreamsMultipleResultsInOrder(t *testing.T) {
 	}
 
 	var collector resultCollector
-	err, drain := jobrunner.Run(context.Background(), shutdown.Policy{}, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
+	drain, err := jobrunner.Run(context.Background(), shutdown.Policy{}, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
 
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
@@ -120,7 +120,7 @@ func TestRun_ForwardsUnderlyingProcessError(t *testing.T) {
 	}
 
 	var collector resultCollector
-	err, drain := jobrunner.Run(context.Background(), shutdown.Policy{}, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
+	drain, err := jobrunner.Run(context.Background(), shutdown.Policy{}, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
 
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("err = %v, want %v", err, sentinel)
@@ -160,7 +160,7 @@ func TestRun_GraceWindow_JobFinishesDuringGrace(t *testing.T) {
 
 	var collector resultCollector
 	policy := shutdown.Policy{Grace: 2 * time.Second, Force: 2 * time.Second}
-	err, drain := jobrunner.Run(shutdownCtx, policy, hooks, proc, "/tmp/x.mkv", collector.onResult)
+	drain, err := jobrunner.Run(shutdownCtx, policy, hooks, proc, "/tmp/x.mkv", collector.onResult)
 
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
@@ -205,7 +205,7 @@ func TestRun_ForceCancel_JobRespectsItemCtxCancellation(t *testing.T) {
 
 	var collector resultCollector
 	policy := shutdown.Policy{Grace: 40 * time.Millisecond, Force: 2 * time.Second}
-	runErr, drain := jobrunner.Run(shutdownCtx, policy, hooks, proc, "/tmp/x.mkv", collector.onResult)
+	drain, runErr := jobrunner.Run(shutdownCtx, policy, hooks, proc, "/tmp/x.mkv", collector.onResult)
 
 	if errors.Is(runErr, jobrunner.ErrAbandoned) {
 		t.Fatalf("err = %v, want a job-returned error, not ErrAbandoned (job completed within the force window)", runErr)
@@ -254,7 +254,7 @@ func TestRun_ForceTimeout_JobIgnoresCancellationEntirely(t *testing.T) {
 	var runErr error
 	var drain shutdown.Result
 	go func() {
-		runErr, drain = jobrunner.Run(shutdownCtx, policy, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
+		drain, runErr = jobrunner.Run(shutdownCtx, policy, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
 		close(runDone)
 	}()
 
@@ -301,7 +301,7 @@ func TestRun_ForceTimeout_DropsLateOnResultCallback(t *testing.T) {
 	var collector resultCollector
 	policy := shutdown.Policy{Grace: 20 * time.Millisecond, Force: 20 * time.Millisecond}
 
-	runErr, drain := jobrunner.Run(shutdownCtx, policy, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
+	drain, runErr := jobrunner.Run(shutdownCtx, policy, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
 	if !errors.Is(runErr, jobrunner.ErrAbandoned) {
 		t.Fatalf("err = %v, want errors.Is(err, jobrunner.ErrAbandoned)", runErr)
 	}
@@ -384,7 +384,7 @@ func TestRun_NilHooksDoNotPanic(t *testing.T) {
 	defer close(release)
 
 	var collector resultCollector
-	runErr, drain := jobrunner.Run(shutdownCtx, policy, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
+	drain, runErr := jobrunner.Run(shutdownCtx, policy, shutdown.Hooks{}, proc, "/tmp/x.mkv", collector.onResult)
 	if !errors.Is(runErr, jobrunner.ErrAbandoned) {
 		t.Fatalf("err = %v, want errors.Is(err, jobrunner.ErrAbandoned)", runErr)
 	}

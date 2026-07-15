@@ -420,7 +420,6 @@ error_dir = "/tmp/errors"
 	}
 }
 
-
 func TestLoad_TorrentAutoCleanupDefaultsFalseWhenOmitted(t *testing.T) {
 	root := t.TempDir()
 	drop := filepath.Join(root, "drop")
