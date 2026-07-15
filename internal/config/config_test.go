@@ -937,6 +937,35 @@ func TestLoad_Bootstrap_CreatesFileWhenMissing(t *testing.T) {
 	}
 }
 
+func TestLoad_Bootstrap_ReportsCreatedDirs(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+
+	_, res, _, err := Load("")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(res.CreatedDirs) == 0 {
+		t.Fatal("expected CreatedDirs to be non-empty on a fresh bootstrap")
+	}
+	if !sliceContains(res.CreatedDirs, res.DropFolderAbs) {
+		t.Fatalf("expected CreatedDirs to include drop folder %q, got %v", res.DropFolderAbs, res.CreatedDirs)
+	}
+	if !sliceContains(res.CreatedDirs, res.StateDirAbs) {
+		t.Fatalf("expected CreatedDirs to include state dir %q, got %v", res.StateDirAbs, res.CreatedDirs)
+	}
+
+	// A second Load against the now-populated directories should report
+	// nothing new created.
+	_, res2, _, err := Load("")
+	if err != nil {
+		t.Fatalf("second Load() error: %v", err)
+	}
+	if len(res2.CreatedDirs) != 0 {
+		t.Fatalf("expected no CreatedDirs on second Load, got %v", res2.CreatedDirs)
+	}
+}
+
 func TestLoad_Bootstrap_ConfigDirCreated(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", root)

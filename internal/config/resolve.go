@@ -182,20 +182,25 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	}
 
 	// Directory creation / existence checks
+	var createdDirs []string
 	if cfg.System.AutoCreateMissingDirs {
 		dirs := []string{dropAbs, stateAbs}
 		if !cfg.System.DeferDestinationChecks {
 			dirs = append(dirs, moviesAbs, showsAbs)
 		}
-		for _, dir := range dirs {
+		mkdirTracked := func(dir string) {
+			if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
+				createdDirs = append(createdDirs, dir)
+			}
 			if err := os.MkdirAll(dir, 0o755); err != nil {
 				errs = append(errs, fmt.Errorf("failed to create directory %q: %w", dir, err))
 			}
 		}
+		for _, dir := range dirs {
+			mkdirTracked(dir)
+		}
 		if historyAbs != "" {
-			if err := os.MkdirAll(filepath.Dir(historyAbs), 0o755); err != nil {
-				errs = append(errs, fmt.Errorf("failed to create history directory %q: %w", filepath.Dir(historyAbs), err))
-			}
+			mkdirTracked(filepath.Dir(historyAbs))
 		}
 	} else {
 		checkDir := func(name, dir string) {
@@ -242,6 +247,8 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		AssociatedFileExtensions: append([]string(nil), cfg.Media.AssociatedFileExtensions...),
 
 		MediaTagBlacklist: resolveMediaTagBlacklist(cfg.Naming.MediaTagBlacklist),
+
+		CreatedDirs: createdDirs,
 	}, nil
 }
 

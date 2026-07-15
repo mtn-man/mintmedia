@@ -115,4 +115,8 @@ type Resolved struct {
 
 	// Naming patterns passed to Go processor.
 	MediaTagBlacklist []string
+
+	// Directories that didn't exist before this Load call and were created
+	// because auto_create_missing_dirs is true. Empty when nothing was created.
+	CreatedDirs []string
 }
