@@ -11,6 +11,51 @@ import (
 	"github.com/mtn-man/mintmedia/internal/logging"
 )
 
+// defaultMediaTagBlacklist is the built-in set of release-tag patterns
+// stripped from parsed titles. It always applies; naming.media_tag_blacklist
+// in the user's config is additive on top of this list, not a replacement
+// for it -- stripping resolution/codec/source tags is core to how mintmedia
+// derives a clean title, not an opt-in feature.
+var defaultMediaTagBlacklist = []string{
+	"2160p",
+	"1080p",
+	"720p",
+	"480p",
+	"x265",
+	"x264",
+	"hevc",
+	"avc",
+	"av1",
+	"xvid",
+	"h\\.264",
+	"h\\.265",
+	"web[- ]?dl",
+	"webrip",
+	"bluray",
+	"bdrip",
+	"brrip",
+	"hdrip",
+	"hdtv",
+	"dvdrip",
+	"aac",
+	"ac3",
+	"dts",
+	"dd5\\.1",
+	"atmos",
+	"truehd",
+	"hdr10?",
+	"dolby[ .]?vision",
+}
+
+// resolveMediaTagBlacklist merges the built-in defaults with any
+// user-supplied patterns from naming.media_tag_blacklist.
+func resolveMediaTagBlacklist(user []string) []string {
+	merged := make([]string, 0, len(defaultMediaTagBlacklist)+len(user))
+	merged = append(merged, defaultMediaTagBlacklist...)
+	merged = append(merged, user...)
+	return merged
+}
+
 func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	var errs []error
 
@@ -196,7 +241,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		MainMediaExtensions:      append([]string(nil), cfg.Media.MainMediaExtensions...),
 		AssociatedFileExtensions: append([]string(nil), cfg.Media.AssociatedFileExtensions...),
 
-		MediaTagBlacklist: append([]string(nil), cfg.Naming.MediaTagBlacklist...),
+		MediaTagBlacklist: resolveMediaTagBlacklist(cfg.Naming.MediaTagBlacklist),
 	}, nil
 }
 
