@@ -68,8 +68,8 @@ type Torrent struct {
 	// Optional. If set, passed as "--auth user:pass" (or your chosen scheme later).
 	Auth string `toml:"auth"`
 
-	// Optional. If unset, defaults to false.
-	AutoCleanupCompletedTorrents *bool `toml:"auto_cleanup_completed_torrents"`
+	// Optional. Defaults to false.
+	AutoCleanupCompletedTorrents bool `toml:"auto_cleanup_completed_torrents"`
 }
 
 type Media struct {
@@ -117,4 +117,6 @@ type Resolved struct {
 	// Directories that didn't exist before this Load call and were created
 	// because auto_create_missing_dirs is true. Empty when nothing was created.
 	CreatedDirs []string
+
+	AutoCleanupCompletedTorrents bool
 }

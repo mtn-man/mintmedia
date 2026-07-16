@@ -247,6 +247,8 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 		MediaTagBlacklist: resolveMediaTagBlacklist(cfg.Naming.MediaTagBlacklist),
 
+		AutoCleanupCompletedTorrents: cfg.Torrent.AutoCleanupCompletedTorrents,
+
 		CreatedDirs: createdDirs,
 	}, nil
 }

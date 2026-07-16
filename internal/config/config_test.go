@@ -453,11 +453,8 @@ host = "localhost:9091"
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if cfg.Torrent.AutoCleanupCompletedTorrents == nil {
-		t.Fatalf("AutoCleanupCompletedTorrents = nil, want non-nil default")
-	}
-	if *cfg.Torrent.AutoCleanupCompletedTorrents {
-		t.Fatalf("AutoCleanupCompletedTorrents = %v, want false", *cfg.Torrent.AutoCleanupCompletedTorrents)
+	if cfg.Torrent.AutoCleanupCompletedTorrents {
+		t.Fatalf("AutoCleanupCompletedTorrents = %v, want false", cfg.Torrent.AutoCleanupCompletedTorrents)
 	}
 }
 
@@ -495,11 +492,8 @@ auto_cleanup_completed_torrents = false
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if cfg.Torrent.AutoCleanupCompletedTorrents == nil {
-		t.Fatalf("AutoCleanupCompletedTorrents = nil, want explicit false")
-	}
-	if *cfg.Torrent.AutoCleanupCompletedTorrents {
-		t.Fatalf("AutoCleanupCompletedTorrents = %v, want false", *cfg.Torrent.AutoCleanupCompletedTorrents)
+	if cfg.Torrent.AutoCleanupCompletedTorrents {
+		t.Fatalf("AutoCleanupCompletedTorrents = %v, want false", cfg.Torrent.AutoCleanupCompletedTorrents)
 	}
 }
 
@@ -537,11 +531,8 @@ auto_cleanup_completed_torrents = true
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if cfg.Torrent.AutoCleanupCompletedTorrents == nil {
-		t.Fatalf("AutoCleanupCompletedTorrents = nil, want explicit true")
-	}
-	if !*cfg.Torrent.AutoCleanupCompletedTorrents {
-		t.Fatalf("AutoCleanupCompletedTorrents = %v, want true", *cfg.Torrent.AutoCleanupCompletedTorrents)
+	if !cfg.Torrent.AutoCleanupCompletedTorrents {
+		t.Fatalf("AutoCleanupCompletedTorrents = %v, want true", cfg.Torrent.AutoCleanupCompletedTorrents)
 	}
 }
 

@@ -61,11 +61,6 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 		}
 	}
 
-	autoCleanupCompletedTorrents := false
-	if cfg.Torrent.AutoCleanupCompletedTorrents != nil {
-		autoCleanupCompletedTorrents = *cfg.Torrent.AutoCleanupCompletedTorrents
-	}
-
 	d := &daemon.Daemon{
 		Watcher: w,
 		Poller:  poller,
@@ -88,7 +83,7 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 
 		MagnetTimeout: defaultMagnetTimeout,
 
-		AutoCleanupCompletedTorrents: autoCleanupCompletedTorrents,
+		AutoCleanupCompletedTorrents: resolved.AutoCleanupCompletedTorrents,
 		CleanupCooldown:              defaultCleanupCooldown,
 	}
 
