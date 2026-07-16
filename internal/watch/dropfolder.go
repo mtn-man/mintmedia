@@ -389,38 +389,24 @@ func (d *DropFolderWatcher) seedExisting() error {
 func (d *DropFolderWatcher) processingRoot(path string) string {
 	path = filepath.Clean(path)
 
-	rel, err := filepath.Rel(d.root, path)
-	if err != nil {
+	parts, ok := paths.RelComponents(d.root, path)
+	if !ok {
+		// Outside root; should not happen, but fail safe.
 		return path
 	}
-	rel = filepath.Clean(rel)
-
-	sep := string(os.PathSeparator)
-	if rel == "." {
+	if len(parts) == 0 {
 		// The drop folder root itself is not a unit of work.
 		// We only process files or directories *inside* the drop folder.
 		return ""
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+sep) {
-		// Outside root; should not happen, but fail safe.
-		return path
-	}
 
-	parts := strings.Split(rel, sep)
-	if len(parts) == 0 {
-		return path
-	}
 	top := parts[0]
 	if top == "" || top == "." {
 		return path
 	}
 
-	// If nested deeper than one component, coalesce to the top-level folder.
-	if len(parts) > 1 {
-		return filepath.Join(d.root, top)
-	}
-
-	// Direct child (file or directory).
+	// Whether it's a direct child or nested deeper (e.g. a file inside a
+	// torrent folder), the unit of work is always the top-level folder.
 	return filepath.Join(d.root, top)
 }
 
