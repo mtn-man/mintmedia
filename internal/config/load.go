@@ -169,12 +169,6 @@ func applyDefaults(cfg *Config) {
 	if strings.TrimSpace(cfg.Logging.HistoryFile) == "" {
 		cfg.Logging.HistoryFile = defaultHistoryFile
 	}
-
-	// Torrent defaults
-	if cfg.Torrent.AutoCleanupCompletedTorrents == nil {
-		v := false
-		cfg.Torrent.AutoCleanupCompletedTorrents = &v
-	}
 }
 
 // writeDefaultConfig writes the embedded defaults.toml to path,
