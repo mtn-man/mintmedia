@@ -44,10 +44,10 @@ func ResolvePolicy(grace, force time.Duration) Policy {
 }
 
 // Drain executes a graceful-then-forced shutdown wait policy.
-func Drain(policy Policy, hasInFlight bool, wait func(timeout time.Duration) bool, forceCancel func(), hooks Hooks) Result {
+func Drain(policy Policy, wait func(timeout time.Duration) bool, forceCancel func(), hooks Hooks) Result {
 	policy = ResolvePolicy(policy.Grace, policy.Force)
 
-	if hasInFlight && hooks.OnWaitStart != nil {
+	if hooks.OnWaitStart != nil {
 		hooks.OnWaitStart(policy.Grace)
 	}
 	if wait(policy.Grace) {

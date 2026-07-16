@@ -27,50 +27,7 @@ func TestResolvePolicy(t *testing.T) {
 	})
 }
 
-func TestDrain_NoInFlight_ImmediateSuccess(t *testing.T) {
-	waitCalls := 0
-	wait := func(timeout time.Duration) bool {
-		waitCalls++
-		if timeout != 10*time.Second {
-			t.Fatalf("timeout = %s, want %s", timeout, 10*time.Second)
-		}
-		return true
-	}
-
-	waitHookCalled := false
-	graceHookCalled := false
-
-	res := Drain(
-		Policy{Grace: 10 * time.Second, Force: 5 * time.Second},
-		false,
-		wait,
-		nil,
-		Hooks{
-			OnWaitStart: func(time.Duration) { waitHookCalled = true },
-			OnGraceElapsed: func(time.Duration) {
-				graceHookCalled = true
-			},
-		},
-	)
-
-	if waitCalls != 1 {
-		t.Fatalf("wait called %d times, want 1", waitCalls)
-	}
-	if waitHookCalled {
-		t.Fatalf("OnWaitStart called, want not called")
-	}
-	if graceHookCalled {
-		t.Fatalf("OnGraceElapsed called, want not called")
-	}
-	if res.GraceElapsed {
-		t.Fatalf("GraceElapsed = true, want false")
-	}
-	if res.TimedOut {
-		t.Fatalf("TimedOut = true, want false")
-	}
-}
-
-func TestDrain_InFlight_GracefulSuccess(t *testing.T) {
+func TestDrain_ImmediateSuccess(t *testing.T) {
 	waitCalls := 0
 	wait := func(timeout time.Duration) bool {
 		waitCalls++
@@ -85,7 +42,6 @@ func TestDrain_InFlight_GracefulSuccess(t *testing.T) {
 
 	res := Drain(
 		Policy{Grace: 12 * time.Second, Force: 7 * time.Second},
-		true,
 		wait,
 		nil,
 		Hooks{
@@ -143,7 +99,6 @@ func TestDrain_GraceElapsed_ForcedSuccess(t *testing.T) {
 
 	res := Drain(
 		Policy{Grace: 9 * time.Second, Force: 4 * time.Second},
-		true,
 		wait,
 		func() { forceCancelCalls++ },
 		Hooks{
@@ -198,7 +153,6 @@ func TestDrain_GraceElapsed_ForcedTimeout(t *testing.T) {
 
 	res := Drain(
 		Policy{Grace: 8 * time.Second, Force: 3 * time.Second},
-		true,
 		wait,
 		func() { forceCancelCalls++ },
 		Hooks{
