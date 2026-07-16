@@ -1,8 +1,11 @@
 package paths
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // MaxDepth is the maximum directory depth relative to a scan root.
@@ -50,4 +53,33 @@ func DirDepthFromRoot(root, dir string) (depth int, ok bool) {
 func WithinMaxDepth(root, dir string, maxDepth int) bool {
 	depth, ok := DirDepthFromRoot(root, dir)
 	return ok && depth <= maxDepth
+}
+
+// SameDevice reports whether src and dst reside on the same filesystem
+// device, so callers can decide whether os.Rename can succeed in place or a
+// cross-device copy is required. src is Lstat'd rather than Stat'd because
+// os.Rename itself never follows a symlink at the source -- it moves the
+// directory entry, wherever that entry's own inode lives, not whatever it
+// points to. dst is Stat'd since callers care about the real device
+// underlying the destination directory, symlinks and all.
+func SameDevice(src, dst string) (bool, error) {
+	srcInfo, err := os.Lstat(src)
+	if err != nil {
+		return false, fmt.Errorf("lstat %q: %w", src, err)
+	}
+	dstInfo, err := os.Stat(dst)
+	if err != nil {
+		return false, fmt.Errorf("stat %q: %w", dst, err)
+	}
+
+	srcStat, ok := srcInfo.Sys().(*syscall.Stat_t)
+	if !ok || srcStat == nil {
+		return false, fmt.Errorf("stat %q: missing syscall.Stat_t", src)
+	}
+	dstStat, ok := dstInfo.Sys().(*syscall.Stat_t)
+	if !ok || dstStat == nil {
+		return false, fmt.Errorf("stat %q: missing syscall.Stat_t", dst)
+	}
+
+	return srcStat.Dev == dstStat.Dev, nil
 }
