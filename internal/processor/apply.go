@@ -60,12 +60,18 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 
 	// Ensure destination directory exists
 	if err := os.MkdirAll(pl.DestDir, 0o755); err != nil {
+		if transfer.IsDestinationUnavailable(err) {
+			return Result{Plan: pl}, &DestinationUnavailableError{Category: pl.Category, Err: err}
+		}
 		return Result{Plan: pl}, fmt.Errorf("create destination dir %q: %w", pl.DestDir, err)
 	}
 
 	// Move main media first
 	if err := p.xfer.Move(ctx, pl.MainSourcePath, pl.DestMainPath); err != nil {
 		if !handleCleanupError(p, err, "main", pl.MainSourcePath, pl.DestMainPath) {
+			if transfer.IsDestinationUnavailable(err) {
+				return Result{Plan: pl}, &DestinationUnavailableError{Category: pl.Category, Err: err}
+			}
 			return Result{Plan: pl}, fmt.Errorf("move main media: %w", err)
 		}
 	}
@@ -85,6 +91,9 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			continue
 		}
 		if err := os.MkdirAll(filepath.Dir(mv.Dest), 0o755); err != nil {
+			if transfer.IsDestinationUnavailable(err) {
+				return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, &DestinationUnavailableError{Category: pl.Category, Err: err}
+			}
 			return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, fmt.Errorf("create associated dest dir %q: %w", filepath.Dir(mv.Dest), err)
 		}
 		if err := p.xfer.Move(ctx, mv.Source, mv.Dest); err != nil {
@@ -95,6 +104,14 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 					"category": string(pl.Category),
 				})
 				continue
+			}
+			// A destination-unavailable error here signals the same systemic
+			// problem a main-media failure would (disk full/permission
+			// denied), not a one-off associated-file glitch -- it will recur
+			// for every subsequent write to this category, so it escalates
+			// out of the best-effort path instead of being logged and skipped.
+			if transfer.IsDestinationUnavailable(err) {
+				return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, &DestinationUnavailableError{Category: pl.Category, Err: err}
 			}
 			assocFailedCount++
 			if pl.InputPath != "" && assocFailedByInput != nil {

@@ -21,6 +21,10 @@ const (
 	EventDaemonTxCleanupError   Event = "daemon.tx.cleanup.error"
 	EventDaemonTxCleanupRemoved Event = "daemon.tx.cleanup.removed"
 
+	EventDaemonDestinationDegraded  Event = "daemon.destination.degraded"
+	EventDaemonDestinationRecovered Event = "daemon.destination.recovered"
+	EventDaemonDestinationDeferred  Event = "daemon.destination.deferred"
+
 	EventProcessorMoveMainApplied                Event = "processor.move.main.applied"
 	EventProcessorMoveAssociatedApplied          Event = "processor.move.associated.applied"
 	EventProcessorMoveAssociatedFailed           Event = "processor.move.associated.failed"
@@ -54,6 +58,9 @@ func AllOperationalEvents() []Event {
 		EventDaemonProcessError,
 		EventDaemonTxCleanupError,
 		EventDaemonTxCleanupRemoved,
+		EventDaemonDestinationDegraded,
+		EventDaemonDestinationRecovered,
+		EventDaemonDestinationDeferred,
 		EventProcessorMoveMainApplied,
 		EventProcessorMoveAssociatedApplied,
 		EventProcessorMoveAssociatedFailed,
@@ -89,5 +96,7 @@ func DefaultHistoryInfoAllowlist() []Event {
 		EventDaemonMagnetAdded,
 		EventDaemonTxCleanupRemoved,
 		EventDaemonPathDuplicate,
+		EventDaemonDestinationRecovered,
+		EventDaemonDestinationDeferred,
 	}
 }

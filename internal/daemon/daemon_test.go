@@ -575,6 +575,175 @@ func TestDaemon_DeferDestinationChecks(t *testing.T) {
 	}
 }
 
+func TestDaemon_DestinationDegraded_DefersAndRecovers(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	w, err := watch.NewDropFolderWatcher(drop, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	showPath := filepath.Join(drop, "show.mkv")
+	moviePath := filepath.Join(drop, "movie.mkv")
+	destErr := &processor.DestinationUnavailableError{Category: processor.CategoryShow, Err: errors.New("no space left on device")}
+
+	proc := &stubProcessor{
+		started: make(chan string, 4),
+		planCategory: map[string]processor.Category{
+			showPath:  processor.CategoryShow,
+			moviePath: processor.CategoryMovie,
+		},
+		failPathsOnce: map[string]bool{showPath: true},
+		failErr:       destErr,
+	}
+
+	var writable atomic.Bool // false until the test flips it, simulating a full/degraded disk
+
+	d := &Daemon{
+		Watcher:                      w,
+		Proc:                         proc,
+		MoviesDir:                    movies,
+		ShowsDir:                     shows,
+		AutoCleanupCompletedTorrents: false,
+		DeferDestinationChecks:       false,
+		dirWritableFn: func(dir string) bool {
+			return writable.Load()
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Start watcher error: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+
+	// First attempt at the show path fails with a destination-unavailable
+	// error; Shows should now be marked degraded.
+	writeFile(t, showPath, "data")
+	if got := waitForPath(t, proc.started, 3*time.Second); got != showPath {
+		cancel()
+		t.Fatalf("Process called with %q, want %q", got, showPath)
+	}
+
+	// A Movies item dropped while Shows is degraded must still process
+	// normally -- degradation is per-category, not global.
+	writeFile(t, moviePath, "data")
+	if got := waitForPath(t, proc.started, 3*time.Second); got != moviePath {
+		cancel()
+		t.Fatalf("Process called with %q, want %q (Movies should not be paused by a Shows outage)", got, moviePath)
+	}
+
+	// While Shows remains degraded, the show path must not be retried yet.
+	expectNoPath(t, proc.started, 700*time.Millisecond)
+
+	// Recovery: once the destination probe reports writable again, the
+	// deferred show path should be retried on the next tick and succeed
+	// (failPathsOnce was already consumed by the first attempt).
+	writable.Store(true)
+	if got := waitForPath(t, proc.started, 7*time.Second); got != showPath {
+		cancel()
+		t.Fatalf("Process called with %q, want %q after recovery", got, showPath)
+	}
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Run did not exit after cancel")
+	}
+}
+
+// TestDaemon_DestinationDegraded_FastPathRecognizesPartialPlanError covers a
+// path whose Plan() returns a non-empty plan alongside a *processor.PartialPlanError
+// (a directory with one skippable-parse-error sibling) while its category is
+// already degraded. The fast-path pre-check in processPath must still
+// recognize the category from the non-empty plan and defer the item without
+// ever calling Process() -- if it didn't, this would fall through and attempt
+// a doomed move against the known-degraded destination.
+func TestDaemon_DestinationDegraded_FastPathRecognizesPartialPlanError(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	w, err := watch.NewDropFolderWatcher(drop, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	firstShowPath := filepath.Join(drop, "show1.mkv")
+	partialShowPath := filepath.Join(drop, "show2-partial.mkv")
+	destErr := &processor.DestinationUnavailableError{Category: processor.CategoryShow, Err: errors.New("no space left on device")}
+
+	proc := &stubProcessor{
+		started: make(chan string, 4),
+		planCategory: map[string]processor.Category{
+			firstShowPath:   processor.CategoryShow,
+			partialShowPath: processor.CategoryShow,
+		},
+		planWithPartialErr: map[string]bool{partialShowPath: true},
+		failPathsOnce:      map[string]bool{firstShowPath: true},
+		failErr:            destErr,
+	}
+
+	d := &Daemon{
+		Watcher:                      w,
+		Proc:                         proc,
+		MoviesDir:                    movies,
+		ShowsDir:                     shows,
+		AutoCleanupCompletedTorrents: false,
+		DeferDestinationChecks:       false,
+		dirWritableFn:                func(string) bool { return false },
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Start watcher error: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+
+	// First item fails and marks Shows degraded.
+	writeFile(t, firstShowPath, "data")
+	if got := waitForPath(t, proc.started, 3*time.Second); got != firstShowPath {
+		cancel()
+		t.Fatalf("Process called with %q, want %q", got, firstShowPath)
+	}
+
+	// Second item's Plan() returns a *PartialPlanError alongside a usable
+	// plan; the fast path must still recognize its Category and defer it
+	// without ever calling Process() for it.
+	writeFile(t, partialShowPath, "data")
+	expectNoPath(t, proc.started, 2*time.Second)
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Run did not exit after cancel")
+	}
+}
+
 func TestDaemon_ProcessPathAsync_CleansCompletedWhenEnabled(t *testing.T) {
 	var mu sync.Mutex
 	var removedIDs []int
@@ -823,6 +992,23 @@ type stubProcessor struct {
 	blockUntilCtx bool
 	results       []processor.Result
 	err           error
+
+	// planCategory, when non-nil, maps an input path to the Category Plan()
+	// reports for it -- used to exercise the destination-degradation fast
+	// path, which needs to learn a path's category without a real Plan().
+	planCategory map[string]processor.Category
+
+	// planWithPartialErr, when set for a path present in planCategory, makes
+	// Plan() return that path's plan alongside a *processor.PartialPlanError
+	// (mimicking a directory with one skippable-parse-error sibling) instead
+	// of a nil error.
+	planWithPartialErr map[string]bool
+
+	// failPathsOnce, when set, makes Process() return failErr the first time
+	// each listed path is seen and succeed normally on every call after that
+	// (the entry is consumed on first use).
+	failPathsOnce map[string]bool
+	failErr       error
 }
 
 type fakeDaemonCaffeinate struct {
@@ -869,8 +1055,23 @@ func (f *fakeDaemonCaffeinate) stopCallsCount() int {
 	return f.stopCalls
 }
 
-func (s *stubProcessor) Plan(context.Context, processor.Request) ([]processor.Plan, error) {
-	return nil, nil
+func (s *stubProcessor) Plan(_ context.Context, req processor.Request) ([]processor.Plan, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.planCategory == nil {
+		return nil, nil
+	}
+	cat, ok := s.planCategory[req.InputPath]
+	if !ok {
+		return nil, nil
+	}
+	plans := []processor.Plan{{InputPath: req.InputPath, Category: cat}}
+	if s.planWithPartialErr != nil && s.planWithPartialErr[req.InputPath] {
+		return plans, &processor.PartialPlanError{Issues: []processor.PlanIssue{
+			{Path: req.InputPath + ".unparseable", Err: errors.New("test-induced skippable parse error")},
+		}}
+	}
+	return plans, nil
 }
 
 func (s *stubProcessor) Apply(context.Context, []processor.Plan) ([]processor.Result, error) {
@@ -907,6 +1108,17 @@ func (s *stubProcessor) Process(ctx context.Context, req processor.Request) erro
 		}
 		<-ctx.Done()
 		return ctx.Err()
+	}
+
+	s.mu.Lock()
+	failOnce := s.failPathsOnce != nil && s.failPathsOnce[req.InputPath]
+	if failOnce {
+		delete(s.failPathsOnce, req.InputPath)
+	}
+	failErr := s.failErr
+	s.mu.Unlock()
+	if failOnce {
+		return failErr
 	}
 
 	if s.err != nil {
@@ -1040,6 +1252,52 @@ func TestDaemon_InFlightDedupe(t *testing.T) {
 	}
 	if !d.tryMarkInFlight(path) {
 		t.Fatalf("expected mark after clear to succeed")
+	}
+}
+
+func TestDaemon_DestDegradedTransitions(t *testing.T) {
+	d := &Daemon{MoviesDir: "/movies", ShowsDir: "/shows"}
+
+	if d.isDestDegraded(processor.CategoryShow) {
+		t.Fatalf("expected Shows to start healthy")
+	}
+	if d.anyDestDegraded() {
+		t.Fatalf("expected nothing degraded initially")
+	}
+	if d.dirFor(processor.CategoryShow) != "/shows" || d.dirFor(processor.CategoryMovie) != "/movies" {
+		t.Fatalf("dirFor mapped the wrong directory")
+	}
+
+	if !d.markDestDegraded(processor.CategoryShow) {
+		t.Fatalf("expected first mark to report a transition")
+	}
+	if d.markDestDegraded(processor.CategoryShow) {
+		t.Fatalf("expected repeat mark to report no transition")
+	}
+	if !d.isDestDegraded(processor.CategoryShow) {
+		t.Fatalf("expected Shows to be degraded")
+	}
+	if d.isDestDegraded(processor.CategoryMovie) {
+		t.Fatalf("expected Movies to remain healthy while only Shows is degraded")
+	}
+	if !d.anyDestDegraded() {
+		t.Fatalf("expected anyDestDegraded to be true")
+	}
+	if got := d.degradedCategories(); len(got) != 1 || got[0] != processor.CategoryShow {
+		t.Fatalf("degradedCategories() = %v, want [Shows]", got)
+	}
+
+	if !d.clearDestDegraded(processor.CategoryShow) {
+		t.Fatalf("expected first clear to report a transition")
+	}
+	if d.clearDestDegraded(processor.CategoryShow) {
+		t.Fatalf("expected repeat clear to report no transition")
+	}
+	if d.isDestDegraded(processor.CategoryShow) {
+		t.Fatalf("expected Shows to be healthy again")
+	}
+	if d.anyDestDegraded() {
+		t.Fatalf("expected nothing degraded after clearing")
 	}
 }
 

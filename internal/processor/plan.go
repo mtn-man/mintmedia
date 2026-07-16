@@ -74,6 +74,16 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 					issues = append(issues, PlanIssue{Path: main, Err: err})
 					continue
 				}
+				var destErr *DestinationUnavailableError
+				if errors.As(err, &destErr) && len(plans) > 0 {
+					// The destination is unavailable to every remaining
+					// sibling too, so there's no point continuing to plan
+					// them -- but the plans already computed for earlier
+					// siblings are still good and shouldn't be thrown away;
+					// the caller can apply them now instead of redoing this
+					// work once the destination recovers.
+					return plans, err
+				}
 				return nil, err
 			}
 			plans = append(plans, pl)

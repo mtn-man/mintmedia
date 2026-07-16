@@ -4,9 +4,11 @@ package processor
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/mtn-man/mintmedia/internal/logging"
@@ -317,6 +319,132 @@ func TestApply_MainMoveCleanupFailureIsNonFatal(t *testing.T) {
 	}
 }
 
+func TestApply_MainMoveDiskFull_ReturnsDestinationUnavailableError(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+
+	mainName := "Stranger.Things.S05E09.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	writeFile(t, mainSrc, strings.Repeat("m", 64))
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+
+	p.xfer = enospcTransferer{}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Applied {
+		t.Fatalf("Applied = true, want false")
+	}
+
+	var destErr *DestinationUnavailableError
+	if !errors.As(err, &destErr) {
+		t.Fatalf("expected *DestinationUnavailableError, got: %v", err)
+	}
+	if destErr.Category != CategoryShow {
+		t.Fatalf("Category = %v, want %v", destErr.Category, CategoryShow)
+	}
+	if !errors.Is(destErr, syscall.ENOSPC) {
+		t.Fatalf("expected wrapped error to satisfy errors.Is(syscall.ENOSPC): %v", destErr)
+	}
+
+	// Source must remain untouched: the move never actually happened.
+	if _, err := os.Stat(mainSrc); err != nil {
+		t.Fatalf("source should remain in place after a failed move: %v", err)
+	}
+}
+
+func TestApply_AssociatedMoveDiskFull_ReturnsDestinationUnavailableError(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+
+	inputDir := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E04.1080p.HEVC.x265-MeGusta[EZTVx.to]")
+	mkdirAll(t, inputDir)
+
+	mainName := "Deadwood.S01E04.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+	mainSrc := filepath.Join(inputDir, mainName)
+	writeFile(t, mainSrc, strings.Repeat("m", 64))
+
+	assocSrc := filepath.Join(inputDir, "Deadwood.S01E04.1080p.HEVC.x265-MeGusta[EZTVx.to].en.srt")
+	writeFile(t, assocSrc, "subtitle")
+
+	pl, err := planOne(t, p, inputDir)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+
+	// Main media moves fine; the associated file hits a full disk.
+	p.xfer = &failOneWithENOSPC{failSrc: assocSrc, delegate: &osRenameTransferer{}}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+
+	var destErr *DestinationUnavailableError
+	if !errors.As(err, &destErr) {
+		t.Fatalf("expected *DestinationUnavailableError, got: %v", err)
+	}
+	if destErr.Category != CategoryShow {
+		t.Fatalf("Category = %v, want %v", destErr.Category, CategoryShow)
+	}
+
+	// The main file still applied successfully; only the associated move
+	// escalated to a hard error instead of being swallowed as a warning.
+	if _, err := os.Stat(pl.DestMainPath); err != nil {
+		t.Fatalf("dest main missing (%s): %v", pl.DestMainPath, err)
+	}
+}
+
+func TestApply_DestDirPermissionDenied_ReturnsDestinationUnavailableError(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permission bits")
+	}
+	p := newTestProcessorWithExecDeps(t)
+
+	mainName := "Deadwood.S01E01.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	writeFile(t, mainSrc, strings.Repeat("m", 64))
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+
+	// Lock down ShowsDir itself so MkdirAll(pl.DestDir, ...) -- which runs
+	// before the Transferer is ever invoked -- fails with permission denied.
+	// This is the path a real chmod-000-destination hits first.
+	if err := os.Chmod(p.cfg.ShowsDir, 0o000); err != nil {
+		t.Fatalf("chmod ShowsDir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(p.cfg.ShowsDir, 0o755) })
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if results[0].Applied {
+		t.Fatalf("Applied = true, want false")
+	}
+
+	var destErr *DestinationUnavailableError
+	if !errors.As(err, &destErr) {
+		t.Fatalf("expected *DestinationUnavailableError, got: %v", err)
+	}
+	if destErr.Category != CategoryShow {
+		t.Fatalf("Category = %v, want %v", destErr.Category, CategoryShow)
+	}
+	if !errors.Is(destErr, fs.ErrPermission) {
+		t.Fatalf("expected wrapped error to satisfy errors.Is(fs.ErrPermission): %v", destErr)
+	}
+}
+
 func TestApply_RefusesToDeleteDropFolderRoot_WhenInputIsRoot(t *testing.T) {
 	t.Parallel()
 
@@ -443,6 +571,27 @@ func (f *failOneTransferer) Move(ctx context.Context, src, dst string) error {
 		return errors.New("forced transfer failure for test")
 	}
 	return f.delegate.Move(ctx, src, dst)
+}
+
+type failOneWithENOSPC struct {
+	failSrc  string
+	delegate Transferer
+}
+
+func (f *failOneWithENOSPC) Move(ctx context.Context, src, dst string) error {
+	if filepath.Clean(src) == filepath.Clean(f.failSrc) {
+		return &fs.PathError{Op: "write", Path: dst, Err: syscall.ENOSPC}
+	}
+	return f.delegate.Move(ctx, src, dst)
+}
+
+type enospcTransferer struct{}
+
+func (enospcTransferer) Move(ctx context.Context, src, dst string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return &fs.PathError{Op: "write", Path: dst, Err: syscall.ENOSPC}
 }
 
 type cleanupErrorTransferer struct{}

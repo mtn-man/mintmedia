@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/transfer"
 )
 
 var (
@@ -30,6 +31,9 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 
 	entries, err := os.ReadDir(showsDir)
 	if err != nil {
+		if transfer.IsDestinationUnavailable(err) {
+			return "", "", &DestinationUnavailableError{Category: CategoryShow, Err: err}
+		}
 		return "", "", fmt.Errorf("read shows dir %q: %w", showsDir, err)
 	}
 
