@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/mtn-man/mintmedia/internal/console"
@@ -14,12 +13,7 @@ import (
 	"github.com/mtn-man/mintmedia/internal/processor"
 	"github.com/mtn-man/mintmedia/internal/resultformat"
 	"github.com/mtn-man/mintmedia/internal/shutdown"
-	"github.com/mtn-man/mintmedia/internal/watch"
 )
-
-type dropCandidate struct {
-	path string
-}
 
 type ProcessDropOutcome struct {
 	ErrorCount  int
@@ -63,60 +57,13 @@ func processDropFolder(
 		}
 	}()
 
-	entries, err := os.ReadDir(dropRoot)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("ERROR    %v", err)))
+	candidates, errCount, readErr, sortErr := discoverDropPaths(ctx, proc, dropRoot)
+	if readErr != nil {
+		fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("ERROR    %v", readErr)))
 		return ProcessDropOutcome{ErrorCount: 1}
 	}
-
-	candidates := make([]dropCandidate, 0, len(entries))
-	errCount := 0
-
-	for _, ent := range entries {
-		name := ent.Name()
-		if watch.IsIgnorableDropEntry(name) {
-			continue
-		}
-		path := filepath.Join(dropRoot, name)
-
-		info, err := ent.Info()
-		if err != nil {
-			PrintProcessDropStatError(path, err)
-			errCount++
-			continue
-		}
-		if !info.IsDir() && !info.Mode().IsRegular() {
-			continue
-		}
-
-		candidates = append(candidates, dropCandidate{path: path})
-	}
-
-	{
-		paths := make([]string, len(candidates))
-		for i, c := range candidates {
-			paths[i] = c.path
-		}
-		sortedPaths, sortErrs, sortErr := processor.SortCandidates(ctx, proc, paths)
-		if sortErr != nil {
-			return ProcessDropOutcome{ErrorCount: errCount, Interrupted: true}
-		}
-		for _, se := range sortErrs {
-			PrintProcessDropSortError(se.Path, se.Err)
-			errCount++
-		}
-		// Build a lookup so we can reconstruct candidates in sorted order.
-		idx := make(map[string]dropCandidate, len(candidates))
-		for _, c := range candidates {
-			idx[c.path] = c
-		}
-		ordered := make([]dropCandidate, 0, len(sortedPaths))
-		for _, p := range sortedPaths {
-			if c, ok := idx[p]; ok {
-				ordered = append(ordered, c)
-			}
-		}
-		candidates = ordered
+	if sortErr != nil {
+		return ProcessDropOutcome{ErrorCount: errCount, Interrupted: true}
 	}
 
 	if len(candidates) == 0 && errCount == 0 {
@@ -130,11 +77,7 @@ func processDropFolder(
 	// Count actual media files via a planning pass so the discovery message
 	// reflects the real number of files to process rather than the number of
 	// top-level drop entries (e.g. a season pack directory counts as 8, not 1).
-	candidatePaths := make([]string, len(candidates))
-	for i, c := range candidates {
-		candidatePaths[i] = c.path
-	}
-	fileCount, countInterrupted := processor.CountPlans(ctx, proc, candidatePaths)
+	fileCount, countInterrupted := processor.CountPlans(ctx, proc, candidates)
 	if countInterrupted {
 		return ProcessDropOutcome{ErrorCount: errCount, Interrupted: true}
 	}
@@ -170,7 +113,7 @@ func processDropFolder(
 		},
 	}
 
-	for _, item := range candidates {
+	for _, path := range candidates {
 		if ctx.Err() != nil {
 			if !interrupted {
 				interrupted = true
@@ -200,7 +143,7 @@ func processDropFolder(
 			summary.Skipped++
 		}
 
-		_, runErr := jobrunner.Run(ctx, policy, hooks, proc, item.path, recordResult)
+		_, runErr := jobrunner.Run(ctx, policy, hooks, proc, path, recordResult)
 
 		if ctx.Err() != nil && !interrupted {
 			interrupted = true
@@ -213,7 +156,7 @@ func processDropFolder(
 		}
 
 		if runErr != nil {
-			PrintProcessDropItemError(item.path, runErr, time.Since(itemStart).Round(time.Second))
+			PrintProcessDropItemError(path, runErr, time.Since(itemStart).Round(time.Second))
 			errCount++
 		}
 
