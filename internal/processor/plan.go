@@ -379,3 +379,25 @@ func planForMain(
 
 	return pl, nil
 }
+
+// CountPlans runs Plan against each path and sums the resulting plan counts
+// (e.g. a season-pack directory counts as 8 files, not 1), so callers get an
+// accurate human-facing file count across expansion. Paths that fail to plan
+// (non-media, unparseable) are silently skipped -- the caller's own
+// processing loop is responsible for surfacing that error later.
+// Stops early if ctx is canceled, returning the partial count and
+// interrupted=true so callers can distinguish a full count from a
+// cancellation-truncated one.
+func CountPlans(ctx context.Context, proc Processor, paths []string) (count int, interrupted bool) {
+	for _, p := range paths {
+		if ctx.Err() != nil {
+			return count, true
+		}
+		plans, err := proc.Plan(ctx, Request{InputPath: p})
+		if err != nil {
+			continue
+		}
+		count += len(plans)
+	}
+	return count, false
+}

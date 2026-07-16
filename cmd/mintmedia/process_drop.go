@@ -130,16 +130,13 @@ func processDropFolder(
 	// Count actual media files via a planning pass so the discovery message
 	// reflects the real number of files to process rather than the number of
 	// top-level drop entries (e.g. a season pack directory counts as 8, not 1).
-	fileCount := 0
-	for _, c := range candidates {
-		if ctx.Err() != nil {
-			return ProcessDropOutcome{ErrorCount: errCount, Interrupted: true}
-		}
-		plans, planErr := proc.Plan(ctx, processor.Request{InputPath: c.path})
-		if planErr != nil {
-			continue // non-media or unparseable; the processing loop will handle it
-		}
-		fileCount += len(plans)
+	candidatePaths := make([]string, len(candidates))
+	for i, c := range candidates {
+		candidatePaths[i] = c.path
+	}
+	fileCount, countInterrupted := processor.CountPlans(ctx, proc, candidatePaths)
+	if countInterrupted {
+		return ProcessDropOutcome{ErrorCount: errCount, Interrupted: true}
 	}
 	if fileCount == 0 && errCount == 0 {
 		PrintProcessDropNoFiles()

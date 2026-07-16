@@ -277,17 +277,7 @@ runLoop:
 					d.logSortParseError(se.Path, se.Err)
 				}
 
-				fileCount := 0
-				for _, pth := range sortedPaths {
-					if ctx.Err() != nil {
-						break
-					}
-					plans, planErr := d.Proc.Plan(ctx, processor.Request{InputPath: pth})
-					if planErr != nil {
-						continue
-					}
-					fileCount += len(plans)
-				}
+				fileCount, _ := processor.CountPlans(ctx, d.Proc, sortedPaths)
 				noun := resultformat.Pluralize(fileCount, "file", "files")
 				d.logConsoleInfo(
 					logging.EventSystemDestinationsReady,
