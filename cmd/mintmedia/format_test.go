@@ -49,7 +49,7 @@ func TestProcessDropCompactLine_Skipped(t *testing.T) {
 	}
 
 	got := processDropCompactLine(res, 0)
-	want := "SKIPPED  Unknown.Release \u2014 no main media found in directory"
+	want := "SKIPPED  Unknown.Release -- no main media found in directory"
 	if got != want {
 		t.Fatalf("processDropCompactLine(skipped) = %q, want %q", got, want)
 	}
@@ -69,7 +69,7 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Errors:  1,
 				Elapsed: 3*time.Minute + 14*time.Second + 250*time.Millisecond,
 			},
-			want: "INFO     10 files \u2014 7 sorted, 2 skipped, 1 error (3m14s)",
+			want: "INFO     10 files -- 7 sorted, 2 skipped, 1 error (3m14s)",
 		},
 		{
 			name: "clean run",
@@ -77,7 +77,7 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Applied: 3,
 				Elapsed: 62 * time.Second,
 			},
-			want: "INFO     3 files \u2014 3 sorted (1m2s)",
+			want: "INFO     3 files -- 3 sorted (1m2s)",
 		},
 		{
 			name: "single file",
@@ -85,7 +85,7 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Applied: 1,
 				Elapsed: 5 * time.Second,
 			},
-			want: "INFO     1 file \u2014 1 sorted (5s)",
+			want: "INFO     1 file -- 1 sorted (5s)",
 		},
 		{
 			name: "multiple errors",
@@ -94,7 +94,7 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Errors:  2,
 				Elapsed: 10 * time.Second,
 			},
-			want: "INFO     4 files \u2014 2 sorted, 2 errors (10s)",
+			want: "INFO     4 files -- 2 sorted, 2 errors (10s)",
 		},
 		{
 			name: "season pack",
@@ -102,15 +102,15 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Applied: 8,
 				Elapsed: 6*time.Minute + 2*time.Second,
 			},
-			want: "INFO     8 files \u2014 8 sorted (6m2s)",
+			want: "INFO     8 files -- 8 sorted (6m2s)",
 		},
 		{
-			name: "instant \u2014 duration suppressed",
+			name: "instant duration suppressed",
 			sum: ProcessDropSummary{
 				Applied: 1,
 				Elapsed: 400 * time.Millisecond,
 			},
-			want: "INFO     1 file \u2014 1 sorted",
+			want: "INFO     1 file -- 1 sorted",
 		},
 	}
 

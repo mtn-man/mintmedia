@@ -164,7 +164,7 @@ func processDropSummaryLine(s ProcessDropSummary) string {
 		durSuffix = fmt.Sprintf(" (%s)", elapsed)
 	}
 	return fmt.Sprintf(
-		"INFO     %d %s — %s%s",
+		"INFO     %d %s -- %s%s",
 		total,
 		noun,
 		strings.Join(parts, ", "),

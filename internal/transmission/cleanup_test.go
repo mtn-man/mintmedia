@@ -47,7 +47,7 @@ func TestRemoveCompleted_NoArgumentsKeyReturnsZero(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		// Omit "arguments" key entirely — some servers or proxies may do this.
+		// Omit "arguments" key entirely -- some servers or proxies may do this.
 		_, _ = w.Write([]byte(`{"result":"success"}`))
 	}))
 	defer ts.Close()

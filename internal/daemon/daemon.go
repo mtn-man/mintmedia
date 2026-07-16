@@ -440,7 +440,7 @@ runLoop:
 				defer cancel()
 
 				if err := d.Tx.AddMagnet(tctx, m); err != nil {
-					d.logConsoleError(logging.EventDaemonTxAddError, fmt.Sprintf("ERROR    torrent: could not add — %v", err), err, logging.Fields{
+					d.logConsoleError(logging.EventDaemonTxAddError, fmt.Sprintf("ERROR    torrent: could not add -- %v", err), err, logging.Fields{
 						"btih": btihShort,
 					})
 					d.logHistoryError(logging.EventDaemonTxAddError, err, logging.Fields{

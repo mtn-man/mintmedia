@@ -112,7 +112,7 @@ func TestCompactLine(t *testing.T) {
 			},
 			nameArg:   "Show.S01E02.mkv",
 			dur:       0,
-			wantExact: "SKIPPED  Show.S01E02.mkv — ambiguous show folder match",
+			wantExact: "SKIPPED  Show.S01E02.mkv -- ambiguous show folder match",
 		},
 		{
 			name: "skipped with empty reason falls back",
@@ -122,7 +122,7 @@ func TestCompactLine(t *testing.T) {
 			},
 			nameArg:   "Show.S01E02.mkv",
 			dur:       0,
-			wantExact: "SKIPPED  Show.S01E02.mkv — not applied",
+			wantExact: "SKIPPED  Show.S01E02.mkv -- not applied",
 		},
 	}
 
