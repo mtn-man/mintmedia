@@ -109,7 +109,7 @@ func Run(
 		case runErr = <-done:
 			gotFinal = true
 		case <-shutdownCtx.Done():
-			drain = shutdown.Drain(policy, true, waitForResult, cancelItem, hooks)
+			drain = shutdown.Drain(policy, waitForResult, cancelItem, hooks)
 			if drain.TimedOut {
 				closeItemClosed()
 				return drain, ErrAbandoned
