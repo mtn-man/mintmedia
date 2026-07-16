@@ -7,7 +7,7 @@ import (
 )
 
 // RemoveCompleted removes all 100%-complete torrents from Transmission.
-// It removes the queue entry only — local data is not deleted.
+// It removes the queue entry only -- local data is not deleted.
 // Returns the number of entries removed.
 func (c *Client) RemoveCompleted(ctx context.Context) (int, error) {
 	if err := c.validate(); err != nil {

@@ -28,7 +28,7 @@ func CleanName(raw string) string {
 
 // CompactLine renders a processor.Result as a single-line status line in the
 // tool's SORTED/SKIPPED voice. The line is unprefixed and uncolorized apart
-// from the destination arrow — callers still apply
+// from the destination arrow -- callers still apply
 // console.ColorizePrefixOut/Err for the label color themselves, since that's
 // applied uniformly to every console line, not just these two.
 func CompactLine(res processor.Result, name string, dur time.Duration) string {
@@ -48,7 +48,7 @@ func CompactLine(res processor.Result, name string, dur time.Duration) string {
 	if reason == "" {
 		reason = "not applied"
 	}
-	return fmt.Sprintf("SKIPPED  %s — %s", name, reason)
+	return fmt.Sprintf("SKIPPED  %s -- %s", name, reason)
 }
 
 // Pluralize returns singular when n == 1, plural otherwise.
@@ -75,12 +75,12 @@ func ShutdownGraceElapsedMessage(noun string, force time.Duration) string {
 
 // ErrorLine renders an item-level failure in the tool's ERROR voice. The line
 // is unprefixed and uncolorized apart from the destination arrow convention
-// used elsewhere — callers still apply console.ColorizePrefixErr themselves.
+// used elsewhere -- callers still apply console.ColorizePrefixErr themselves.
 // dur is omitted from the line when it's under a second, matching CompactLine.
 func ErrorLine(path string, err error, dur time.Duration) string {
 	durSuffix := ""
 	if dur >= time.Second {
 		durSuffix = fmt.Sprintf("  (%s)", shutdown.FormatDurationCompact(dur))
 	}
-	return fmt.Sprintf("ERROR    %s — %v%s", path, err, durSuffix)
+	return fmt.Sprintf("ERROR    %s -- %v%s", path, err, durSuffix)
 }

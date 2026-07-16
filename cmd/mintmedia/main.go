@@ -134,7 +134,7 @@ func main() {
 			die(err, exitError)
 		}
 		if err := p.Signal(syscall.SIGTERM); err != nil {
-			// Process exited in the window between CheckLock and Signal — already stopped.
+			// Process exited in the window between CheckLock and Signal -- already stopped.
 			if errors.Is(err, syscall.ESRCH) {
 				fmt.Println(console.ColorizePrefixOut("STOPPED  daemon"))
 				return

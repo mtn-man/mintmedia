@@ -191,7 +191,7 @@ func handleCleanupError(p *processorImpl, err error, kind, src, dst string) bool
 	logWarn(
 		p,
 		logging.EventProcessorCleanupSourceFailed,
-		fmt.Sprintf("%s source not removed: %s — %v", kind, logSrc, logErr),
+		fmt.Sprintf("%s source not removed: %s -- %v", kind, logSrc, logErr),
 		logErr,
 		logging.Fields{
 			"cleanup_kind": kind,

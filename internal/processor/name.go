@@ -316,7 +316,7 @@ func parseMovieOnce(blacklist []*regexp.Regexp, raw string) (title string, year 
 	raw = strings.TrimSuffix(raw, filepath.Ext(raw))
 
 	// If year exists, keep only portion before the year occurrence for the title.
-	// Year is always ASCII digits — no case fold needed.
+	// Year is always ASCII digits -- no case fold needed.
 	if year != "" {
 		if yidx := strings.Index(raw, year); yidx > 0 {
 			raw = raw[:yidx]

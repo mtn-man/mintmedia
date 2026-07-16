@@ -158,7 +158,7 @@ func parseShowFolderQualifier(folder string) (base string, qualifier string, ok 
 }
 
 // parseShowFolderYear is like parseShowFolderQualifier but only recognizes a
-// trailing 4-digit year, not an arbitrary qualifier — used where the caller
+// trailing 4-digit year, not an arbitrary qualifier -- used where the caller
 // needs to strip a year specifically (year is tracked and re-appended
 // separately) without also stripping identity-bearing qualifiers like
 // country tags.
