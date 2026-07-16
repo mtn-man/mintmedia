@@ -31,18 +31,35 @@ type LockInfo struct {
 // Returns (LockInfo{}, false, nil) for a stale or absent lock.
 // Returns an error if the lock file exists but cannot be parsed.
 func CheckLock(lockPath string) (LockInfo, bool, error) {
+	info, exists, err := readLockFile(lockPath)
+	if err != nil {
+		return LockInfo{}, false, err
+	}
+	if !exists {
+		return LockInfo{}, false, nil
+	}
+	return info, isProcessAlive(info.PID), nil
+}
+
+// readLockFile reads and parses the lock file at lockPath. It is the single
+// mechanism shared by CheckLock (fail-open: an absent/unreadable lock means
+// "not running") and AcquireLock (fail-closed: an absent/unreadable lock
+// mid-race is treated as "can't be confident, refuse to start") -- each
+// caller applies its own policy on top of exists/err rather than sharing one.
+//
+// exists reports whether the lock file exists. When exists is false, err is
+// always nil (a missing lock file is not an error). When exists is true, err
+// is non-nil if the file could not be read or parsed.
+func readLockFile(lockPath string) (info LockInfo, exists bool, err error) {
 	b, err := os.ReadFile(lockPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return LockInfo{}, false, nil
 		}
-		return LockInfo{}, false, fmt.Errorf("read lock file: %w", err)
+		return LockInfo{}, true, fmt.Errorf("read lock file: %w", err)
 	}
-	info, err := parseLockContents(b)
-	if err != nil {
-		return LockInfo{}, false, err
-	}
-	return info, isProcessAlive(info.PID), nil
+	info, err = parseLockContents(b)
+	return info, true, err
 }
 
 // parseLockContents parses the key=value contents of a lock file.
@@ -131,12 +148,12 @@ func AcquireLock(lockPath string) (ReleaseFunc, error) {
 	}
 
 	// Lock file exists: check staleness.
-	pid, readErr := readPIDFromLock(lockPath)
-	if readErr != nil {
+	pid, alive, staleErr := checkStaleness(lockPath)
+	if staleErr != nil {
 		// If we can't confidently read the lock, fail closed.
 		return nil, fmt.Errorf("%w: lock=%s", ErrAlreadyRunning, lockPath)
 	}
-	if isProcessAlive(pid) {
+	if alive {
 		return nil, fmt.Errorf("%w: pid=%d lock=%s", ErrAlreadyRunning, pid, lockPath)
 	}
 
@@ -149,13 +166,28 @@ func AcquireLock(lockPath string) (ReleaseFunc, error) {
 	}
 	if errors.Is(err, os.ErrExist) {
 		// Race: someone else acquired it after we removed/while retrying.
-		pid, readErr := readPIDFromLock(lockPath)
-		if readErr == nil && isProcessAlive(pid) {
+		pid, alive, staleErr := checkStaleness(lockPath)
+		if staleErr == nil && alive {
 			return nil, fmt.Errorf("%w: pid=%d lock=%s", ErrAlreadyRunning, pid, lockPath)
 		}
 		return nil, fmt.Errorf("%w: lock=%s", ErrAlreadyRunning, lockPath)
 	}
 	return nil, err
+}
+
+// checkStaleness reads the lock at lockPath and reports whether its PID is
+// alive. Fail-closed policy on top of readLockFile: a vanished or unreadable
+// lock file returns a non-nil err (see readLockFile's doc comment for why
+// this differs from CheckLock's fail-open behavior).
+func checkStaleness(lockPath string) (pid int, alive bool, err error) {
+	info, exists, err := readLockFile(lockPath)
+	if err != nil {
+		return 0, false, err
+	}
+	if !exists {
+		return 0, false, fmt.Errorf("lock file vanished mid-check")
+	}
+	return info.PID, isProcessAlive(info.PID), nil
 }
 
 func tryCreateLock(lockPath string) (ReleaseFunc, error) {
@@ -183,18 +215,6 @@ func tryCreateLock(lockPath string) (ReleaseFunc, error) {
 		}
 		return nil
 	}, nil
-}
-
-func readPIDFromLock(lockPath string) (int, error) {
-	b, err := os.ReadFile(lockPath)
-	if err != nil {
-		return 0, fmt.Errorf("read lock file: %w", err)
-	}
-	info, err := parseLockContents(b)
-	if err != nil {
-		return 0, err
-	}
-	return info.PID, nil
 }
 
 // isProcessAlive returns true if a process with pid appears to be running.
