@@ -152,11 +152,7 @@ func processDropSummaryLine(s ProcessDropSummary) string {
 		parts = append(parts, fmt.Sprintf("%d skipped", s.Skipped))
 	}
 	if s.Errors > 0 {
-		errNoun := "error"
-		if s.Errors != 1 {
-			errNoun = "errors"
-		}
-		parts = append(parts, fmt.Sprintf("%d %s", s.Errors, errNoun))
+		parts = append(parts, fmt.Sprintf("%d %s", s.Errors, resultformat.Pluralize(s.Errors, "error", "errors")))
 	}
 
 	durSuffix := ""
