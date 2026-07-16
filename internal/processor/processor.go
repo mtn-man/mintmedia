@@ -110,7 +110,10 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 
 	plans, err := p.Plan(ctx, req)
 	var partial *PartialPlanError
-	if err != nil && !errors.As(err, &partial) {
+	var destErr *DestinationUnavailableError
+	isPartial := errors.As(err, &partial)
+	isDestUnavailable := errors.As(err, &destErr)
+	if err != nil && !isPartial && !isDestUnavailable {
 		var noMediaErr *NoMainMediaFoundError
 		if errors.As(err, &noMediaErr) && noMediaErr.DepthHit {
 			logWarnHistoryOnly(p, logging.EventProcessorInputMaxDepthNoMedia, nil, logging.Fields{
@@ -157,8 +160,8 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 		return err
 	}
 
-	if _, err := applyWithEmitter(ctx, p, plans, emit); err != nil {
-		return err
+	if _, applyErr := applyWithEmitter(ctx, p, plans, emit); applyErr != nil {
+		return applyErr
 	}
 
 	if partial != nil && len(partial.Issues) > 0 {
@@ -181,6 +184,14 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 				Reason:  issue.Err.Error(),
 			})
 		}
+	}
+
+	if isDestUnavailable {
+		// Whatever plans were already computed for this input just applied
+		// successfully above; destErr still propagates so the caller (the
+		// daemon) knows this destination is unavailable and defers the rest
+		// of this input for retry once it recovers.
+		return destErr
 	}
 	return nil
 }

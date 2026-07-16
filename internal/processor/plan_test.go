@@ -3,6 +3,7 @@ package processor
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1621,5 +1622,46 @@ func TestPlan_TableDriven(t *testing.T) {
 			}
 			c.check(t, p, input, pl, err)
 		})
+	}
+}
+
+// TestPlan_DirectoryBatch_PreservesEarlierPlansOnDestinationUnavailable covers
+// a mixed-category directory (a movie file plans first, alphabetically,
+// before a show file) where the show file's resolveShowFolder call hits a
+// ShowsDir that's unavailable. plan() must return the already-computed movie
+// plan alongside the error instead of discarding it.
+func TestPlan_DirectoryBatch_PreservesEarlierPlansOnDestinationUnavailable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permission bits")
+	}
+	p := newTestProcessor(t)
+
+	dir := filepath.Join(p.cfg.DropFolder, "MixedBatch")
+	mkdirAll(t, dir)
+	// "A" sorts before "Z" so the movie plans successfully before the show
+	// file's resolveShowFolder call ever runs.
+	writeFile(t, filepath.Join(dir, "AMovie.2020.1080p.BluRay.x264-GROUP.mkv"), "dummy")
+	writeFile(t, filepath.Join(dir, "Zdeadwood.S01E01.1080p.HEVC.x265-MeGusta.mkv"), "dummy")
+
+	if err := os.Chmod(p.cfg.ShowsDir, 0o000); err != nil {
+		t.Fatalf("chmod ShowsDir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(p.cfg.ShowsDir, 0o755) })
+
+	plans, err := p.Plan(context.Background(), Request{InputPath: dir})
+
+	var destErr *DestinationUnavailableError
+	if !errors.As(err, &destErr) {
+		t.Fatalf("expected *DestinationUnavailableError, got: %v", err)
+	}
+	if destErr.Category != CategoryShow {
+		t.Fatalf("Category = %v, want %v", destErr.Category, CategoryShow)
+	}
+
+	if len(plans) != 1 {
+		t.Fatalf("expected the already-planned movie to be preserved, got %d plans", len(plans))
+	}
+	if plans[0].Category != CategoryMovie {
+		t.Fatalf("preserved plan Category = %v, want %v", plans[0].Category, CategoryMovie)
 	}
 }

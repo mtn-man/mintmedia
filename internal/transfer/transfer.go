@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,6 +13,17 @@ import (
 	"syscall"
 	"time"
 )
+
+// IsDestinationUnavailable reports whether err indicates the destination
+// filesystem itself is the problem (out of space, over quota, or permission
+// denied) rather than an ordinary one-off move failure. Callers can use this
+// to distinguish a systemic destination outage -- worth pausing further
+// writes until it clears -- from a transient or item-specific error.
+func IsDestinationUnavailable(err error) bool {
+	return errors.Is(err, syscall.ENOSPC) ||
+		errors.Is(err, syscall.EDQUOT) ||
+		errors.Is(err, fs.ErrPermission)
+}
 
 // Options configures transfer behavior.
 type Options struct {

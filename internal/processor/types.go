@@ -171,6 +171,27 @@ func (e *NoMainMediaFoundError) Unwrap() error {
 	return ErrNoMainMediaFound
 }
 
+// DestinationUnavailableError indicates an operation against a destination
+// directory failed because the destination filesystem itself is the problem
+// (out of space, over quota, or permission denied) rather than an ordinary
+// one-off failure. It can surface from either Plan (e.g. resolveShowFolder
+// listing an inaccessible ShowsDir) or Apply (creating a destination
+// directory, or moving a main or associated file). Category identifies which
+// destination (Movies or Shows) is affected so callers can pause further
+// writes to just that destination rather than the whole pipeline.
+type DestinationUnavailableError struct {
+	Category Category
+	Err      error
+}
+
+func (e *DestinationUnavailableError) Error() string {
+	return fmt.Sprintf("destination unavailable for %s: %v", e.Category, e.Err)
+}
+
+func (e *DestinationUnavailableError) Unwrap() error {
+	return e.Err
+}
+
 // Sentinel errors used by Plan() so higher layers (worker/watch) can decide what to do.
 var (
 	// ErrNotMedia indicates the input is not a recognized main media type.

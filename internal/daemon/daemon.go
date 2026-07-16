@@ -82,11 +82,34 @@ type Daemon struct {
 	inFlightMu sync.Mutex
 	inFlight   map[string]struct{}
 
+	// internal: tracks which destination categories (Movies/Shows) are
+	// currently refusing writes (disk full, over quota, permission denied).
+	// Presence as a key means degraded; absent means healthy. The triggering
+	// error is logged at the point of detection, not stored here, since
+	// nothing needs to read it back later. Guarded by destMu.
+	destMu       sync.Mutex
+	destDegraded map[processor.Category]struct{}
+
+	// internal: hands a path back to Run's main loop for deferred retry once
+	// its destination becomes writable again. Written by the runWorker
+	// goroutine, read by the main loop goroutine.
+	deferredRetry chan retryItem
+
+	// internal test seam; defaults to dirWritable when nil.
+	dirWritableFn func(string) bool
+
 	// internal test seam; defaults to notify.PlaySound when nil.
 	playSoundFn func(context.Context, string) error
 
 	// internal: ensures "Track progress here" is logged at most once per session.
 	trackProgressOnce sync.Once
+}
+
+// retryItem is a path deferred because its destination category was
+// degraded at the time it was dequeued or attempted.
+type retryItem struct {
+	path     string
+	category processor.Category
 }
 
 // workItem is a unit of work queued for the single processing worker.
@@ -168,6 +191,14 @@ func (d *Daemon) Run(ctx context.Context) error {
 	d.inFlight = make(map[string]struct{})
 	d.inFlightMu.Unlock()
 
+	d.destMu.Lock()
+	d.destDegraded = make(map[processor.Category]struct{})
+	d.destMu.Unlock()
+	if d.dirWritableFn == nil {
+		d.dirWritableFn = dirWritable
+	}
+	d.deferredRetry = make(chan retryItem, 128)
+
 	// Wire media-aware ordering into the watcher's settle batch. The closure
 	// captures ctx so sorting respects daemon shutdown cancellation.
 	d.Watcher.SetSortFunc(func(paths []string) []string {
@@ -218,6 +249,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	})
 
 	pending := make(map[string]time.Time)
+	degradedPending := make(map[string]retryItem)
 	var lastWaitLog time.Time
 
 	retryTick := time.NewTicker(5 * time.Second)
@@ -231,67 +263,81 @@ runLoop:
 			break runLoop
 
 		case <-retryTick.C:
-			if len(pending) == 0 {
-				continue
-			}
-			if !d.DeferDestinationChecks || !d.destinationsReady() {
-				continue
-			}
-
-			pendingPaths := make([]string, 0, len(pending))
-			for pth := range pending {
-				pendingPaths = append(pendingPaths, pth)
-			}
-			sortedPaths, sortErrs, sortErr := processor.SortCandidates(ctx, d.Proc, pendingPaths)
-			if sortErr != nil {
-				sortedPaths = pendingPaths // context canceled; fall back to arbitrary order
-			}
-			for _, se := range sortErrs {
-				// Leave parse-error paths in pending; they will be retried on the next tick.
-				d.logSortParseError(se.Path, se.Err)
-			}
-
-			fileCount := 0
-			for _, pth := range sortedPaths {
-				if ctx.Err() != nil {
-					break
+			if len(pending) > 0 && d.DeferDestinationChecks && d.destinationsReady() {
+				pendingPaths := make([]string, 0, len(pending))
+				for pth := range pending {
+					pendingPaths = append(pendingPaths, pth)
 				}
-				plans, planErr := d.Proc.Plan(ctx, processor.Request{InputPath: pth})
-				if planErr != nil {
+				sortedPaths, sortErrs, sortErr := processor.SortCandidates(ctx, d.Proc, pendingPaths)
+				if sortErr != nil {
+					sortedPaths = pendingPaths // context canceled; fall back to arbitrary order
+				}
+				for _, se := range sortErrs {
+					// Leave parse-error paths in pending; they will be retried on the next tick.
+					d.logSortParseError(se.Path, se.Err)
+				}
+
+				fileCount := 0
+				for _, pth := range sortedPaths {
+					if ctx.Err() != nil {
+						break
+					}
+					plans, planErr := d.Proc.Plan(ctx, processor.Request{InputPath: pth})
+					if planErr != nil {
+						continue
+					}
+					fileCount += len(plans)
+				}
+				noun := resultformat.Pluralize(fileCount, "file", "files")
+				d.logConsoleInfo(
+					logging.EventSystemDestinationsReady,
+					fmt.Sprintf("INFO     destinations ready; processing %d pending %s.", fileCount, noun),
+					logging.Fields{"pending": fileCount},
+				)
+				d.logHistoryInfo(logging.EventSystemDestinationsReady, logging.Fields{
+					"pending": fileCount,
+				})
+				for _, pth := range sortedPaths {
+					delete(pending, pth)
+					key := d.inFlightKey(pth)
+					if key == "" {
+						return fmt.Errorf("empty in-flight key for path: %s", pth)
+					}
+					d.dispatchToQueue(ctx, workQueue, pth, key)
+				}
+			}
+
+			// Independent of the defer_destination_checks pending drain above:
+			// probe any runtime-degraded destination for recovery, then flush
+			// items deferred while their category was degraded.
+			for _, cat := range d.degradedCategories() {
+				if !d.dirWritableFn(d.dirFor(cat)) {
 					continue
 				}
-				fileCount += len(plans)
+				if !d.clearDestDegraded(cat) {
+					continue
+				}
+				d.logConsoleInfo(
+					logging.EventDaemonDestinationRecovered,
+					fmt.Sprintf("INFO     %s destination available again; resuming pending items", cat),
+					logging.Fields{"category": string(cat)},
+				)
+				d.logHistoryInfo(logging.EventDaemonDestinationRecovered, logging.Fields{"category": string(cat)})
 			}
-			noun := resultformat.Pluralize(fileCount, "file", "files")
-			d.logConsoleInfo(
-				logging.EventSystemDestinationsReady,
-				fmt.Sprintf("INFO     destinations ready; processing %d pending %s.", fileCount, noun),
-				logging.Fields{"pending": fileCount},
-			)
-			d.logHistoryInfo(logging.EventSystemDestinationsReady, logging.Fields{
-				"pending": fileCount,
-			})
-			for _, pth := range sortedPaths {
-				delete(pending, pth)
+			for pth, item := range degradedPending {
+				if d.isDestDegraded(item.category) {
+					continue
+				}
+				delete(degradedPending, pth)
 				key := d.inFlightKey(pth)
 				if key == "" {
 					return fmt.Errorf("empty in-flight key for path: %s", pth)
 				}
-				if !d.tryMarkInFlight(key) {
-					d.logConsoleInfo(
-						logging.EventDaemonPathDuplicate,
-						fmt.Sprintf("INFO     already in-flight, skipping: %s", pth),
-						logging.Fields{"path": pth},
-					)
-					d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": pth})
-					continue
-				}
-				select {
-				case workQueue <- workItem{path: pth, inFlightKey: key}:
-				case <-ctx.Done():
-					d.clearInFlight(key)
-				}
+				d.dispatchToQueue(ctx, workQueue, pth, key)
 			}
+
+		case item := <-d.deferredRetry:
+			degradedPending[item.path] = item
 
 		// --- Watcher errors ---
 		case err, ok := <-d.Watcher.Errors():
@@ -343,19 +389,7 @@ runLoop:
 				continue
 			}
 
-			if !d.tryMarkInFlight(key) {
-				d.logConsoleInfo(
-					logging.EventDaemonPathDuplicate,
-					fmt.Sprintf("INFO     already in-flight, skipping: %s", path),
-					logging.Fields{"path": path},
-				)
-				d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": path})
-				continue
-			}
-			select {
-			case workQueue <- workItem{path: path, inFlightKey: key}:
-			case <-ctx.Done():
-				d.clearInFlight(key)
+			if d.dispatchToQueue(ctx, workQueue, path, key) == dispatchCanceled {
 				break runLoop
 			}
 
@@ -507,6 +541,48 @@ func (d *Daemon) runWorker(runCtx context.Context, policy shutdown.Policy, hooks
 func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks shutdown.Hooks, pth string, inFlightKey string) (timedOut bool) {
 	defer d.clearInFlight(inFlightKey)
 
+	// Fast path: if any destination is currently degraded, find out which
+	// category this item belongs to before attempting a move. Skipping here
+	// avoids more than a doomed move -- a known-full disk still costs a real
+	// write, since RenameOrCopy's cross-device path copies the whole file
+	// into a temp file on the destination before its own io.Copy/Sync would
+	// hit ENOSPC. This only pays for a Plan() call while something is
+	// actually degraded; the common (healthy) case is a single map-length check.
+	if d.anyDestDegraded() {
+		plans, planErr := d.Proc.Plan(ctx, processor.Request{InputPath: pth})
+		// A category can be learned two ways here: plans came back non-empty
+		// (a clean success, or a *processor.PartialPlanError where some
+		// siblings in a directory hit a skippable parse error but others
+		// planned fine -- plans[0]'s category is authoritative either way),
+		// or planning itself failed outright because it needed to read the
+		// degraded destination (e.g. resolveShowFolder listing ShowsDir to
+		// match an existing show folder) -- that failure is itself a
+		// *processor.DestinationUnavailableError, which already names the
+		// category, so no plan is needed to identify it.
+		var cat processor.Category
+		var known bool
+		var planDestErr *processor.DestinationUnavailableError
+		switch {
+		case len(plans) > 0:
+			cat, known = plans[0].Category, true
+		case errors.As(planErr, &planDestErr):
+			cat, known = planDestErr.Category, true
+		}
+		if known && d.isDestDegraded(cat) {
+			d.logConsoleInfo(
+				logging.EventDaemonDestinationDeferred,
+				fmt.Sprintf("INFO     %s destination still unavailable, deferring: %s", cat, pth),
+				logging.Fields{"path": pth, "category": string(cat)},
+			)
+			d.logHistoryInfo(logging.EventDaemonDestinationDeferred, logging.Fields{"path": pth, "category": string(cat)})
+			select {
+			case d.deferredRetry <- retryItem{path: pth, category: cat}:
+			case <-ctx.Done():
+			}
+			return false
+		}
+	}
+
 	start := time.Now()
 	jobCtx := context.WithoutCancel(ctx)
 	planner := notify.NewDoneSoundPlanner(d.DoneNotificationMode)
@@ -540,6 +616,31 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 	}
 
 	dur := time.Since(start).Round(time.Second)
+
+	var destErr *processor.DestinationUnavailableError
+	if errors.As(err, &destErr) {
+		if d.markDestDegraded(destErr.Category) {
+			d.logConsoleError(
+				logging.EventDaemonDestinationDegraded,
+				fmt.Sprintf(
+					"ERROR    %s destination unavailable (%v); pausing new %s items until it recovers: %s",
+					destErr.Category, destErr.Err, destErr.Category, d.dirFor(destErr.Category),
+				),
+				destErr.Err,
+				logging.Fields{"category": string(destErr.Category), "dir": d.dirFor(destErr.Category), "path": pth},
+			)
+			d.logHistoryError(logging.EventDaemonDestinationDegraded, destErr.Err, logging.Fields{
+				"category": string(destErr.Category),
+				"dir":      d.dirFor(destErr.Category),
+				"path":     pth,
+			})
+		}
+		select {
+		case d.deferredRetry <- retryItem{path: pth, category: destErr.Category}:
+		case <-ctx.Done():
+		}
+		return false
+	}
 
 	if err != nil {
 		d.logConsoleError(
@@ -620,6 +721,42 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 	}
 }
 
+// dispatchOutcome reports what dispatchToQueue did with a path.
+type dispatchOutcome int
+
+const (
+	// dispatchSent means pth was marked in-flight and handed to workQueue.
+	dispatchSent dispatchOutcome = iota
+	// dispatchDuplicate means pth was already in-flight; it was logged and
+	// skipped, and no in-flight state was changed.
+	dispatchDuplicate
+	// dispatchCanceled means ctx was done before the send to workQueue
+	// completed; the speculative in-flight mark was rolled back.
+	dispatchCanceled
+)
+
+// dispatchToQueue marks pth (already resolved to key by the caller, since
+// some callers need the key for an earlier check too) in-flight and enqueues
+// it on workQueue, logging and skipping if it's already in-flight.
+func (d *Daemon) dispatchToQueue(ctx context.Context, workQueue chan<- workItem, pth, key string) dispatchOutcome {
+	if !d.tryMarkInFlight(key) {
+		d.logConsoleInfo(
+			logging.EventDaemonPathDuplicate,
+			fmt.Sprintf("INFO     already in-flight, skipping: %s", pth),
+			logging.Fields{"path": pth},
+		)
+		d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": pth})
+		return dispatchDuplicate
+	}
+	select {
+	case workQueue <- workItem{path: pth, inFlightKey: key}:
+		return dispatchSent
+	case <-ctx.Done():
+		d.clearInFlight(key)
+		return dispatchCanceled
+	}
+}
+
 func (d *Daemon) tryMarkInFlight(path string) bool {
 	d.inFlightMu.Lock()
 	defer d.inFlightMu.Unlock()
@@ -650,6 +787,71 @@ func (d *Daemon) clearInFlight(path string) {
 		return
 	}
 	delete(d.inFlight, path)
+}
+
+// markDestDegraded records that cat's destination is refusing writes. It
+// returns true only the first time this is called for a healthy cat (a
+// healthy->degraded transition), so callers can log the loud warning exactly
+// once instead of on every subsequent failure.
+func (d *Daemon) markDestDegraded(cat processor.Category) bool {
+	d.destMu.Lock()
+	defer d.destMu.Unlock()
+	if d.destDegraded == nil {
+		d.destDegraded = make(map[processor.Category]struct{})
+	}
+	if _, already := d.destDegraded[cat]; already {
+		return false
+	}
+	d.destDegraded[cat] = struct{}{}
+	return true
+}
+
+// clearDestDegraded marks cat healthy again. It returns true only when cat
+// was actually degraded (a degraded->healthy transition).
+func (d *Daemon) clearDestDegraded(cat processor.Category) bool {
+	d.destMu.Lock()
+	defer d.destMu.Unlock()
+	if _, ok := d.destDegraded[cat]; !ok {
+		return false
+	}
+	delete(d.destDegraded, cat)
+	return true
+}
+
+// isDestDegraded reports whether cat's destination is currently degraded.
+func (d *Daemon) isDestDegraded(cat processor.Category) bool {
+	d.destMu.Lock()
+	defer d.destMu.Unlock()
+	_, ok := d.destDegraded[cat]
+	return ok
+}
+
+// anyDestDegraded reports whether any destination category is currently
+// degraded, so callers can skip the cost of planning a category just to
+// check in the common (healthy) case.
+func (d *Daemon) anyDestDegraded() bool {
+	d.destMu.Lock()
+	defer d.destMu.Unlock()
+	return len(d.destDegraded) > 0
+}
+
+// degradedCategories returns the categories currently marked degraded.
+func (d *Daemon) degradedCategories() []processor.Category {
+	d.destMu.Lock()
+	defer d.destMu.Unlock()
+	cats := make([]processor.Category, 0, len(d.destDegraded))
+	for cat := range d.destDegraded {
+		cats = append(cats, cat)
+	}
+	return cats
+}
+
+// dirFor maps a processor.Category to its configured destination directory.
+func (d *Daemon) dirFor(cat processor.Category) string {
+	if cat == processor.CategoryShow {
+		return d.ShowsDir
+	}
+	return d.MoviesDir
 }
 
 func (d *Daemon) inFlightKey(path string) string {
