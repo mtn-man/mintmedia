@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/mtn-man/mintmedia/internal/paths"
 )
 
 // IsDestinationUnavailable reports whether err indicates the destination
@@ -94,28 +96,6 @@ func NewRenameOrCopy(opts Options) *RenameOrCopy {
 	}
 }
 
-func sameDevice(srcPath, dstDir string) (bool, error) {
-	srcInfo, err := os.Lstat(srcPath)
-	if err != nil {
-		return false, fmt.Errorf("lstat source %q: %w", srcPath, err)
-	}
-	dstInfo, err := os.Stat(dstDir)
-	if err != nil {
-		return false, fmt.Errorf("stat destination dir %q: %w", dstDir, err)
-	}
-
-	srcStat, ok := srcInfo.Sys().(*syscall.Stat_t)
-	if !ok || srcStat == nil {
-		return false, fmt.Errorf("stat source %q: missing syscall.Stat_t", srcPath)
-	}
-	dstStat, ok := dstInfo.Sys().(*syscall.Stat_t)
-	if !ok || dstStat == nil {
-		return false, fmt.Errorf("stat destination dir %q: missing syscall.Stat_t", dstDir)
-	}
-
-	return srcStat.Dev == dstStat.Dev, nil
-}
-
 func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -132,7 +112,7 @@ func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 		return fmt.Errorf("stat destination: %w", err)
 	}
 
-	same, err := sameDevice(src, filepath.Dir(dst))
+	same, err := paths.SameDevice(src, filepath.Dir(dst))
 	if err != nil {
 		return err
 	}

@@ -212,28 +212,6 @@ func TestMove_DestinationExists(t *testing.T) {
 	}
 }
 
-func TestSameDevice_TempDir(t *testing.T) {
-	root := t.TempDir()
-	src := filepath.Join(root, "src.mkv")
-	writeFile(t, src, "data")
-
-	same, err := sameDevice(src, root)
-	if err != nil {
-		t.Fatalf("sameDevice error: %v", err)
-	}
-	if !same {
-		t.Fatalf("expected same device for temp dir paths")
-	}
-}
-
-func TestSameDevice_StatError(t *testing.T) {
-	root := t.TempDir()
-	_, err := sameDevice(filepath.Join(root, "missing.mkv"), root)
-	if err == nil {
-		t.Fatalf("expected error for missing source path")
-	}
-}
-
 func TestMove_SameDeviceRenameFailure_NoFallback(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("chmod semantics differ on windows")

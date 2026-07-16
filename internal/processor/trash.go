@@ -5,7 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
+
+	"github.com/mtn-man/mintmedia/internal/paths"
 )
 
 func trashHomeDir() (string, error) {
@@ -70,7 +71,7 @@ func cleanupSourceDirIfSafe(p *processorImpl, inputPath string) error {
 	if err := os.MkdirAll(trashDir, 0o700); err != nil {
 		return fmt.Errorf("ensure trash dir: %w", err)
 	}
-	if sameDevice, err := sameDevice(in, trashDir); err != nil {
+	if sameDevice, err := paths.SameDevice(in, trashDir); err != nil {
 		return err
 	} else if !sameDevice {
 		return fmt.Errorf("cleanup skipped: drop folder and Trash are on different volumes")
@@ -118,22 +119,3 @@ func moveToTrashWithDir(src, trashDir string) error {
 	return fmt.Errorf("unable to find available trash name for %q", base)
 }
 
-func sameDevice(a, b string) (bool, error) {
-	aInfo, err := os.Stat(a)
-	if err != nil {
-		return false, fmt.Errorf("stat source: %w", err)
-	}
-	bInfo, err := os.Stat(b)
-	if err != nil {
-		return false, fmt.Errorf("stat trash dir: %w", err)
-	}
-	aSys, ok := aInfo.Sys().(*syscall.Stat_t)
-	if !ok || aSys == nil {
-		return false, fmt.Errorf("stat source: unsupported file info")
-	}
-	bSys, ok := bInfo.Sys().(*syscall.Stat_t)
-	if !ok || bSys == nil {
-		return false, fmt.Errorf("stat trash dir: unsupported file info")
-	}
-	return aSys.Dev == bSys.Dev, nil
-}
