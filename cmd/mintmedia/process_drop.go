@@ -18,8 +18,7 @@ import (
 )
 
 type dropCandidate struct {
-	path    string
-	modTime time.Time
+	path string
 }
 
 type ProcessDropOutcome struct {
@@ -90,10 +89,7 @@ func processDropFolder(
 			continue
 		}
 
-		candidates = append(candidates, dropCandidate{
-			path:    path,
-			modTime: info.ModTime(),
-		})
+		candidates = append(candidates, dropCandidate{path: path})
 	}
 
 	{
