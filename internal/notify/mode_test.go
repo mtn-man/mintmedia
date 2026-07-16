@@ -35,27 +35,3 @@ func TestNormalizeDoneNotificationMode(t *testing.T) {
 		})
 	}
 }
-
-func TestDoneSoundCount(t *testing.T) {
-	tests := []struct {
-		name             string
-		mode             string
-		appliedMainCount int
-		want             int
-	}{
-		{name: "PerFile_ThreeApplied", mode: DoneNotificationPerFile, appliedMainCount: 3, want: 3},
-		{name: "PerJob_ThreeApplied", mode: DoneNotificationPerJob, appliedMainCount: 3, want: 1},
-		{name: "Off_ThreeApplied", mode: DoneNotificationOff, appliedMainCount: 3, want: 0},
-		{name: "PerFile_ZeroApplied", mode: DoneNotificationPerFile, appliedMainCount: 0, want: 0},
-		{name: "InvalidMode_FallsBackToPerFile", mode: "loud", appliedMainCount: 2, want: 2},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := DoneSoundCount(tc.mode, tc.appliedMainCount)
-			if got != tc.want {
-				t.Fatalf("DoneSoundCount() = %d, want %d", got, tc.want)
-			}
-		})
-	}
-}

@@ -35,21 +35,6 @@ func NormalizeDoneNotificationMode(raw string) (string, error) {
 	}
 }
 
-// DoneSoundCount returns how many done sounds to play for applied main media files.
-func DoneSoundCount(mode string, appliedMainCount int) int {
-	if appliedMainCount <= 0 {
-		return 0
-	}
-
-	planner := NewDoneSoundPlanner(mode)
-	total := 0
-	for i := 0; i < appliedMainCount; i++ {
-		total += planner.OnAppliedMain()
-	}
-	total += planner.OnJobComplete()
-	return total
-}
-
 // DoneSoundPlanner is the single source of truth for done-sound timing policy.
 type DoneSoundPlanner struct {
 	mode             string
