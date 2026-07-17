@@ -2,7 +2,7 @@
 
 This is the detailed reference for how mintmedia decides whether a name is a
 movie or a show, and how it parses a title, year, and season/episode out of
-it. See the main [README](README.md#how-it-works) for the short version.
+it. See the main [README](../README.md#how-it-works) for the short version.
 
 ## Movie vs. show
 
@@ -20,7 +20,7 @@ There is no support for `1x02`-style episode notation -- only `SxxExx`.
 
 ## Year
 
-A year is a plain standalone 4-digit token between `1900` and `2099`, found
+A year is a standalone 4-digit token between `1900` and `2099`, found
 anywhere in the name -- bare (`Fallout.2024`), dot-separated
 (`Fallout.2024.S02E04`), or in parens (`Fallout (2024)`). For movies,
 everything after the year is discarded, which is what drops trailing
@@ -34,10 +34,10 @@ Before producing a clean title, mintmedia strips:
 
 - Bracketed release-group tags: `[EZTVx.to]`, `[YTS]`
 - Leading website-ad prefixes: `www.UIndex.org - `, `EZTVx.to - `
-- Resolution/codec/source tags from `naming.media_tag_blacklist` in your
-  config -- `2160p`, `1080p`, `x264`, `x265`, `hevc`, `web-dl`, `bluray`,
-  `hdtv`, `aac`, `dts`, `atmos`, and similar. This list is documented in full,
-  and is additive to your own config -- see `config.example.toml`.
+- Resolution/codec/source tags from `media_tag_blacklist` in your config --
+  `2160p`, `1080p`, `x264`, `x265`, `hevc`, `web-dl`, `bluray`, `hdtv`, `aac`,
+  `dts`, `atmos`, and similar. This list is documented in full, and is
+  additive to your own config -- see `config.example.toml`.
 
 Hyphens that look like compound words (`X-Men`, `Spider-Man`) are preserved;
 separator hyphens elsewhere become spaces. The resulting title is title-cased,
@@ -55,3 +55,11 @@ or last.
 | `[EZTVx.to] Fallout S01E02 1080p WEB-DL.mkv` | Show | `Fallout`, S01E02 |
 | `X-Men.Days.of.Future.Past.2014.mkv` | Movie | `X-Men Days of Future Past`, 2014 |
 | `Show.S01E01.mkv` (inside a `Show S01-S04` folder) | Show | `Show` (from folder), S01E01 |
+
+## Patterns that don't match
+
+| Input | Category | Why |
+|---|---|---|
+| `Show.S01.1080p.mkv` | Movie | Has a season signal but no episode signal, so it falls through to the movie path -- and since there's no year either, it likely won't parse as a clean movie title |
+| `Show.1x02.mkv` | Movie | `1x02` isn't a recognized pattern -- only `SxxExx` is |
+| `Show.Name.mkv` | Movie | No season/episode signal at all, and no year to anchor a movie parse either -- likely reported as unparseable |

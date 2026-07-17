@@ -3,7 +3,8 @@
 **mintmedia** turns messy downloads into a clean library, automatically -- no database, no web UI, nothing to run but this program:
 
 ```
-Stranger.Things.S04E07.2160p.BluRay.x265.mkv  →  Shows/Stranger Things/Season 04/Stranger Things - S04E07.mkv
+input:   Stranger.Things.S04E07.2160p.BluRay.x265.mkv
+output:  Shows/Stranger Things/Season 04/Stranger Things - S04E07.mkv
 ```
 
 Drop a file or folder into the watch folder and mintmedia figures out what it is -- recursing into season folders and collections as needed -- renames it cleanly, and moves it to your Movies or Shows library.
@@ -48,16 +49,16 @@ Clipboard-based magnet link detection additionally requires a Wayland session wi
 When mintmedia processes a file or folder, it:
 
 1. Finds the main media file (by extension -- `.mkv`, `.mp4`, etc.), searching recursively so season folders, whole-show dumps, and movie collections all work the same as a single file
-2. Figures out whether it's a movie or a TV show from the filename
+2. Figures out whether it's a movie or a show from the filename
 3. Parses the title, year, and season/episode information
 4. Moves everything -- main file and any subtitles -- to the right destination with a clean name
-5. If the input was a folder and everything moved successfully, sends it to Trash
+5. If the input was a folder and everything moved successfully, sends it to Trash (using whatever trash mechanism your OS provides)
 
 If a subtitle or other accompanying file can't be moved, the main media is still moved and you'll see a warning. The source folder is left in place if anything was left behind.
 
 Use `--plan` to preview what mintmedia would do without touching anything. Pass a path to preview a specific item, or omit it to preview the whole drop folder.
 
-See [Media detection](media-detection.md) for exactly which filename patterns are recognized, and [Folder processing](folder-processing.md) for how season packs, movie collections, and mixed folders are handled.
+See [Media detection](docs/media-detection.md) for exactly which filename patterns are recognized, and [Folder processing](docs/folder-processing.md) for how season packs, movie collections, and mixed folders are handled.
 
 ### Output naming
 
@@ -85,7 +86,7 @@ Stranger.Things.S04E07.en.srt  →  Stranger Things - S04E07.en.srt
 
 For shows, mintmedia reads your existing library folder before deciding on a destination. If your Shows directory already has a `Survivor (2000)` folder, a new episode that parses as `Survivor` will be routed there -- no duplicate folders, no year guessing.
 
-mintmedia uses a few heuristics to match an incoming episode to the right existing folder. If it doesn't find a match, it creates a new folder for the show. If it's ever unsure which folder is correct, it won't guess -- it skips the file and reports it so you can sort it manually. This lets mintmedia slot into an existing library without renaming folders or creating duplicates. See [Show folder matching](show-folder-matching.md) for the exact rules.
+mintmedia uses a few heuristics to match an incoming episode to the right existing folder. If it doesn't find a match, it creates a new folder for the show. If it's ever unsure which folder is correct, it won't guess -- it skips the file and reports it so you can sort it manually. This lets mintmedia slot into an existing library without renaming folders or creating duplicates. See [Show folder matching](docs/show-folder-matching.md) for the exact rules.
 
 ## CLI Reference
 
@@ -136,7 +137,7 @@ If a file ended up somewhere unexpected, or a subtitle was left behind, that's t
 
 ## Transmission Integration
 
-See [Transmission integration](transmission-integration.md) for the config and platform requirements needed to enable the hands-free magnet-link-to-library workflow described above.
+See [Transmission integration](docs/transmission-integration.md) for the config and platform requirements needed to enable the hands-free magnet-link-to-library workflow described above.
 
 ## License
 

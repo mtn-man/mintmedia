@@ -2,7 +2,7 @@
 
 This is the detailed reference for how mintmedia handles a folder passed as
 input (or found in the drop folder), rather than a single file. See the main
-[README](README.md#how-it-works) for the short version.
+[README](../README.md#how-it-works) for the short version.
 
 ## How folders are walked
 
@@ -19,8 +19,8 @@ This means these all work the same way, with no special-casing required:
 - A whole season folder (`Season 01/` with all its episodes)
 - A season-range dump (`Show S01-S04/` with subfolders per season, or all
   episodes flattened directly inside)
-- A movie collection folder (e.g. a Bourne or Harry Potter collection with
-  several `.mkv` files side by side)
+- A movie collection folder (e.g. a Jason Bourne or Harry Potter collection
+  with several `.mkv` files side by side)
 - A mix of the above nested a level or two deep
 
 ## Movie collections
@@ -68,7 +68,7 @@ files left behind -- the source folder is left in place so nothing is lost.
 
 ## What's ignored
 
-There's no filename-based ignore list (no "sample" or "trailer" detection).
-Filtering is purely by extension: anything not in `main_media_extensions` or
-`associated_file_extensions` -- `.nfo`, images, `.txt`, samples, etc. -- is
-silently left untouched in the source folder.
+There's no filename-based ignore list (no "sample" or "trailer" detection),
+by design. Filtering is purely by extension: anything not in
+`main_media_extensions` or `associated_file_extensions` -- `.nfo`, images,
+`.txt`, samples, etc. -- is silently left untouched in the source folder.
