@@ -34,10 +34,7 @@ func CleanName(raw string) string {
 func CompactLine(res processor.Result, name string, dur time.Duration) string {
 	if res.Applied {
 		dest := strings.TrimSpace(res.Plan.DestMainPath)
-		durSuffix := ""
-		if dur >= time.Second {
-			durSuffix = fmt.Sprintf("  (%s)", shutdown.FormatDurationCompact(dur))
-		}
+		durSuffix := durationSuffix(dur)
 		if dest == "" {
 			return fmt.Sprintf("SORTED   %s%s", name, durSuffix)
 		}
@@ -49,6 +46,15 @@ func CompactLine(res processor.Result, name string, dur time.Duration) string {
 		reason = "not applied"
 	}
 	return fmt.Sprintf("SKIPPED  %s -- %s", name, reason)
+}
+
+// durationSuffix renders dur as a "  (1m30s)" suffix, or "" when dur is
+// under a second (not worth showing for near-instant operations).
+func durationSuffix(dur time.Duration) string {
+	if dur < time.Second {
+		return ""
+	}
+	return fmt.Sprintf("  (%s)", shutdown.FormatDurationCompact(dur))
 }
 
 // Pluralize returns singular when n == 1, plural otherwise.
@@ -78,9 +84,5 @@ func ShutdownGraceElapsedMessage(noun string, force time.Duration) string {
 // used elsewhere -- callers still apply console.ColorizePrefixErr themselves.
 // dur is omitted from the line when it's under a second, matching CompactLine.
 func ErrorLine(path string, err error, dur time.Duration) string {
-	durSuffix := ""
-	if dur >= time.Second {
-		durSuffix = fmt.Sprintf("  (%s)", shutdown.FormatDurationCompact(dur))
-	}
-	return fmt.Sprintf("ERROR    %s -- %v%s", path, err, durSuffix)
+	return fmt.Sprintf("ERROR    %s -- %v%s", path, err, durationSuffix(dur))
 }
