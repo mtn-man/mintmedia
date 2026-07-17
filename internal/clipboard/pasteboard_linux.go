@@ -27,8 +27,16 @@ func pasteboardChangeCount(ctx context.Context) int64 {
 	return linuxClipboard.count
 }
 
-func pasteboardReadString(ctx context.Context) string {
-	return wlPasteRead(ctx)
+// pasteboardReadString returns the content already fetched by the most
+// recent pasteboardChangeCount call instead of re-invoking wl-paste: unlike
+// darwin's NSPasteboard.changeCount (a cheap in-process property read),
+// every wl-paste call forks a subprocess, and the poller always calls
+// pasteboardChangeCount immediately before pasteboardReadString within the
+// same tick, so the cached content is already current.
+func pasteboardReadString(_ context.Context) string {
+	linuxClipboard.mu.Lock()
+	defer linuxClipboard.mu.Unlock()
+	return linuxClipboard.content
 }
 
 func wlPasteRead(ctx context.Context) string {
