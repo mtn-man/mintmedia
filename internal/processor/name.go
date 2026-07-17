@@ -224,54 +224,54 @@ func parseShowCrossSeasonEpisode(blacklist []*regexp.Regexp, baseName string, fi
 	return showName, showYear, season, episode, true
 }
 
-func parseSeasonComponent(raw string) (season int, idx int, ok bool) {
-	if idxs := reSeasonEpisode.FindStringSubmatchIndex(raw); len(idxs) == 6 {
-		season = atoiSafe(raw[idxs[2]:idxs[3]])
-		if season >= 0 {
-			return season, idxs[0], true
+// componentPattern pairs a regex with the 1-based capture group that holds
+// the digits to extract for that pattern.
+type componentPattern struct {
+	re    *regexp.Regexp
+	group int
+}
+
+// Order matters: earlier patterns take priority when a raw string matches
+// more than one (e.g. "Season.1-4.S01-S04" matches reSeasonWord and both
+// range patterns -- reSeasonWord must win).
+var (
+	seasonPatterns = []componentPattern{
+		{reSeasonEpisode, 1},
+		{reSeasonWord, 1},
+		{reSeasonRange, 1},
+		{reSeasonWordRange, 1},
+	}
+	episodePatterns = []componentPattern{
+		{reSeasonEpisode, 2},
+		{reEpisodeWord, 1},
+	}
+)
+
+// matchComponent tries each pattern in order, returning the digit value of
+// the first pattern whose capture group parses to a valid (non-negative)
+// number. idx is the start of the whole match (not the capture group),
+// since callers use it to slice the show title off before the marker.
+func matchComponent(raw string, patterns []componentPattern) (value int, idx int, ok bool) {
+	for _, p := range patterns {
+		idxs := p.re.FindStringSubmatchIndex(raw)
+		gi := p.group * 2
+		if idxs == nil || gi+1 >= len(idxs) || idxs[gi] < 0 {
+			continue
+		}
+		value = atoiSafe(raw[idxs[gi]:idxs[gi+1]])
+		if value >= 0 {
+			return value, idxs[0], true
 		}
 	}
-
-	if idxs := reSeasonWord.FindStringSubmatchIndex(raw); len(idxs) == 4 {
-		season = atoiSafe(raw[idxs[2]:idxs[3]])
-		if season >= 0 {
-			return season, idxs[0], true
-		}
-	}
-
-	if idxs := reSeasonRange.FindStringSubmatchIndex(raw); len(idxs) == 6 {
-		season = atoiSafe(raw[idxs[2]:idxs[3]])
-		if season >= 0 {
-			return season, idxs[0], true
-		}
-	}
-
-	if idxs := reSeasonWordRange.FindStringSubmatchIndex(raw); len(idxs) == 6 {
-		season = atoiSafe(raw[idxs[2]:idxs[3]])
-		if season >= 0 {
-			return season, idxs[0], true
-		}
-	}
-
 	return 0, 0, false
 }
 
+func parseSeasonComponent(raw string) (season int, idx int, ok bool) {
+	return matchComponent(raw, seasonPatterns)
+}
+
 func parseEpisodeComponent(raw string) (episode int, idx int, ok bool) {
-	if idxs := reSeasonEpisode.FindStringSubmatchIndex(raw); len(idxs) == 6 {
-		episode = atoiSafe(raw[idxs[4]:idxs[5]])
-		if episode >= 0 {
-			return episode, idxs[0], true
-		}
-	}
-
-	if idxs := reEpisodeWord.FindStringSubmatchIndex(raw); len(idxs) == 4 {
-		episode = atoiSafe(raw[idxs[2]:idxs[3]])
-		if episode >= 0 {
-			return episode, idxs[0], true
-		}
-	}
-
-	return 0, 0, false
+	return matchComponent(raw, episodePatterns)
 }
 
 func parseMovieFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (title string, year string, err error) {
