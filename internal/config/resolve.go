@@ -182,12 +182,23 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	}
 
 	// Directory creation / existence checks
+	type namedDir struct {
+		name string
+		path string
+	}
+	dirs := []namedDir{
+		{"paths.drop_folder", dropAbs},
+		{"paths.state_dir", stateAbs},
+	}
+	if !cfg.System.DeferDestinationChecks {
+		dirs = append(dirs,
+			namedDir{"destinations.dest_dir_movies", moviesAbs},
+			namedDir{"destinations.dest_dir_shows", showsAbs},
+		)
+	}
+
 	var createdDirs []string
 	if cfg.System.AutoCreateMissingDirs {
-		dirs := []string{dropAbs, stateAbs}
-		if !cfg.System.DeferDestinationChecks {
-			dirs = append(dirs, moviesAbs, showsAbs)
-		}
 		mkdirTracked := func(dir string) {
 			if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
 				createdDirs = append(createdDirs, dir)
@@ -196,26 +207,24 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 				errs = append(errs, fmt.Errorf("failed to create directory %q: %w", dir, err))
 			}
 		}
-		for _, dir := range dirs {
-			mkdirTracked(dir)
+		for _, d := range dirs {
+			mkdirTracked(d.path)
 		}
+		// The history file's parent directory isn't validated in the check
+		// branch below -- HistorySink.Write creates it lazily on first write
+		// regardless of AutoCreateMissingDirs, so it's not a hard
+		// requirement. Creating it eagerly here is just a convenience.
 		if historyAbs != "" {
 			mkdirTracked(filepath.Dir(historyAbs))
 		}
 	} else {
-		checkDir := func(name, dir string) {
-			st, err := os.Stat(dir)
+		for _, d := range dirs {
+			st, err := os.Stat(d.path)
 			if err != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", name, err))
+				errs = append(errs, fmt.Errorf("%s: %w", d.name, err))
 			} else if !st.IsDir() {
-				errs = append(errs, fmt.Errorf("%s is not a directory: %q", name, dir))
+				errs = append(errs, fmt.Errorf("%s is not a directory: %q", d.name, d.path))
 			}
-		}
-		checkDir("paths.drop_folder", dropAbs)
-		checkDir("paths.state_dir", stateAbs)
-		if !cfg.System.DeferDestinationChecks {
-			checkDir("destinations.dest_dir_movies", moviesAbs)
-			checkDir("destinations.dest_dir_shows", showsAbs)
 		}
 	}
 
