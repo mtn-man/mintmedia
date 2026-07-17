@@ -99,7 +99,7 @@ mintmedia [flags]
 | `-d` / `--daemon` | Run continuously, watching for new files |
 | `-p` / `--process-drop` | Process everything currently in the drop folder (default when no flag is given) |
 | `--process <path>` | Process a specific path -- non-media and empty directories are silently skipped |
-| `--plan [path]` | Preview what would happen -- no changes made; omit path to preview the drop folder |
+| `--plan [path]` / `--dry-run [path]` | Preview what would happen -- no changes made; omit path to preview the drop folder |
 | `-s` / `--status` | Check whether the daemon is running |
 | `-S` / `--stop` | Gracefully stop the running daemon |
 | `--config <path>` | Use a different config file |
