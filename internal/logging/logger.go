@@ -83,107 +83,57 @@ func New(opts Options) (*RuntimeLogger, error) {
 	return l, nil
 }
 
-func (l *RuntimeLogger) Debug(component string, event Event, msg string, fields Fields) {
-	l.Log(Entry{
-		Level:     LevelDebug,
+// newEntry builds an Entry from the parameters shared by every Logger
+// method. err may be nil for levels that don't carry one.
+func newEntry(level Level, component string, event Event, msg string, err error, fields Fields) Entry {
+	return Entry{
+		Level:     level,
 		Component: component,
 		Event:     event,
 		Message:   msg,
 		Fields:    fields,
-	})
+		Err:       ErrorFieldFrom(err),
+	}
+}
+
+func (l *RuntimeLogger) Debug(component string, event Event, msg string, fields Fields) {
+	l.Log(newEntry(LevelDebug, component, event, msg, nil, fields))
 }
 
 func (l *RuntimeLogger) Info(component string, event Event, msg string, fields Fields) {
-	l.Log(Entry{
-		Level:     LevelInfo,
-		Component: component,
-		Event:     event,
-		Message:   msg,
-		Fields:    fields,
-	})
+	l.Log(newEntry(LevelInfo, component, event, msg, nil, fields))
 }
 
 func (l *RuntimeLogger) Warn(component string, event Event, msg string, err error, fields Fields) {
-	l.Log(Entry{
-		Level:     LevelWarn,
-		Component: component,
-		Event:     event,
-		Message:   msg,
-		Fields:    fields,
-		Err:       ErrorFieldFrom(err),
-	})
+	l.Log(newEntry(LevelWarn, component, event, msg, err, fields))
 }
 
 func (l *RuntimeLogger) Error(component string, event Event, msg string, err error, fields Fields) {
-	l.Log(Entry{
-		Level:     LevelError,
-		Component: component,
-		Event:     event,
-		Message:   msg,
-		Fields:    fields,
-		Err:       ErrorFieldFrom(err),
-	})
+	l.Log(newEntry(LevelError, component, event, msg, err, fields))
 }
 
 func (l *RuntimeLogger) ConsoleInfo(component string, event Event, msg string, fields Fields) {
-	l.logConsoleOnly(Entry{
-		Level:     LevelInfo,
-		Component: component,
-		Event:     event,
-		Message:   msg,
-		Fields:    fields,
-	})
+	l.logConsoleOnly(newEntry(LevelInfo, component, event, msg, nil, fields))
 }
 
 func (l *RuntimeLogger) ConsoleWarn(component string, event Event, msg string, err error, fields Fields) {
-	l.logConsoleOnly(Entry{
-		Level:     LevelWarn,
-		Component: component,
-		Event:     event,
-		Message:   msg,
-		Fields:    fields,
-		Err:       ErrorFieldFrom(err),
-	})
+	l.logConsoleOnly(newEntry(LevelWarn, component, event, msg, err, fields))
 }
 
 func (l *RuntimeLogger) ConsoleError(component string, event Event, msg string, err error, fields Fields) {
-	l.logConsoleOnly(Entry{
-		Level:     LevelError,
-		Component: component,
-		Event:     event,
-		Message:   msg,
-		Fields:    fields,
-		Err:       ErrorFieldFrom(err),
-	})
+	l.logConsoleOnly(newEntry(LevelError, component, event, msg, err, fields))
 }
 
 func (l *RuntimeLogger) HistoryInfo(component string, event Event, fields Fields) {
-	l.logHistoryOnly(Entry{
-		Level:     LevelInfo,
-		Component: component,
-		Event:     event,
-		Fields:    fields,
-	})
+	l.logHistoryOnly(newEntry(LevelInfo, component, event, "", nil, fields))
 }
 
 func (l *RuntimeLogger) HistoryWarn(component string, event Event, err error, fields Fields) {
-	l.logHistoryOnly(Entry{
-		Level:     LevelWarn,
-		Component: component,
-		Event:     event,
-		Fields:    fields,
-		Err:       ErrorFieldFrom(err),
-	})
+	l.logHistoryOnly(newEntry(LevelWarn, component, event, "", err, fields))
 }
 
 func (l *RuntimeLogger) HistoryError(component string, event Event, err error, fields Fields) {
-	l.logHistoryOnly(Entry{
-		Level:     LevelError,
-		Component: component,
-		Event:     event,
-		Fields:    fields,
-		Err:       ErrorFieldFrom(err),
-	})
+	l.logHistoryOnly(newEntry(LevelError, component, event, "", err, fields))
 }
 
 func (l *RuntimeLogger) Log(entry Entry) {
