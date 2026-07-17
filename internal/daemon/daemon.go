@@ -380,7 +380,7 @@ runLoop:
 				continue
 			}
 
-			if d.dispatchToQueue(ctx, workQueue, path, key) == dispatchCanceled {
+			if d.dispatchToQueue(ctx, workQueue, path, key) {
 				break runLoop
 			}
 
@@ -712,24 +712,11 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 	}
 }
 
-// dispatchOutcome reports what dispatchToQueue did with a path.
-type dispatchOutcome int
-
-const (
-	// dispatchSent means pth was marked in-flight and handed to workQueue.
-	dispatchSent dispatchOutcome = iota
-	// dispatchDuplicate means pth was already in-flight; it was logged and
-	// skipped, and no in-flight state was changed.
-	dispatchDuplicate
-	// dispatchCanceled means ctx was done before the send to workQueue
-	// completed; the speculative in-flight mark was rolled back.
-	dispatchCanceled
-)
-
 // dispatchToQueue marks pth (already resolved to key by the caller, since
 // some callers need the key for an earlier check too) in-flight and enqueues
-// it on workQueue, logging and skipping if it's already in-flight.
-func (d *Daemon) dispatchToQueue(ctx context.Context, workQueue chan<- workItem, pth, key string) dispatchOutcome {
+// it on workQueue, logging and skipping if it's already in-flight. It reports
+// whether ctx was done before the enqueue could complete.
+func (d *Daemon) dispatchToQueue(ctx context.Context, workQueue chan<- workItem, pth, key string) (canceled bool) {
 	if !d.tryMarkInFlight(key) {
 		d.logConsoleInfo(
 			logging.EventDaemonPathDuplicate,
@@ -737,14 +724,14 @@ func (d *Daemon) dispatchToQueue(ctx context.Context, workQueue chan<- workItem,
 			logging.Fields{"path": pth},
 		)
 		d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": pth})
-		return dispatchDuplicate
+		return false
 	}
 	select {
 	case workQueue <- workItem{path: pth, inFlightKey: key}:
-		return dispatchSent
+		return false
 	case <-ctx.Done():
 		d.clearInFlight(key)
-		return dispatchCanceled
+		return true
 	}
 }
 
