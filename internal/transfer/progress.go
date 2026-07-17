@@ -215,7 +215,8 @@ func (r *terminalReporter) renderBarLine(name string, s Snapshot) string {
 	nameToUse := name
 	if width, ok := terminalWidth(r.out); ok {
 		bytesStr := copiedStr + "/" + totalStr
-		fixed := len(labelRaw) + 1 + 1 + 1 + w + 1 + 1 + len(pctTokRaw) + 1 + len(bytesStr) + 1 + len(rateStr)
+		fixedBase := len(labelRaw) + 1 + 1 + 1 + w + 1 + 1 + len(pctTokRaw) + 1 + len(bytesStr) + 1 + len(rateStr)
+		fixed := fixedBase
 		if etaOK {
 			fixed += 1 + len(etaStr)
 		}
@@ -224,8 +225,7 @@ func (r *terminalReporter) renderBarLine(name string, s Snapshot) string {
 			if etaOK {
 				etaOK = false
 				etaStr = ""
-				fixed = len(labelRaw) + 1 + 1 + 1 + w + 1 + 1 + len(pctTokRaw) + 1 + len(bytesStr) + 1 + len(rateStr)
-				avail = width - fixed
+				avail = width - fixedBase
 			}
 			if avail < 4 {
 				return r.renderClassicCopyingLine(name, s)
