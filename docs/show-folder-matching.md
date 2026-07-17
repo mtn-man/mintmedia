@@ -1,7 +1,7 @@
 # Show folder matching
 
 This is the detailed reference for how mintmedia picks a destination folder for
-an incoming show episode. See the main [README](README.md#library-awareness)
+an incoming show episode. See the main [README](../README.md#library-awareness)
 for the short version.
 
 Before checking any of the rules below, mintmedia parses a show name and
@@ -23,7 +23,7 @@ resolves to either a confident match or an explicit skip.
 | 1 | A folder with just the show name already exists (no year, no qualifier) | Uses it, regardless of any year in the filename |
 | 2 | The filename has a year, and a `Show Name (YYYY)` folder with that exact year exists | Uses that folder |
 | 2 (fallback) | The filename has a year, no exact-year folder exists, but exactly one folder exists with some other qualifier (e.g. `Show Name (UK)`) | Uses it as a best-effort match and reports it, in case the guess was wrong |
-| 2 (fallback) | The filename has a year, no exact-year folder exists, and *multiple* other-qualifier folders exist | Skips the file and reports it -- won't guess which one is right |
+| 2 (fallback, ambiguous) | The filename has a year, no exact-year folder exists, and *multiple* other-qualifier folders exist | Skips the file and reports it -- won't guess which one is right |
 | 2 (create) | The filename has a year, and none of the above matched | Creates a new `Show Name (YYYY)` folder using the filename's year |
 | 3 | The filename has no year, and exactly one `Show Name (YYYY)` folder exists | Uses that folder |
 | 3 (ambiguous) | The filename has no year, and *multiple* `Show Name (YYYY)` folders exist | Skips the file and reports it -- won't guess which year is right |
