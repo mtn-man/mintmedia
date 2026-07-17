@@ -95,7 +95,7 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 		if exactYearFolder != "" {
 			return exactYearFolder, showYear, nil
 		}
-		if folder, err, ok := tryQualifiedFallback(p, showsDir, showName, otherQualifiedFolders); ok {
+		if folder, ok, err := tryQualifiedFallback(p, showsDir, showName, otherQualifiedFolders); ok {
 			return folder, "", err
 		}
 		return fmt.Sprintf("%s (%s)", showName, showYear), showYear, nil
@@ -115,7 +115,7 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 	}
 
 	// Rule 4: No year-based match; fall back to a qualified-folder guess.
-	if folder, err, ok := tryQualifiedFallback(p, showsDir, showName, otherQualifiedFolders); ok {
+	if folder, ok, err := tryQualifiedFallback(p, showsDir, showName, otherQualifiedFolders); ok {
 		return folder, "", err
 	}
 
@@ -129,23 +129,23 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 // ok is false when there was nothing to fall back to, in which case the
 // caller proceeds to its own default. When ok is true, err is non-nil only
 // for the ambiguous (multiple-candidate) case.
-func tryQualifiedFallback(p *processorImpl, showsDir, showName string, otherQualifiedFolders []string) (folder string, err error, ok bool) {
+func tryQualifiedFallback(p *processorImpl, showsDir, showName string, otherQualifiedFolders []string) (folder string, ok bool, err error) {
 	switch len(otherQualifiedFolders) {
 	case 0:
-		return "", nil, false
+		return "", false, nil
 	case 1:
 		folder = otherQualifiedFolders[0]
 		logWarn(p, logging.EventProcessorShowFolderQualifiedGuess,
 			fmt.Sprintf("using best-effort match for %q: existing folder %q has an unrecognized qualifier", showName, folder),
 			nil, logging.Fields{"path": showsDir, "folder": folder})
-		return folder, nil, true
+		return folder, true, nil
 	default:
 		msg := fmt.Sprintf("WARNING  multiple show folders match %q with unrecognized qualifiers: %s; skipping", showName, strings.Join(otherQualifiedFolders, ", "))
 		logConsoleWarn(p, logging.EventProcessorInputSkippedParseError, msg, ErrAmbiguousShow, logging.Fields{
 			"path":   showsDir,
 			"reason": ErrAmbiguousShow.Error(),
 		})
-		return "", ErrAmbiguousShow, true
+		return "", true, ErrAmbiguousShow
 	}
 }
 
