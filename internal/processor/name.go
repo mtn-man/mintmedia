@@ -136,10 +136,7 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 		return "", "", 0, 0, false
 	}
 
-	titleCut := seasonIdx
-	if episodeIdx < titleCut {
-		titleCut = episodeIdx
-	}
+	titleCut := min(seasonIdx, episodeIdx)
 	if titleCut <= 0 || titleCut > len(raw) {
 		return "", "", 0, 0, false
 	}

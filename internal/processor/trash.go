@@ -90,7 +90,7 @@ func moveToTrashWithDir(src, trashDir string) error {
 		return fmt.Errorf("invalid trash base for %q", src)
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		name := base
 		if i > 0 {
 			name = fmt.Sprintf("%s %d", base, i+1)
