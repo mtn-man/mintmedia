@@ -32,6 +32,12 @@ const (
 	defaultCleanupCooldown = 2 * time.Minute
 
 	defaultReportEvery = 250 * time.Millisecond
+
+	// planDropSentinel is passed to pflag as NoOptDefVal for --plan/--dry-run.
+	// pflag only allows a flag's argument to be omitted when NoOptDefVal is
+	// non-empty, so an actual empty string can't be used here even though ""
+	// is what the omitted-path case conceptually means.
+	planDropSentinel = "\x00drop-folder\x00"
 )
 
 // die prints err in the tool's standard labeled/colorized error voice and
@@ -52,7 +58,9 @@ func main() {
 
 	// One-shot processor harness flags
 	planPath := pflag.String("plan", "", "Compute and print the processing plan for a path (no changes)")
-	pflag.Lookup("plan").NoOptDefVal = "" // makes the path argument optional; no-arg form plans the drop folder
+	pflag.Lookup("plan").NoOptDefVal = planDropSentinel // makes the path argument optional; no-arg form plans the drop folder
+	dryRunPath := pflag.String("dry-run", "", "Alias for --plan")
+	pflag.Lookup("dry-run").NoOptDefVal = planDropSentinel
 	processPath := pflag.String("process", "", "Process a path with policy (ignore non-media/no-media dirs)")
 	processDrop := pflag.BoolP("process-drop", "p", false, "Process all paths currently in the drop folder (one-shot)")
 	daemonFlag := pflag.BoolP("daemon", "d", false, "Run the daemon (watch/poll/automations)")
@@ -73,6 +81,7 @@ func main() {
 		write("Usage: %s [flags]\n\n", filepath.Base(os.Args[0]))
 		writeln("Modes (choose one; default is -p/--process-drop when features.enable_processing=true):")
 		writeln("  --plan [path]        Preview what would happen (no changes); omit path to preview drop folder")
+		writeln("  --dry-run [path]     Alias for --plan")
 		writeln("  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
 		writeln("  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
 		writeln("  -d, --daemon         Run the daemon (watch/poll/automations)")
@@ -87,6 +96,16 @@ func main() {
 	}
 
 	pflag.Parse()
+	if pflag.Lookup("plan").Changed && pflag.Lookup("dry-run").Changed {
+		die(errors.New("use --plan or --dry-run, not both"), exitUsage)
+	}
+	if pflag.Lookup("dry-run").Changed {
+		planPath = dryRunPath
+		pflag.Lookup("plan").Changed = true
+	}
+	if *planPath == planDropSentinel {
+		*planPath = ""
+	}
 	if *help {
 		pflag.Usage()
 		return
