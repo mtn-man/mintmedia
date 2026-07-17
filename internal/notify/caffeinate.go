@@ -41,20 +41,9 @@ func (c *Caffeinate) Start(_ context.Context) error {
 
 	c.mu.Lock()
 	// Already running?
-	if c.cmd != nil {
-		if c.done != nil {
-			select {
-			case <-c.done:
-				c.cmd = nil
-				c.done = nil
-			default:
-				c.mu.Unlock()
-				return nil
-			}
-		} else {
-			c.mu.Unlock()
-			return nil
-		}
+	if c.cmd != nil && !c.reapIfExited() {
+		c.mu.Unlock()
+		return nil
 	}
 
 	// Start the process
@@ -83,25 +72,35 @@ func (c *Caffeinate) Start(_ context.Context) error {
 	return nil
 }
 
+// reapIfExited reports whether the inhibit process has already exited via
+// the background reaper goroutine, clearing c.cmd/c.done if so. Must be
+// called with c.mu held.
+func (c *Caffeinate) reapIfExited() bool {
+	if c.done == nil {
+		return false
+	}
+	select {
+	case <-c.done:
+		c.cmd = nil
+		c.done = nil
+		return true
+	default:
+		return false
+	}
+}
+
 // Stop terminates the sleep-inhibit process if running.
 func (c *Caffeinate) Stop() error {
 	c.mu.Lock()
 	cmd := c.cmd
-	done := c.done
 	if cmd == nil || cmd.Process == nil {
 		c.mu.Unlock()
 		return nil
 	}
 
-	if done != nil {
-		select {
-		case <-done:
-			c.cmd = nil
-			c.done = nil
-			c.mu.Unlock()
-			return nil
-		default:
-		}
+	if c.reapIfExited() {
+		c.mu.Unlock()
+		return nil
 	}
 
 	// Try graceful termination first.
