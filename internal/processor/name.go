@@ -448,6 +448,11 @@ func titleCaseSimple(s string) string {
 	return strings.Join(parts, " ")
 }
 
+// isAlphaNum reports whether r is an ASCII letter or digit.
+func isAlphaNum(r rune) bool {
+	return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')
+}
+
 func isAllLetters(s string) bool {
 	for _, r := range s {
 		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
@@ -464,16 +469,14 @@ func isAllLetters(s string) bool {
 func tokenParts(tok string) (prefix, core, suffix string) {
 	start := 0
 	for start < len(tok) {
-		r := rune(tok[start])
-		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+		if isAlphaNum(rune(tok[start])) {
 			break
 		}
 		start++
 	}
 	end := len(tok)
 	for end > start {
-		r := rune(tok[end-1])
-		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+		if isAlphaNum(rune(tok[end-1])) {
 			break
 		}
 		end--
@@ -501,13 +504,8 @@ func atoiSafe(s string) int {
 
 func trimRightJunk(s string) string {
 	s = strings.TrimSpace(s)
-	return strings.TrimRightFunc(s, func(r rune) bool {
-		// keep letters/digits; trim everything else
-		isAlphaNum := (r >= '0' && r <= '9') ||
-			(r >= 'A' && r <= 'Z') ||
-			(r >= 'a' && r <= 'z')
-		return !isAlphaNum
-	})
+	// keep letters/digits; trim everything else
+	return strings.TrimRightFunc(s, func(r rune) bool { return !isAlphaNum(r) })
 }
 
 func removeYearToken(s string, year string) string {
@@ -519,12 +517,7 @@ func removeYearToken(s string, year string) string {
 		if p == year {
 			continue
 		}
-		trimmed := strings.TrimFunc(p, func(r rune) bool {
-			isAlphaNum := (r >= '0' && r <= '9') ||
-				(r >= 'A' && r <= 'Z') ||
-				(r >= 'a' && r <= 'z')
-			return !isAlphaNum
-		})
+		trimmed := strings.TrimFunc(p, func(r rune) bool { return !isAlphaNum(r) })
 		if trimmed == year {
 			continue
 		}
