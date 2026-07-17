@@ -109,12 +109,6 @@ func Load(configPath string) (*Config, *Resolved, bool, error) {
 		}
 		return nil, nil, false, formatConfigError(cfgPathAbs, err)
 	}
-	if md.IsDefined("processing", "history_file") {
-		return nil, nil, false, formatConfigError(cfgPathAbs, errors.New("processing.history_file has been removed; use logging.history_file"))
-	}
-	if md.IsDefined("processing") {
-		return nil, nil, false, formatConfigError(cfgPathAbs, errors.New("[processing] section has been removed; use [logging]"))
-	}
 	if unknown := formatUndecodedKeys(md.Undecoded()); len(unknown) > 0 {
 		return nil, nil, false, formatConfigError(cfgPathAbs, fmt.Errorf("unknown config key(s): %s", strings.Join(unknown, ", ")))
 	}
