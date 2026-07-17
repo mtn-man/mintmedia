@@ -245,7 +245,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	d.logConsoleInfo(logging.EventSystemStartup, "Press Ctrl+C to stop.\n", nil)
 	d.logHistoryInfo(logging.EventSystemStartup, logging.Fields{
-		"mode": "daemon",
+		"schema": logging.SchemaV1,
+		"mode":   "daemon",
 	})
 
 	pending := make(map[string]time.Time)

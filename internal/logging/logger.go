@@ -10,10 +10,8 @@ import (
 	"time"
 )
 
-const (
-	componentSystem = "system"
-	schemaV1        = "mintmedia.log.v1"
-)
+// SchemaV1 identifies the current JSONL history record schema.
+const SchemaV1 = "mintmedia.log.v1"
 
 // Options configure the runtime logger and sinks.
 type Options struct {
@@ -273,17 +271,6 @@ func (l *RuntimeLogger) normalizeEntry(entry Entry) Entry {
 	entry.Message = strings.TrimSpace(entry.Message)
 	entry.PID = l.pid
 	entry.Fields = normalizeFields(entry.Fields)
-	if entry.Event == EventSystemStartup {
-		if entry.Fields == nil {
-			entry.Fields = make(Fields, 1)
-		}
-		if _, ok := entry.Fields["schema"]; !ok {
-			entry.Fields["schema"] = schemaV1
-		}
-		if entry.Component == "" {
-			entry.Component = componentSystem
-		}
-	}
 	return entry
 }
 
