@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -18,7 +19,11 @@ func withCaffeinate(fn func() error) error {
 	caff := newMainCaffeinate()
 	if caff != nil {
 		if err := caff.Start(caffCtx); err != nil {
-			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate: %v", err)))
+			if errors.Is(err, notify.ErrInhibitUnsupported) {
+				fmt.Println(console.ColorizePrefixOut("INFO     caffeinate: sleep inhibition not available on this platform"))
+			} else {
+				fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate: %v", err)))
+			}
 		}
 	}
 	defer func() {

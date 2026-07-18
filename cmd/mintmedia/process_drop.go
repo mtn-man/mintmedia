@@ -48,7 +48,11 @@ func processDropFolder(
 	caffCtx, cancelCaff := context.WithCancel(context.Background())
 	caff := newProcessDropCaffeinate()
 	if err := caff.Start(caffCtx); err != nil {
-		fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate: %v", err)))
+		if errors.Is(err, notify.ErrInhibitUnsupported) {
+			fmt.Println(console.ColorizePrefixOut("INFO     caffeinate: sleep inhibition not available on this platform"))
+		} else {
+			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate: %v", err)))
+		}
 	}
 	defer func() {
 		cancelCaff()
