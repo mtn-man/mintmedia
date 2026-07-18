@@ -10,6 +10,12 @@ import (
 	"syscall"
 )
 
+// ErrInhibitUnsupported is returned by Start when no sleep-inhibit command is
+// available on this host (e.g. macOS/Linux binary missing, or an unsupported
+// platform). It is expected and non-fatal -- callers should surface it as an
+// informational notice rather than a warning.
+var ErrInhibitUnsupported = errors.New("sleep inhibition not available on this platform")
+
 // CaffeinateController is the interface for controlling sleep inhibition.
 type CaffeinateController interface {
 	Start(context.Context) error
@@ -36,7 +42,7 @@ func NewCaffeinate() *Caffeinate {
 func (c *Caffeinate) Start(_ context.Context) error {
 	cmd := inhibitCmd()
 	if cmd == nil {
-		return nil
+		return ErrInhibitUnsupported
 	}
 
 	c.mu.Lock()
