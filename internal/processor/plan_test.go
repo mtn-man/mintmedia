@@ -29,7 +29,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -64,7 +64,7 @@ func TestPlan_TableDriven(t *testing.T) {
 
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -89,8 +89,8 @@ func TestPlan_TableDriven(t *testing.T) {
 				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "Stranger Things")) {
 					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
 				}
-				if !strings.HasSuffix(pl.DestDir, filepath.Join("Season 05")) {
-					t.Fatalf("DestDir = %q, want suffix %q", pl.DestDir, filepath.Join("Season 05"))
+				if !strings.HasSuffix(pl.DestDir, "Season 05") {
+					t.Fatalf("DestDir = %q, want suffix %q", pl.DestDir, "Season 05")
 				}
 				if !strings.HasSuffix(pl.DestMainPath, wantRadix+".mkv") {
 					t.Fatalf("DestMainPath = %q, want suffix %q", pl.DestMainPath, wantRadix+".mkv")
@@ -127,7 +127,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(season04, "Sherlock.S04E00.1080p.x265.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, inputPath string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -165,7 +165,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "S01E02.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, p *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -200,7 +200,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -226,8 +226,8 @@ func TestPlan_TableDriven(t *testing.T) {
 				if pl.DestRadix != "Planet Earth II (2016) - S01E01" {
 					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Planet Earth II (2016) - S01E01")
 				}
-				if !strings.HasSuffix(pl.DestDir, filepath.Join("Season 01")) {
-					t.Fatalf("DestDir = %q, want suffix %q", pl.DestDir, filepath.Join("Season 01"))
+				if !strings.HasSuffix(pl.DestDir, "Season 01") {
+					t.Fatalf("DestDir = %q, want suffix %q", pl.DestDir, "Season 01")
 				}
 			},
 		},
@@ -241,7 +241,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -278,7 +278,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -316,7 +316,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -345,7 +345,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -374,7 +374,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "X-Men TAS [HQ] Season 2 [dummy]", "X-Men TAS 201 'Til Death Do Us Part 1of2 [dummy].avi"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -412,7 +412,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "Firefly Season 2", "Firefly 201 Other Title.avi"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -450,7 +450,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "Show Season 2", "Show.2005.2x01.Title.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -483,7 +483,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -515,7 +515,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				// Two candidate tokens ("201" and "245") both match the
@@ -548,7 +548,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				var ppe *PartialPlanError
@@ -579,7 +579,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				var ppe *PartialPlanError
@@ -609,7 +609,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				var pse *ParseShowError
@@ -634,7 +634,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, mainName), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -663,7 +663,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -684,7 +684,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "Episode01.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, inputPath string, plans []Plan, err error) {
 				t.Helper()
 
 				var partial *PartialPlanError
@@ -715,7 +715,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "S01E01.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -738,7 +738,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "Sherlock.2017.S01E01.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -761,7 +761,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "S01E01.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -787,7 +787,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "Sherlock.2017.S01E01.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -816,7 +816,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -842,7 +842,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "Sherlock.2014.S01E02.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -866,7 +866,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -897,7 +897,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -928,7 +928,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -958,7 +958,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -994,7 +994,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1023,7 +1023,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1053,7 +1053,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1085,7 +1085,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1111,7 +1111,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1137,7 +1137,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1163,7 +1163,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1190,13 +1190,13 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, _ Plan, err error) {
 				t.Helper()
 
 				if err == nil {
 					t.Fatalf("expected error, got nil")
 				}
-				if err != ErrAmbiguousShow {
+				if !errors.Is(err, ErrAmbiguousShow) {
 					t.Fatalf("error = %v, want ErrAmbiguousShow", err)
 				}
 			},
@@ -1211,7 +1211,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1241,7 +1241,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1259,8 +1259,8 @@ func TestPlan_TableDriven(t *testing.T) {
 				if pl.DestRadix != "One Piece - S21E100" {
 					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "One Piece - S21E100")
 				}
-				if !strings.HasSuffix(pl.DestDir, filepath.Join("Season 21")) {
-					t.Fatalf("DestDir = %q, want suffix %q", pl.DestDir, filepath.Join("Season 21"))
+				if !strings.HasSuffix(pl.DestDir, "Season 21") {
+					t.Fatalf("DestDir = %q, want suffix %q", pl.DestDir, "Season 21")
 				}
 			},
 		},
@@ -1274,7 +1274,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1307,7 +1307,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1334,7 +1334,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1358,7 +1358,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1385,7 +1385,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1416,7 +1416,7 @@ func TestPlan_TableDriven(t *testing.T) {
 
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1464,7 +1464,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1488,7 +1488,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1512,7 +1512,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1539,7 +1539,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1571,7 +1571,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1595,13 +1595,13 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, _ Plan, err error) {
 				t.Helper()
 
 				if err == nil {
 					t.Fatalf("expected error, got nil")
 				}
-				if err != ErrAmbiguousShow {
+				if !errors.Is(err, ErrAmbiguousShow) {
 					t.Fatalf("error = %v, want ErrAmbiguousShow", err)
 				}
 			},
@@ -1618,7 +1618,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1645,7 +1645,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "Ghosts.2021.S02E01.1080p.WEBRip.x265.mp4"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, p *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1686,7 +1686,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1718,7 +1718,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1751,7 +1751,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1778,7 +1778,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1807,7 +1807,7 @@ func TestPlan_TableDriven(t *testing.T) {
 
 				return folder
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1845,7 +1845,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "The Bourne Ultimatum 2007 1080p BluRay HEVC x265 5.1 BONE.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1892,7 +1892,7 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, filepath.Join(root, "1080p.x265.hevc.bluray.mkv"), "dummy")
 				return root
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, _ *processorImpl, inputPath string, plans []Plan, err error) {
 				t.Helper()
 
 				var partial *PartialPlanError
@@ -1942,7 +1942,7 @@ func TestPlan_TableDriven(t *testing.T) {
 
 				return rootFolder
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, p *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -1992,7 +1992,7 @@ func TestPlan_TableDriven(t *testing.T) {
 
 				return rootFolder
 			},
-			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+			checkMany: func(t *testing.T, p *processorImpl, _ string, plans []Plan, err error) {
 				t.Helper()
 
 				if err != nil {
@@ -2030,13 +2030,13 @@ func TestPlan_TableDriven(t *testing.T) {
 				writeFile(t, src, "dummy")
 				return src
 			},
-			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+			check: func(t *testing.T, _ *processorImpl, _ string, _ Plan, err error) {
 				t.Helper()
 
 				if err == nil {
 					t.Fatalf("expected error, got nil")
 				}
-				if err != ErrNotMedia {
+				if !errors.Is(err, ErrNotMedia) {
 					t.Fatalf("error = %v, want ErrNotMedia", err)
 				}
 			},
@@ -2044,7 +2044,6 @@ func TestPlan_TableDriven(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 
