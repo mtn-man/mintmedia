@@ -23,6 +23,7 @@ import (
 	"github.com/mtn-man/mintmedia/internal/watch"
 )
 
+// ErrShutdownTimedOut indicates the daemon did not finish shutting down within its grace/force timeout.
 var ErrShutdownTimedOut = errors.New("daemon shutdown timed out")
 
 var newDaemonCaffeinate = func() notify.CaffeinateController {
@@ -911,17 +912,17 @@ func magnetSummary(m string) (btihShort string, dn string, trackers int, ok bool
 	return magnet.ShortBTIH(info.BTIH, 12), info.DN, info.Trackers, true
 }
 
-func truncateForLog(s string, max int) string {
+func truncateForLog(s string, maxLen int) string {
 	s = strings.TrimSpace(s)
-	if max <= 0 {
+	if maxLen <= 0 {
 		return s
 	}
 	rs := []rune(s)
-	if len(rs) <= max {
+	if len(rs) <= maxLen {
 		return s
 	}
-	if max <= 3 {
-		return string(rs[:max])
+	if maxLen <= 3 {
+		return string(rs[:maxLen])
 	}
-	return string(rs[:max-3]) + "..."
+	return string(rs[:maxLen-3]) + "..."
 }
