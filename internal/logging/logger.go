@@ -96,46 +96,58 @@ func newEntry(level Level, component string, event Event, msg string, err error,
 	}
 }
 
+// Debug logs a DEBUG-level entry to both sinks (subject to each sink's level floor).
 func (l *RuntimeLogger) Debug(component string, event Event, msg string, fields Fields) {
 	l.Log(newEntry(LevelDebug, component, event, msg, nil, fields))
 }
 
+// Info logs an INFO-level entry to both sinks (subject to each sink's level floor).
 func (l *RuntimeLogger) Info(component string, event Event, msg string, fields Fields) {
 	l.Log(newEntry(LevelInfo, component, event, msg, nil, fields))
 }
 
+// Warn logs a WARN-level entry to both sinks (subject to each sink's level floor).
 func (l *RuntimeLogger) Warn(component string, event Event, msg string, err error, fields Fields) {
 	l.Log(newEntry(LevelWarn, component, event, msg, err, fields))
 }
 
+// Error logs an ERROR-level entry to both sinks (subject to each sink's level floor).
 func (l *RuntimeLogger) Error(component string, event Event, msg string, err error, fields Fields) {
 	l.Log(newEntry(LevelError, component, event, msg, err, fields))
 }
 
+// ConsoleInfo logs an INFO-level entry to the console sink only.
 func (l *RuntimeLogger) ConsoleInfo(component string, event Event, msg string, fields Fields) {
 	l.logConsoleOnly(newEntry(LevelInfo, component, event, msg, nil, fields))
 }
 
+// ConsoleWarn logs a WARN-level entry to the console sink only.
 func (l *RuntimeLogger) ConsoleWarn(component string, event Event, msg string, err error, fields Fields) {
 	l.logConsoleOnly(newEntry(LevelWarn, component, event, msg, err, fields))
 }
 
+// ConsoleError logs an ERROR-level entry to the console sink only.
 func (l *RuntimeLogger) ConsoleError(component string, event Event, msg string, err error, fields Fields) {
 	l.logConsoleOnly(newEntry(LevelError, component, event, msg, err, fields))
 }
 
+// HistoryInfo logs an INFO-level entry to the history sink only.
 func (l *RuntimeLogger) HistoryInfo(component string, event Event, fields Fields) {
 	l.logHistoryOnly(newEntry(LevelInfo, component, event, "", nil, fields))
 }
 
+// HistoryWarn logs a WARN-level entry to the history sink only.
 func (l *RuntimeLogger) HistoryWarn(component string, event Event, err error, fields Fields) {
 	l.logHistoryOnly(newEntry(LevelWarn, component, event, "", err, fields))
 }
 
+// HistoryError logs an ERROR-level entry to the history sink only.
 func (l *RuntimeLogger) HistoryError(component string, event Event, err error, fields Fields) {
 	l.logHistoryOnly(newEntry(LevelError, component, event, "", err, fields))
 }
 
+// Log writes entry to both sinks, applying each sink's level floor and the
+// history-info allowlist.
 func (l *RuntimeLogger) Log(entry Entry) {
 	if l == nil {
 		return

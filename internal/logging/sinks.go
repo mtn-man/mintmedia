@@ -17,6 +17,7 @@ type ConsoleSink struct {
 	stderr io.Writer
 }
 
+// NewConsoleSink builds a ConsoleSink writing to the given stdout/stderr streams.
 func NewConsoleSink(stdout, stderr io.Writer) *ConsoleSink {
 	return &ConsoleSink{stdout: stdout, stderr: stderr}
 }
@@ -43,6 +44,7 @@ type HistorySink struct {
 	mu   sync.Mutex
 }
 
+// NewHistorySink builds a HistorySink appending JSONL records to path.
 func NewHistorySink(path string) *HistorySink {
 	return &HistorySink{path: strings.TrimSpace(path)}
 }
