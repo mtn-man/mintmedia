@@ -96,6 +96,9 @@ func NewRenameOrCopy(opts Options) *RenameOrCopy {
 	}
 }
 
+// Move relocates src to dst, attempting os.Rename first and falling back to
+// copy+atomic finalize (with progress reporting) when rename isn't possible,
+// e.g. across filesystems/devices.
 func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 	if err := ctx.Err(); err != nil {
 		return err
