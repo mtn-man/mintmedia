@@ -531,28 +531,6 @@ func planForMain(
 	return pl, nil
 }
 
-// CountPlans runs Plan against each path and sums the resulting plan counts
-// (e.g. a season-pack directory counts as 8 files, not 1), so callers get an
-// accurate human-facing file count across expansion. Paths that fail to plan
-// (non-media, unparseable) are silently skipped -- the caller's own
-// processing loop is responsible for surfacing that error later.
-// Stops early if ctx is canceled, returning the partial count and
-// interrupted=true so callers can distinguish a full count from a
-// cancellation-truncated one.
-func CountPlans(ctx context.Context, proc Processor, paths []string) (count int, interrupted bool) {
-	for _, p := range paths {
-		if ctx.Err() != nil {
-			return count, true
-		}
-		plans, err := proc.Plan(ctx, Request{InputPath: p})
-		if err != nil {
-			continue
-		}
-		count += len(plans)
-	}
-	return count, false
-}
-
 // CountMainMedia counts main media files under path using the same
 // extension-filtered selection as Plan (single file check, or a directory
 // walk via listMainMediaFromDir), without running any naming/hint-resolution
@@ -588,9 +566,8 @@ func (p *processorImpl) CountMainMedia(ctx context.Context, path string) (int, e
 }
 
 // CountMainMedia sums the cheap, extension-only media count (see
-// (*processorImpl).CountMainMedia) across paths. Use this instead of
-// CountPlans for a fast upfront estimate; use CountPlans when an exact,
-// fully-planned count is required.
+// (*processorImpl).CountMainMedia) across paths, for a fast upfront estimate
+// without running Plan's naming/hint-resolution logic.
 func CountMainMedia(ctx context.Context, proc Processor, paths []string) (count int, interrupted bool) {
 	for _, p := range paths {
 		if ctx.Err() != nil {
