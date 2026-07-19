@@ -340,20 +340,17 @@ func TestProcessDropFolder_NoCandidates_PrintsNoFilesWithoutConfigPath(t *testin
 	}
 }
 
-func TestProcessDropFolder_StreamedPerFile_NoDuplicateLinesOrSounds(t *testing.T) {
+func TestProcessDropFolder_StreamedPerFile_NoDuplicateLines_SoundsDebounced(t *testing.T) {
 	drop := t.TempDir()
 	input := filepath.Join(drop, "pack")
 	if err := os.MkdirAll(input, 0o755); err != nil {
 		t.Fatalf("mkdir pack: %v", err)
 	}
 
-	soundMu := sync.Mutex{}
-	soundCount := 0
+	soundCalls := make(chan struct{}, 16)
 	oldPlayDoneSound := playDoneSound
 	playDoneSound = func(context.Context, string) error {
-		soundMu.Lock()
-		soundCount++
-		soundMu.Unlock()
+		soundCalls <- struct{}{}
 		return nil
 	}
 	t.Cleanup(func() { playDoneSound = oldPlayDoneSound })
@@ -396,12 +393,10 @@ func TestProcessDropFolder_StreamedPerFile_NoDuplicateLinesOrSounds(t *testing.T
 		t.Fatalf("expected 2 compact sorted lines, got %d (output=%q)", got, out)
 	}
 
-	soundMu.Lock()
-	gotSounds := soundCount
-	soundMu.Unlock()
-	if gotSounds != 2 {
-		t.Fatalf("sound count = %d, want 2", gotSounds)
-	}
+	// Both applies stream in well within the 3s done-sound cooldown, so the
+	// second play is coalesced into the first rather than overlapping it.
+	waitForSoundCount(t, soundCalls, 1, 2*time.Second)
+	assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
 }
 
 func TestProcessDropFolder_StreamedPerJob_PlaysOneSoundForWholeJob(t *testing.T) {
@@ -411,13 +406,10 @@ func TestProcessDropFolder_StreamedPerJob_PlaysOneSoundForWholeJob(t *testing.T)
 		t.Fatalf("mkdir pack: %v", err)
 	}
 
-	soundMu := sync.Mutex{}
-	soundCount := 0
+	soundCalls := make(chan struct{}, 16)
 	oldPlayDoneSound := playDoneSound
 	playDoneSound = func(context.Context, string) error {
-		soundMu.Lock()
-		soundCount++
-		soundMu.Unlock()
+		soundCalls <- struct{}{}
 		return nil
 	}
 	t.Cleanup(func() { playDoneSound = oldPlayDoneSound })
@@ -454,11 +446,32 @@ func TestProcessDropFolder_StreamedPerJob_PlaysOneSoundForWholeJob(t *testing.T)
 		t.Fatalf("ErrorCount = %d, want 0", result.ErrorCount)
 	}
 
-	soundMu.Lock()
-	gotSounds := soundCount
-	soundMu.Unlock()
-	if gotSounds != 1 {
-		t.Fatalf("sound count = %d, want 1", gotSounds)
+	waitForSoundCount(t, soundCalls, 1, 2*time.Second)
+	assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
+}
+
+func waitForSoundCount(t *testing.T, ch <-chan struct{}, want int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.After(timeout)
+	got := 0
+	for got < want {
+		select {
+		case <-ch:
+			got++
+		case <-deadline:
+			t.Fatalf("timeout waiting for sound calls: got=%d want=%d", got, want)
+		}
+	}
+}
+
+func assertNoExtraSoundCalls(t *testing.T, ch <-chan struct{}, wait time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ch:
+		t.Fatalf("unexpected extra sound call")
+	case <-timer.C:
 	}
 }
 

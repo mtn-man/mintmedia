@@ -122,6 +122,29 @@ func processDropFolder(
 		},
 	}
 
+	// Done-sound plays are spaced at least doneSoundCooldown apart: afplay on
+	// the default done sound runs ~2s, and a fast, same-filesystem batch can
+	// stream many applied results within milliseconds of each other, so
+	// without coalescing they'd overlap into a cacophony rather than
+	// distinct dings. Declared above the candidate loop (not per-job, like
+	// planner below) since overlap can happen across jobs too, e.g. two
+	// small top-level candidates finishing back-to-back.
+	const doneSoundCooldown = 3 * time.Second
+	var soundDebounce notify.Debouncer
+	playDoneCount := func(count int) {
+		for i := 0; i < count; i++ {
+			if !soundDebounce.Allow(time.Now(), doneSoundCooldown) {
+				continue
+			}
+			// Capture playDoneSound synchronously here rather than inside the
+			// goroutine: it's a package-level var swapped out by tests, and
+			// reading it lazily in the goroutine could race with a test's
+			// cleanup restoring it after processDropFolder has returned.
+			play := playDoneSound
+			go func() { _ = play(context.WithoutCancel(ctx), soundDone) }()
+		}
+	}
+
 	for _, path := range candidates {
 		if ctx.Err() != nil {
 			if !interrupted {
@@ -131,11 +154,6 @@ func processDropFolder(
 		}
 
 		planner := notify.NewDoneSoundPlanner(doneNotificationMode)
-		playDoneCount := func(count int) {
-			for i := 0; i < count; i++ {
-				_ = playDoneSound(context.WithoutCancel(ctx), soundDone)
-			}
-		}
 		itemStart := time.Now()
 		recordResult := func(r processor.Result) {
 			if processor.IsSuppressedResult(r) {
