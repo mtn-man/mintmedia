@@ -16,21 +16,25 @@ type Config struct {
 	Naming       Naming       `toml:"naming"`
 }
 
+// Paths holds the drop folder and state directory locations.
 type Paths struct {
 	DropFolder string `toml:"drop_folder"`
 	StateDir   string `toml:"state_dir"`
 }
 
+// Destinations holds the library root directories Plan/Apply move files into.
 type Destinations struct {
 	DestDirMovies string `toml:"dest_dir_movies"`
 	DestDirShows  string `toml:"dest_dir_shows"`
 }
 
+// Features toggles optional subsystems.
 type Features struct {
 	EnableTorrentAutomation bool `toml:"enable_torrent_automation"`
 	EnableProcessing        bool `toml:"enable_processing"`
 }
 
+// Logging configures the console/history logging sinks.
 type Logging struct {
 	// Optional. Defaults to INFO.
 	ConsoleLevel string `toml:"console_level"`
@@ -40,6 +44,7 @@ type Logging struct {
 	HistoryFile string `toml:"history_file"`
 }
 
+// System holds process-level behavior settings.
 type System struct {
 	AutoCreateMissingDirs  bool   `toml:"auto_create_missing_dirs"`
 	DeferDestinationChecks bool   `toml:"defer_destination_checks"`
@@ -48,17 +53,20 @@ type System struct {
 	ShutdownForceTimeout   string `toml:"shutdown_force_timeout"`
 }
 
+// Watch configures the drop folder filesystem watcher.
 type Watch struct {
 	// e.g. "3s"
 	DropSettleDuration string `toml:"drop_settle_duration"`
 }
 
+// Clipboard configures magnet-link detection via clipboard polling.
 type Clipboard struct {
 	Enabled bool `toml:"enabled"`
 	// e.g. "1s"
 	PollInterval string `toml:"poll_interval"`
 }
 
+// Torrent configures the Transmission JSON-RPC integration.
 type Torrent struct {
 	Enabled bool `toml:"enabled"`
 
@@ -72,6 +80,7 @@ type Torrent struct {
 	AutoCleanupCompletedTorrents bool `toml:"auto_cleanup_completed_torrents"`
 }
 
+// Media configures which file extensions are treated as main/associated media.
 type Media struct {
 	// Required when processing is enabled. Extensions should include the leading dot (e.g. ".mkv").
 	MainMediaExtensions []string `toml:"main_media_extensions"`
@@ -80,6 +89,7 @@ type Media struct {
 	AssociatedFileExtensions []string `toml:"associated_file_extensions"`
 }
 
+// Naming configures release-name cleanup during title parsing.
 type Naming struct {
 	// Additional regex patterns (strings) to strip from release names, on top
 	// of mintmedia's built-in defaults (resolution/codec/source tags). This

@@ -294,13 +294,13 @@ func parseDurationField(errs *[]error, field, raw, example string) (d time.Durat
 
 // parseDurationFieldMin is parseDurationField plus a minimum-value check,
 // appending a single "too small" error when the parsed duration is below min.
-func parseDurationFieldMin(errs *[]error, field, raw, example string, min time.Duration) (d time.Duration, ok bool) {
+func parseDurationFieldMin(errs *[]error, field, raw, example string, minVal time.Duration) (d time.Duration, ok bool) {
 	d, ok = parseDurationField(errs, field, raw, example)
 	if !ok {
 		return d, false
 	}
-	if d < min {
-		*errs = append(*errs, fmt.Errorf("%s: %s is too small (minimum %s)", field, d, min))
+	if d < minVal {
+		*errs = append(*errs, fmt.Errorf("%s: %s is too small (minimum %s)", field, d, minVal))
 		return d, false
 	}
 	return d, true
