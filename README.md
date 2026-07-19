@@ -56,7 +56,7 @@ When mintmedia processes a file or folder, it:
 
 If a subtitle or other accompanying file can't be moved, the main media is still moved and you'll see a warning. The source folder is left in place if anything was left behind.
 
-Use `--plan` to preview what mintmedia would do without touching anything. Pass a path to preview a specific item, or omit it to preview the whole drop folder.
+Use `--plan` to preview what mintmedia would do without touching anything. Pass a path with `=` to preview a specific item (`--plan=/path/to/item` -- the space-separated form, `--plan /path/to/item`, is parsed as no path given, since the path is optional), or omit it entirely to preview the whole drop folder.
 
 See [Media detection](docs/media-detection.md) for exactly which filename patterns are recognized, and [Folder processing](docs/folder-processing.md) for how season packs, movie collections, and mixed folders are handled.
 
@@ -99,7 +99,7 @@ mintmedia [flags]
 | `-d` / `--daemon` | Run continuously, watching for new files |
 | `-p` / `--process-drop` | Process everything currently in the drop folder (default when no flag is given) |
 | `--process <path>` | Process a specific path -- non-media and empty directories are silently skipped |
-| `--plan [path]` / `--dry-run [path]` | Preview what would happen -- no changes made; omit path to preview the drop folder |
+| `--plan[=path]` / `--dry-run[=path]` | Preview what would happen -- no changes made; omit path to preview the drop folder. Use `=` to pass a path (`--plan=/path`, not `--plan /path`) |
 | `-s` / `--status` | Check whether the daemon is running |
 | `-S` / `--stop` | Gracefully stop the running daemon |
 | `--config <path>` | Use a different config file |

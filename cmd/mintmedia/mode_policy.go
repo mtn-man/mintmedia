@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-var errConflictingModes = errors.New("use only one of --plan (or --dry-run), --plan <path>, --process, --process-drop, or --daemon at a time")
+var errConflictingModes = errors.New("use only one of --plan (or --dry-run), --plan=<path>, --process, --process-drop, or --daemon at a time")
 var errProcessingDisabled = errors.New("processing modes require features.enable_processing=true in the config.toml; set it to true or run with no mode flags for a config-only smoke test")
 
 type modePolicy struct {
