@@ -67,6 +67,11 @@ type Plan struct {
 	// Associated files to move (if any)
 	Associated []Move
 
+	// Duplicate is true when DestMainPath already exists in the library.
+	// Apply must not attempt to move a plan with Duplicate set; it should
+	// report a graceful skip instead.
+	Duplicate bool
+
 	// Cleanup intent (optional; not all Apply implementations will honor this initially)
 	DeleteEmptyInputDir bool
 }

@@ -445,6 +445,178 @@ func TestApply_DestDirPermissionDenied_ReturnsDestinationUnavailableError(t *tes
 	}
 }
 
+// TestApply_MultiEpisodeDir_DuplicateSiblingBlocksCleanup covers a
+// season-pack batch where one episode is a pre-existing duplicate (skipped,
+// left in place) and its sibling is new (applied normally). DeleteEmptyInputDir
+// is only set on the last-planned sibling (see plan()), so if the duplicate
+// skip weren't tracked across the whole batch, the successful sibling's
+// cleanup would trash the input directory -- taking the still-unmoved
+// duplicate file down with it. It must not: the input directory must survive
+// with the duplicate's source file still inside it.
+func TestApply_MultiEpisodeDir_DuplicateSiblingBlocksCleanup(t *testing.T) {
+	t.Parallel()
+
+	p := newTestProcessorWithExecDeps(t)
+
+	inputDir := filepath.Join(p.cfg.DropFolder, "Deadwood.S01")
+	mkdirAll(t, inputDir)
+
+	ep1 := "Deadwood.S01E01.1080p.HEVC.x265-MeGusta.mkv"
+	ep2 := "Deadwood.S01E02.1080p.HEVC.x265-MeGusta.mkv"
+	ep1Src := filepath.Join(inputDir, ep1)
+	ep2Src := filepath.Join(inputDir, ep2)
+	writeFile(t, ep1Src, strings.Repeat("m", 64))
+	writeFile(t, ep2Src, strings.Repeat("m", 64))
+
+	// Episode 1 already exists in the library; episode 2 is new.
+	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01.mkv"), "already here")
+
+	plans, err := p.Plan(context.Background(), Request{InputPath: inputDir})
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if len(plans) != 2 {
+		t.Fatalf("expected 2 plans, got %d", len(plans))
+	}
+
+	results, err := p.Apply(context.Background(), plans)
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+
+	var dupResult, appliedResult *Result
+	for i := range results {
+		if results[i].Plan.Duplicate {
+			dupResult = &results[i]
+		} else {
+			appliedResult = &results[i]
+		}
+	}
+	if dupResult == nil || appliedResult == nil {
+		t.Fatalf("expected one duplicate and one applied result, got: %+v", results)
+	}
+	if dupResult.Applied {
+		t.Fatalf("duplicate result Applied = true, want false")
+	}
+	if !appliedResult.Applied {
+		t.Fatalf("non-duplicate result Applied = false, want true")
+	}
+
+	// The directory must survive, still containing episode 1's unmoved file.
+	if _, err := os.Stat(inputDir); err != nil {
+		t.Fatalf("input dir should survive (duplicate sibling left in place): %v", err)
+	}
+	if _, err := os.Stat(ep1Src); err != nil {
+		t.Fatalf("episode 1 source should remain untouched: %v", err)
+	}
+	if _, err := os.Stat(ep2Src); !os.IsNotExist(err) {
+		t.Fatalf("episode 2 source should have been moved, stat err=%v", err)
+	}
+}
+
+// TestApply_Duplicate_SkipsWithoutMoving covers the Plan-time-detected
+// duplicate path: applyOne must report a graceful skip and must never touch
+// the Transferer at all for a plan with Duplicate already set.
+func TestApply_Duplicate_SkipsWithoutMoving(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+
+	mainName := "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	writeFile(t, mainSrc, "dummy")
+
+	existing := filepath.Join(p.cfg.MoviesDir, "Get Smart (2008)", "Get Smart (2008).mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true")
+	}
+
+	p.xfer = failIfCalledTransferer{t: t}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Applied {
+		t.Fatalf("Applied = true, want false")
+	}
+	if !res.Handled {
+		t.Fatalf("Handled = false, want true")
+	}
+	if !strings.Contains(res.Reason, "already in library") {
+		t.Fatalf("Reason = %q, want it to mention the library conflict", res.Reason)
+	}
+
+	// The source file must be untouched -- a skipped duplicate is not moved,
+	// not deleted.
+	if _, err := os.Stat(mainSrc); err != nil {
+		t.Fatalf("source should remain in place: %v", err)
+	}
+}
+
+// TestApply_DuplicateRace_DowngradesToGracefulSkip covers the TOCTOU case:
+// Plan saw no duplicate (pl.Duplicate == false), but another job/batch item
+// claimed the destination before this Move ran. The real transfer.RenameOrCopy
+// refuses to overwrite and returns a transfer.ErrDestinationExists-wrapped
+// error; applyOne must downgrade that to the same graceful skip Result as
+// the Plan-time-detected case rather than propagating a hard error.
+func TestApply_DuplicateRace_DowngradesToGracefulSkip(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+
+	mainName := "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	writeFile(t, mainSrc, "dummy")
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false (nothing exists yet at plan time)")
+	}
+
+	// Simulate another job winning the race between Plan and Apply.
+	writeFile(t, pl.DestMainPath, "claimed by another job")
+
+	p.xfer = transfer.NewRenameOrCopy(transfer.Options{})
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Applied {
+		t.Fatalf("Applied = true, want false")
+	}
+	if !res.Handled {
+		t.Fatalf("Handled = false, want true")
+	}
+	if !strings.Contains(res.Reason, "already in library") {
+		t.Fatalf("Reason = %q, want it to mention the library conflict", res.Reason)
+	}
+
+	// The source file must be untouched -- the race loser doesn't get moved.
+	if _, err := os.Stat(mainSrc); err != nil {
+		t.Fatalf("source should remain in place: %v", err)
+	}
+}
+
 func TestApply_RefusesToDeleteDropFolderRoot_WhenInputIsRoot(t *testing.T) {
 	t.Parallel()
 
@@ -547,6 +719,19 @@ func newTestProcessorWithExecDeps(t *testing.T) *processorImpl {
 	p := newTestProcessor(t)
 	p.xfer = &osRenameTransferer{}
 	return p
+}
+
+// failIfCalledTransferer fails the test immediately if Move is ever invoked,
+// for asserting a code path that must short-circuit before touching the
+// Transferer at all.
+type failIfCalledTransferer struct {
+	t *testing.T
+}
+
+func (f failIfCalledTransferer) Move(ctx context.Context, src, dst string) error {
+	f.t.Helper()
+	f.t.Fatalf("Move(%q, %q) should not have been called", src, dst)
+	return nil
 }
 
 type osRenameTransferer struct{}

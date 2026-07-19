@@ -29,10 +29,11 @@ func applyWithEmitter(ctx context.Context, p *processorImpl, plans []Plan, emit 
 	}
 
 	assocFailedByInput := make(map[string]bool)
+	duplicateSkippedByInput := make(map[string]bool)
 
 	results := make([]Result, 0, len(plans))
 	for _, pl := range plans {
-		res, err := applyOne(ctx, p, pl, assocFailedByInput)
+		res, err := applyOne(ctx, p, pl, assocFailedByInput, duplicateSkippedByInput)
 		results = append(results, res)
 		if emit != nil {
 			emit(res)
@@ -45,7 +46,7 @@ func applyWithEmitter(ctx context.Context, p *processorImpl, plans []Plan, emit 
 	return results, nil
 }
 
-func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput map[string]bool) (Result, error) {
+func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput, duplicateSkippedByInput map[string]bool) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{Plan: pl}, err
 	}
@@ -56,6 +57,10 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 
 	if p.xfer == nil {
 		return Result{Plan: pl}, fmt.Errorf("processor misconfigured: Transferer is nil")
+	}
+
+	if pl.Duplicate {
+		return skipDuplicateResult(p, pl, duplicateSkippedByInput), nil
 	}
 
 	// Ensure destination directory exists
@@ -71,6 +76,14 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		if !handleCleanupError(p, err, "main", pl.MainSourcePath, pl.DestMainPath) {
 			if transfer.IsDestinationUnavailable(err) {
 				return Result{Plan: pl}, &DestinationUnavailableError{Category: pl.Category, Err: err}
+			}
+			if transfer.IsDestinationExists(err) {
+				// Lost a race against another job/batch item that claimed
+				// this destination after Plan's own duplicate check ran (see
+				// pl.Duplicate above) but before this move -- treat it the
+				// same as a Plan-time-detected duplicate rather than a hard
+				// failure.
+				return skipDuplicateResult(p, pl, duplicateSkippedByInput), nil
 			}
 			return Result{Plan: pl}, fmt.Errorf("move main media: %w", err)
 		}
@@ -152,6 +165,20 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 				Reason:  "applied",
 			}, nil
 		}
+		if pl.InputPath != "" && duplicateSkippedByInput[pl.InputPath] {
+			// A sibling in this batch was left in place because it was a
+			// duplicate (see skipDuplicateResult) -- trashing the input
+			// directory now would take that un-moved file down with it.
+			logWarn(p, logging.EventProcessorCleanupSkippedDuplicate, fmt.Sprintf("source folder cleanup skipped for %s (duplicate file left in place)", pl.InputPath), nil, logging.Fields{
+				"input_path": pl.InputPath,
+			})
+			return Result{
+				Plan:    pl,
+				Applied: true,
+				Handled: true,
+				Reason:  "applied",
+			}, nil
+		}
 		if err := cleanupSourceDirIfSafe(p, pl.InputPath); err != nil {
 			logWarn(p, logging.EventProcessorCleanupSkippedFailed, fmt.Sprintf("source folder cleanup skipped for %s: %v", pl.InputPath, err), err, logging.Fields{
 				"input_path": pl.InputPath,
@@ -165,6 +192,23 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		Handled: true,
 		Reason:  "applied",
 	}, nil
+}
+
+// skipDuplicateResult logs and builds the graceful-skip Result shared by
+// both duplicate-detection paths: the Plan-time check (pl.Duplicate) and the
+// Apply-time TOCTOU downgrade (transfer.IsDestinationExists). It also
+// records pl.InputPath in duplicateSkippedByInput so the batch-level cleanup
+// gate below won't trash a directory that still holds this un-moved file.
+func skipDuplicateResult(p *processorImpl, pl Plan, duplicateSkippedByInput map[string]bool) Result {
+	if pl.InputPath != "" && duplicateSkippedByInput != nil {
+		duplicateSkippedByInput[pl.InputPath] = true
+	}
+	reason := fmt.Sprintf("already in library: %s", pl.DestMainPath)
+	logInfoHistoryOnly(p, logging.EventProcessorInputSkippedDuplicate, logging.Fields{
+		"input_path": pl.InputPath,
+		"dest_path":  pl.DestMainPath,
+	})
+	return Result{Plan: pl, Applied: false, Handled: true, Reason: reason}
 }
 
 func handleCleanupError(p *processorImpl, err error, kind, src, dst string) bool {

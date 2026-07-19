@@ -206,6 +206,9 @@ func TestMove_DestinationExists(t *testing.T) {
 	if !strings.Contains(err.Error(), "destination already exists") {
 		t.Fatalf("expected destination exists error, got: %v", err)
 	}
+	if !IsDestinationExists(err) {
+		t.Fatalf("expected IsDestinationExists(err) to be true, got: %v", err)
+	}
 
 	if _, err := os.Stat(src); err != nil {
 		t.Fatalf("expected source to remain, stat err=%v", err)
@@ -335,6 +338,9 @@ func TestCopyThenReplace_DestinationAlreadyExists(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "destination already exists") {
 		t.Fatalf("expected destination exists error, got: %v", err)
+	}
+	if !IsDestinationExists(err) {
+		t.Fatalf("expected IsDestinationExists(err) to be true, got: %v", err)
 	}
 }
 

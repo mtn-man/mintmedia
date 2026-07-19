@@ -2107,3 +2107,109 @@ func TestPlan_DirectoryBatch_PreservesEarlierPlansOnDestinationUnavailable(t *te
 		t.Fatalf("preserved plan Category = %v, want %v", plans[0].Category, CategoryMovie)
 	}
 }
+
+// TestPlan_Duplicate_MovieAlreadyInLibrary covers case 1 of duplicate
+// detection: a file already sits at the computed DestMainPath, so Plan must
+// mark pl.Duplicate rather than leaving Apply to discover the collision as a
+// raw transfer error.
+func TestPlan_Duplicate_MovieAlreadyInLibrary(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	// Pre-seed the exact destination the plan will compute.
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Get Smart (2008)", "Get Smart (2008).mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true")
+	}
+}
+
+// TestPlan_Duplicate_ShowAlreadyInLibrary mirrors
+// TestPlan_Duplicate_MovieAlreadyInLibrary for the show category.
+func TestPlan_Duplicate_ShowAlreadyInLibrary(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.1080p.HEVC.x265-MeGusta.mkv")
+	writeFile(t, src, "dummy")
+
+	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01.mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true")
+	}
+}
+
+// TestPlan_Duplicate_FalseWhenDestDirMissing covers the common case: a
+// brand-new title has no destination folder yet, so no stat collision is
+// possible and Plan must not report a duplicate.
+func TestPlan_Duplicate_FalseWhenDestDirMissing(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Fringe.2008.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false")
+	}
+}
+
+// TestPlan_Duplicate_StatErrorSurfaces covers a stat failure on
+// DestMainPath that isn't "not exist" (e.g. permission denied on the
+// destination folder) -- it must surface as a plan error rather than being
+// silently treated as "no duplicate".
+func TestPlan_Duplicate_StatErrorSurfaces(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permission bits")
+	}
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	destDir := filepath.Join(p.cfg.MoviesDir, "Get Smart (2008)")
+	mkdirAll(t, destDir)
+	if err := os.Chmod(destDir, 0o000); err != nil {
+		t.Fatalf("chmod destDir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(destDir, 0o755) })
+
+	_, err := planOne(t, p, src)
+	if err == nil {
+		t.Fatalf("expected a plan error, got nil")
+	}
+}
+
+// TestPlan_Duplicate_DifferentTitleNotFlagged ensures a sibling file in the
+// same destination folder with a different title doesn't false-positive the
+// duplicate check -- only an exact DestMainPath match should.
+func TestPlan_Duplicate_DifferentTitleNotFlagged(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E02.1080p.HEVC.x265-MeGusta.mkv")
+	writeFile(t, src, "dummy")
+
+	// A different episode already lives in the same season folder.
+	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01.mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false")
+	}
+}
