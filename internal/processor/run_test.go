@@ -65,7 +65,7 @@ func TestProcessEach_ErrorPropagated(t *testing.T) {
 	}
 
 	var count int
-	err := ProcessEach(context.Background(), proc, Request{InputPath: "/tmp/x"}, func(r Result) {
+	err := ProcessEach(context.Background(), proc, Request{InputPath: "/tmp/x"}, func(_ Result) {
 		count++
 	})
 	if !errors.Is(err, sentinel) {

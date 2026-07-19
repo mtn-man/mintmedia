@@ -587,7 +587,7 @@ func (f *failOneWithENOSPC) Move(ctx context.Context, src, dst string) error {
 
 type enospcTransferer struct{}
 
-func (enospcTransferer) Move(ctx context.Context, src, dst string) error {
+func (enospcTransferer) Move(ctx context.Context, _, dst string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}

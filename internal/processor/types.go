@@ -10,6 +10,7 @@ import (
 // Category represents Mintmedia's two canonical library targets.
 type Category string
 
+// The two canonical categories.
 const (
 	CategoryMovie Category = "Movies"
 	CategoryShow  Category = "Shows"
