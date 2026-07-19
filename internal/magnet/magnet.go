@@ -14,6 +14,7 @@ const (
 	MinBTIHLen = 8
 )
 
+// Sentinel errors returned by Parse.
 var (
 	ErrEmpty        = errors.New("magnet is empty")
 	ErrInvalidURI   = errors.New("invalid magnet URI")
@@ -39,7 +40,7 @@ func Parse(raw string) (Info, error) {
 
 	u, err := url.Parse(raw)
 	if err != nil {
-		return Info{}, fmt.Errorf("%w: %v", ErrInvalidURI, err)
+		return Info{}, fmt.Errorf("%w: %w", ErrInvalidURI, err)
 	}
 	if strings.ToLower(u.Scheme) != "magnet" {
 		return Info{}, ErrNotMagnet
@@ -71,13 +72,13 @@ func IsValid(raw string) bool {
 }
 
 // ShortBTIH returns a shortened hash fragment for logging.
-func ShortBTIH(btih string, max int) string {
+func ShortBTIH(btih string, maxLen int) string {
 	btih = strings.TrimSpace(btih)
-	if btih == "" || max <= 0 {
+	if btih == "" || maxLen <= 0 {
 		return ""
 	}
-	if len(btih) <= max {
+	if len(btih) <= maxLen {
 		return btih
 	}
-	return btih[:max]
+	return btih[:maxLen]
 }
