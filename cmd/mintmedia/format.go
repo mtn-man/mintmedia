@@ -149,7 +149,6 @@ func processDropCompactLine(res processor.Result, dur time.Duration) string {
 func processDropSummaryLine(s ProcessDropSummary) string {
 	total := s.Applied + s.Skipped + s.Errors
 	noun := resultformat.Pluralize(total, "file", "files")
-	elapsed := s.Elapsed.Round(time.Second)
 
 	parts := []string{fmt.Sprintf("%d sorted", s.Applied)}
 	if s.Skipped > 0 {
@@ -159,9 +158,21 @@ func processDropSummaryLine(s ProcessDropSummary) string {
 		parts = append(parts, fmt.Sprintf("%d %s", s.Errors, resultformat.Pluralize(s.Errors, "error", "errors")))
 	}
 
-	durSuffix := ""
-	if elapsed >= time.Second {
-		durSuffix = fmt.Sprintf(" (%s)", elapsed)
+	// Unlike the per-file duration suffix (resultformat.durationSuffix), the
+	// batch summary always shows an elapsed time, even sub-second -- a run
+	// that sorted 76 files in 400ms is worth reporting as fast, not silent.
+	// Precision scales with magnitude so the number stays meaningful instead
+	// of noisy: whole seconds at 1s+, one decimal from 100ms-1s, three
+	// decimals below 100ms (where a single decimal would round distinct fast
+	// runs down to the same "0.0s").
+	var durSuffix string
+	switch {
+	case s.Elapsed >= time.Second:
+		durSuffix = fmt.Sprintf(" (%s)", s.Elapsed.Round(time.Second))
+	case s.Elapsed >= 100*time.Millisecond:
+		durSuffix = fmt.Sprintf(" (%.1fs)", s.Elapsed.Seconds())
+	default:
+		durSuffix = fmt.Sprintf(" (%.3fs)", s.Elapsed.Seconds())
 	}
 	return fmt.Sprintf(
 		"INFO     %d %s -- %s%s",
