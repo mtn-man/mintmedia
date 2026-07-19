@@ -1110,6 +1110,62 @@ func TestPlatformDefaultsSameKeys(t *testing.T) {
 	}
 }
 
+// TestDefaultsAgreeAcrossSources guards against value drift between the
+// default constants in load.go and the three TOML sources that document/ship
+// those same defaults (defaults_darwin.toml, defaults_linux.toml,
+// config.example.toml). Path fields (state_dir, dest_dir_movies,
+// dest_dir_shows) are intentionally OS-specific and excluded here.
+func TestDefaultsAgreeAcrossSources(t *testing.T) {
+	t.Parallel()
+
+	exampleBytes, err := os.ReadFile(filepath.Join("..", "..", "config.example.toml"))
+	if err != nil {
+		t.Fatalf("read config.example.toml: %v", err)
+	}
+
+	sources := map[string][]byte{
+		"defaults_darwin.toml": defaultConfigDarwin,
+		"defaults_linux.toml":  defaultConfigLinux,
+		"config.example.toml":  exampleBytes,
+	}
+
+	for name, raw := range sources {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var cfg Config
+			if _, err := toml.Decode(string(raw), &cfg); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+
+			checkDuration := func(field, raw string, want time.Duration) {
+				got, err := time.ParseDuration(raw)
+				if err != nil {
+					t.Errorf("%s: invalid duration %q: %v", field, raw, err)
+					return
+				}
+				if got != want {
+					t.Errorf("%s = %q (%s), want %s (per load.go default const)", field, raw, got, want)
+				}
+			}
+			checkString := func(field, got, want string) {
+				if got != want {
+					t.Errorf("%s = %q, want %q (per load.go default const)", field, got, want)
+				}
+			}
+
+			checkString("system.done_notification_mode", cfg.System.DoneNotificationMode, "per_file")
+			checkDuration("system.shutdown_grace_duration", cfg.System.ShutdownGraceDuration, defaultShutdownGraceDuration)
+			checkDuration("system.shutdown_force_timeout", cfg.System.ShutdownForceTimeout, defaultShutdownForceTimeout)
+			checkDuration("watch.drop_settle_duration", cfg.Watch.DropSettleDuration, defaultDropSettleDuration)
+			checkDuration("clipboard.poll_interval", cfg.Clipboard.PollInterval, defaultClipboardPollInterval)
+			checkString("logging.console_level", cfg.Logging.ConsoleLevel, defaultConsoleLevel)
+			checkString("logging.history_level", cfg.Logging.HistoryLevel, defaultHistoryLevel)
+			checkString("logging.history_file", cfg.Logging.HistoryFile, defaultHistoryFile)
+		})
+	}
+}
+
 func collectTomlKeys(m map[string]interface{}, prefix string) []string {
 	var keys []string
 	for k, v := range m {

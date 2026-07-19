@@ -86,7 +86,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 	// Durations
 	settle, _ := parseDurationFieldMin(&errs, "watch.drop_settle_duration", cfg.Watch.DropSettleDuration, "3s", 500*time.Millisecond)
-	poll, _ := parseDurationFieldMin(&errs, "clipboard.poll_interval", cfg.Clipboard.PollInterval, "1s", 250*time.Millisecond)
+	poll, _ := parseDurationFieldMin(&errs, "clipboard.poll_interval", cfg.Clipboard.PollInterval, "250ms", 250*time.Millisecond)
 	shutdownGrace, _ := parseDurationFieldPositive(&errs, "system.shutdown_grace_duration", cfg.System.ShutdownGraceDuration, "10m")
 	shutdownForce, _ := parseDurationFieldPositive(&errs, "system.shutdown_force_timeout", cfg.System.ShutdownForceTimeout, "15s")
 

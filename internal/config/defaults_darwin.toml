@@ -1,5 +1,3 @@
-# Embedded bootstrap default — keep in sync with defaults_linux.toml (sibling) and /config.example.toml at the project root.
-
 [paths]
 # Folder watched for incoming media (drop zone).
 # Use an absolute path or "~" if mintmedia expands it.

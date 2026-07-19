@@ -21,6 +21,11 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// defaults_darwin.toml and defaults_linux.toml must be kept in sync with each
+// other and with /config.example.toml at the project root -- same defaults,
+// differing only in the OS-idiomatic path fields (state_dir, dest_dir_movies,
+// dest_dir_shows).
+//
 //go:embed defaults_darwin.toml
 var defaultConfigDarwin []byte
 
@@ -39,7 +44,7 @@ const (
 	DefaultConfigPathRel = ".config/mintmedia/config.toml"
 
 	// Defaults (opinionated for reliability).
-	defaultClipboardPollInterval = 1 * time.Second
+	defaultClipboardPollInterval = 250 * time.Millisecond
 	defaultDropSettleDuration    = 3 * time.Second
 	defaultShutdownGraceDuration = 10 * time.Minute
 	defaultShutdownForceTimeout  = 15 * time.Second
