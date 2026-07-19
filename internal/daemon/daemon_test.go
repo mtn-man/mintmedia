@@ -612,7 +612,7 @@ func TestDaemon_DestinationDegraded_DefersAndRecovers(t *testing.T) {
 		ShowsDir:                     shows,
 		AutoCleanupCompletedTorrents: false,
 		DeferDestinationChecks:       false,
-		dirWritableFn: func(dir string) bool {
+		dirWritableFn: func(_ string) bool {
 			return writable.Load()
 		},
 	}
