@@ -126,6 +126,8 @@ func (d *DropFolderWatcher) Start(ctx context.Context) error {
 	return nil
 }
 
+// Close stops the underlying fsnotify watcher, which causes the watcher's
+// event/error channels to close and its loops to exit.
 func (d *DropFolderWatcher) Close() error {
 	// Closing the watcher will cause fsnotify event/error channels to close
 	// and our loops to exit. Do not close output channels here; callers stop
@@ -199,10 +201,7 @@ func (d *DropFolderWatcher) loopEvents(ctx context.Context) {
 
 func (d *DropFolderWatcher) loopSettle(ctx context.Context) {
 	// Tick faster than settleDuration to be responsive but not busy.
-	tick := d.settleDuration / 3
-	if tick < 250*time.Millisecond {
-		tick = 250 * time.Millisecond
-	}
+	tick := max(d.settleDuration/3, 250*time.Millisecond)
 	t := time.NewTicker(tick)
 	defer t.Stop()
 
@@ -410,6 +409,8 @@ func (d *DropFolderWatcher) processingRoot(path string) string {
 	return filepath.Join(d.root, top)
 }
 
+// IsIgnorableDropEntry reports whether name is filesystem noise (e.g. .DS_Store,
+// AppleDouble metadata files) that should be skipped rather than processed.
 func IsIgnorableDropEntry(name string) bool {
 	name = strings.TrimSpace(name)
 	if name == "" {
