@@ -78,10 +78,15 @@ func processDropFolder(
 		return ProcessDropOutcome{ErrorCount: errCount}
 	}
 
-	// Count actual media files via a planning pass so the discovery message
-	// reflects the real number of files to process rather than the number of
-	// top-level drop entries (e.g. a season pack directory counts as 8, not 1).
-	fileCount, countInterrupted := processor.CountPlans(ctx, proc, candidates)
+	// Count expected media files via a cheap extension-only walk (no naming/
+	// hint resolution) so the discovery message reflects the real number of
+	// files to process rather than the number of top-level drop entries (e.g.
+	// a season pack directory counts as 8, not 1), without paying for a full
+	// second Plan pass over the batch. This is an estimate, not an exact
+	// count: Plan may still reject a file this count includes (unparseable or
+	// ambiguous name), which is why it's labeled "expected" rather than
+	// "discovered".
+	fileCount, countInterrupted := processor.CountMainMedia(ctx, proc, candidates)
 	if countInterrupted {
 		return ProcessDropOutcome{ErrorCount: errCount, Interrupted: true}
 	}
@@ -137,6 +142,7 @@ func processDropFolder(
 				return
 			}
 			dur := time.Since(itemStart).Round(time.Second)
+			itemStart = time.Now()
 			PrintProcessDropResults([]processor.Result{r}, verbose, dur)
 			summary.Results++
 			if r.Applied {

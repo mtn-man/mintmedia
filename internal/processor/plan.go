@@ -541,3 +541,55 @@ func CountPlans(ctx context.Context, proc Processor, paths []string) (count int,
 	}
 	return count, false
 }
+
+// CountMainMedia counts main media files under path using the same
+// extension-filtered selection as Plan (single file check, or a directory
+// walk via listMainMediaFromDir), without running any naming/hint-resolution
+// logic. This makes it much cheaper than Plan for a path whose contents Plan
+// would otherwise have to categorize and destination-check, at the cost of
+// being an estimate: a file that passes the extension filter here may still
+// turn out unparseable or ambiguous once Plan actually processes it, so this
+// count can be slightly higher than the real, fully-planned result.
+func (p *processorImpl) CountMainMedia(ctx context.Context, path string) (int, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return 0, err
+	}
+
+	st, err := os.Stat(abs)
+	if err != nil {
+		return 0, err
+	}
+
+	if st.Mode().IsRegular() {
+		ext := strings.ToLower(filepath.Ext(abs))
+		if !isExtInSet(ext, p.mainExtSet) {
+			return 0, ErrNotMedia
+		}
+		return 1, nil
+	}
+
+	mainPaths, _, err := listMainMediaFromDir(ctx, p, abs)
+	if err != nil {
+		return 0, err
+	}
+	return len(mainPaths), nil
+}
+
+// CountMainMedia sums the cheap, extension-only media count (see
+// (*processorImpl).CountMainMedia) across paths. Use this instead of
+// CountPlans for a fast upfront estimate; use CountPlans when an exact,
+// fully-planned count is required.
+func CountMainMedia(ctx context.Context, proc Processor, paths []string) (count int, interrupted bool) {
+	for _, p := range paths {
+		if ctx.Err() != nil {
+			return count, true
+		}
+		n, err := proc.CountMainMedia(ctx, p)
+		if err != nil {
+			continue
+		}
+		count += n
+	}
+	return count, false
+}
