@@ -12,6 +12,7 @@ type Fields map[string]any
 // Level describes log severity.
 type Level string
 
+// Severity levels, ordered low to high.
 const (
 	LevelDebug Level = "DEBUG"
 	LevelInfo  Level = "INFO"

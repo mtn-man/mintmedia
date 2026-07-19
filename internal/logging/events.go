@@ -3,6 +3,7 @@ package logging
 // Event is the canonical identifier for a structured operational log event.
 type Event string
 
+// Canonical event identifiers logged across the daemon/CLI.
 const (
 	EventSystemStartup              Event = "system.startup"
 	EventSystemDestinationsReady    Event = "system.destinations.ready"
