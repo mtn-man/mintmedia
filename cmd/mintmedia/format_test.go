@@ -105,12 +105,20 @@ func TestProcessDropSummaryLine(t *testing.T) {
 			want: "INFO     8 files -- 8 sorted (6m2s)",
 		},
 		{
-			name: "instant duration suppressed",
+			name: "sub-second duration still shown",
 			sum: ProcessDropSummary{
 				Applied: 1,
 				Elapsed: 400 * time.Millisecond,
 			},
-			want: "INFO     1 file -- 1 sorted",
+			want: "INFO     1 file -- 1 sorted (0.4s)",
+		},
+		{
+			name: "very fast duration shown with millisecond precision",
+			sum: ProcessDropSummary{
+				Applied: 76,
+				Elapsed: 43 * time.Millisecond,
+			},
+			want: "INFO     76 files -- 76 sorted (0.043s)",
 		},
 	}
 
