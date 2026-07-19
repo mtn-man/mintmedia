@@ -48,6 +48,7 @@ func determineCategoryFromName(name string) Category {
 
 func hasShowSeasonSignal(name string) bool {
 	return reSeasonEpisode.MatchString(name) ||
+		reSeasonEpisodeX.MatchString(name) ||
 		reSeasonRange.MatchString(name) ||
 		reSeasonWordRange.MatchString(name) ||
 		reSeasonWord.MatchString(name)
@@ -55,6 +56,7 @@ func hasShowSeasonSignal(name string) bool {
 
 func hasShowEpisodeSignal(name string) bool {
 	return reSeasonEpisode.MatchString(name) ||
+		reSeasonEpisodeX.MatchString(name) ||
 		reEpisodeWord.MatchString(name)
 }
 
@@ -88,25 +90,36 @@ func parseShowFromName(blacklist []*regexp.Regexp, baseName string, fileName str
 }
 
 // deriveShowHintFromFolder attempts to extract a show name/year from a season-pack style folder.
-// It only returns ok=true when a season range marker is present.
-func deriveShowHintFromFolder(blacklist []*regexp.Regexp, folderName string) (showName, showYear string, ok bool) {
+// It returns ok=true when the folder name itself carries a season marker -- either a season range
+// (e.g. "Season 1-5") or a single season (e.g. "Season 2"). For the single-season case, seasonOK is
+// also set with the specific season number, letting callers force Show category and anchor
+// bare-digit episode parsing (see parseBareSeasonEpisode) to a season already trusted from the
+// folder, rather than re-deriving it from an ambiguous filename token.
+func deriveShowHintFromFolder(blacklist []*regexp.Regexp, folderName string) (showName, showYear string, season int, seasonOK bool, ok bool) {
 	raw := strings.TrimSpace(folderName)
 	if raw == "" {
-		return "", "", false
+		return "", "", 0, false, false
 	}
 
-	if !reSeasonRange.MatchString(raw) && !reSeasonWordRange.MatchString(raw) {
-		return "", "", false
+	isRange := reSeasonRange.MatchString(raw) || reSeasonWordRange.MatchString(raw)
+	if !isRange {
+		if m := reSeasonWord.FindStringSubmatch(raw); m != nil {
+			season = atoiSafe(m[1])
+			seasonOK = true
+		} else {
+			return "", "", 0, false, false
+		}
 	}
 
-	// Remove season range markers before cleaning.
+	// Remove season markers before cleaning.
 	raw = reSeasonWordRange.ReplaceAllString(raw, " ")
 	raw = reSeasonRange.ReplaceAllString(raw, " ")
+	raw = reSeasonWord.ReplaceAllString(raw, " ")
 
 	raw = cleanReleaseName(blacklist, raw)
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", "", false
+		return "", "", 0, false, false
 	}
 
 	// Extract and remove year token if present.
@@ -117,11 +130,11 @@ func deriveShowHintFromFolder(blacklist []*regexp.Regexp, folderName string) (sh
 	}
 
 	if raw == "" {
-		return "", "", false
+		return "", "", 0, false, false
 	}
 
 	showName = titleCaseSimple(raw)
-	return showName, showYear, true
+	return showName, showYear, season, seasonOK, true
 }
 
 func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear string, season, episode int, ok bool) {
@@ -163,6 +176,81 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 
 	showName = titleCaseSimple(titlePart)
 	return showName, showYear, season, episode, true
+}
+
+// isLeadingBareToken reports whether fileName[:pos] contains nothing but release-noise --
+// bracketed tags and separator punctuation -- meaning a match starting at pos is effectively
+// the first real content in the name: the shape of a movie catalog-number prefix (e.g.
+// "[GRP] 101.Dalmations.1961...", or plain "101.Dalmations.1961..."). Genuine leading title
+// text (e.g. "Alias 101 Dalmations 1961.mkv") is deliberately not treated as noise -- that's a
+// narrower, accepted gap rather than risking false rejections of real embedded-year show titles.
+func isLeadingBareToken(fileName string, pos int) bool {
+	prefix := reBracketedTag.ReplaceAllString(fileName[:pos], "")
+	return strings.Trim(prefix, " ._-") == ""
+}
+
+// parseBareSeasonEpisode interprets a bare concatenated SxxEyy token (e.g. "201" as season 2
+// episode 01) in fileName. This form is inherently ambiguous with numbered movie titles/catalog
+// numbers (e.g. "101 Dalmations"), so it is only ever accepted when hint carries a season number
+// already trusted from the folder (see deriveShowHintFromFolder), and the extracted season must
+// match it exactly -- this function never guesses a season on its own. As a secondary guard, a
+// leading bare-digit token (allowing for release-noise like bracket tags before it) that is
+// followed *later in the filename* by a year (the "101.Dalmations.1961..." shape) is rejected,
+// since that shape reads as a movie catalog/sequence prefix rather than an embedded episode code.
+// The year search is scoped to the text after the match specifically -- a year appearing before
+// or overlapping the match (e.g. an unrelated upload-date tag like "[2020] 201 Title.avi") must
+// not count, or it would falsely reject a legitimate, hint-confirmed episode.
+//
+// Known accepted gap: this still can't distinguish a movie's "number, title, year" shape from a
+// show whose own episode title happens to mention a year in freeform text (e.g. "201 The Year
+// 1969 Special.avi") -- both have a year somewhere after the leading digits. A precise fix would
+// need to check that the year appears before any release-tag-like text (resolution, codec, etc.)
+// rather than merely "somewhere after," which isn't implemented yet since a real-world example of
+// the false-negative case hasn't been observed. TODO: tighten this if it turns out to matter.
+//
+// A filename can contain more than one bare 3-digit run (e.g. a stray number
+// elsewhere in the title). Every run is checked, not just the first: if
+// exactly one matches the trusted season, it's accepted; if more than one
+// does, that's a genuine ambiguity and this refuses to guess, same as if none
+// had matched.
+func parseBareSeasonEpisode(hint showHint, fileName string) (season, episode int, ok bool) {
+	if !hint.seasonOK {
+		return 0, 0, false
+	}
+
+	matches := reBareSeasonEpisode.FindAllStringSubmatchIndex(fileName, -1)
+	if matches == nil {
+		return 0, 0, false
+	}
+
+	found := false
+	for _, idxs := range matches {
+		// Use the digit capture group's own bounds (idxs[2], idxs[5]), not the
+		// full match bounds (idxs[0], idxs[1]) -- unlike \b, this regex's
+		// custom boundary consumes a real character, so the full match can
+		// extend one character beyond the digits themselves. Anchoring to the
+		// digits directly keeps "leading" and "after the match" precise
+		// regardless of what boundary character (if any) was consumed.
+		if isLeadingBareToken(fileName, idxs[2]) && findYear(fileName[idxs[5]:]) != "" {
+			continue
+		}
+
+		s := atoiSafe(fileName[idxs[2]:idxs[3]])
+		if s != hint.season {
+			continue
+		}
+
+		if found {
+			// A second candidate also matches the trusted season -- ambiguous
+			// which one is the real episode code, so refuse to guess.
+			return 0, 0, false
+		}
+		season = s
+		episode = atoiSafe(fileName[idxs[4]:idxs[5]])
+		found = true
+	}
+
+	return season, episode, found
 }
 
 func parseSeasonEpisode(raw string) (season, episode int, ok bool) {
@@ -234,12 +322,14 @@ type componentPattern struct {
 var (
 	seasonPatterns = []componentPattern{
 		{reSeasonEpisode, 1},
+		{reSeasonEpisodeX, 1},
 		{reSeasonWord, 1},
 		{reSeasonRange, 1},
 		{reSeasonWordRange, 1},
 	}
 	episodePatterns = []componentPattern{
 		{reSeasonEpisode, 2},
+		{reSeasonEpisodeX, 2},
 		{reEpisodeWord, 1},
 	}
 )

@@ -38,6 +38,7 @@ const (
 	EventProcessorInputSkippedNoMainMedia        Event = "processor.input.skipped.no.main.media"
 	EventProcessorMoviePackSkipUnparseable       Event = "processor.movie.pack.skip.unparseable"
 	EventProcessorShowFolderQualifiedGuess       Event = "processor.show.folder.qualified.guess"
+	EventProcessorShowFileSkipUnparseable        Event = "processor.show.file.skip.unparseable"
 )
 
 // AllOperationalEvents returns the complete set of production event constants.
@@ -74,6 +75,7 @@ func AllOperationalEvents() []Event {
 		EventProcessorInputSkippedNoMainMedia,
 		EventProcessorMoviePackSkipUnparseable,
 		EventProcessorShowFolderQualifiedGuess,
+		EventProcessorShowFileSkipUnparseable,
 	}
 }
 
