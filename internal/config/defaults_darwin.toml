@@ -1,3 +1,15 @@
+# -----------------------------------------------------------------------------
+# START HERE: dest_dir_movies and dest_dir_shows below are the settings you're
+# most likely to need to change -- where mintmedia puts your organized library.
+# -----------------------------------------------------------------------------
+[destinations]
+# Destination for processed movies
+dest_dir_movies = "~/Movies/Movies"
+
+# Destination for processed TV shows
+dest_dir_shows = "~/Movies/Shows"
+
+
 [paths]
 # Folder watched for incoming media (drop zone).
 # Use an absolute path or "~" if mintmedia expands it.
@@ -8,14 +20,6 @@ drop_folder = "~/Downloads/MintDrop"
 # macOS idiomatic default: "~/Library/Application Support/mintmedia"
 # Linux common default: "~/.local/state/mintmedia" (or $XDG_STATE_HOME/mintmedia)
 state_dir = "~/Library/Application Support/mintmedia"
-
-
-[destinations]
-# Destination for processed movies
-dest_dir_movies = "~/Movies/Movies"
-
-# Destination for processed TV shows
-dest_dir_shows = "~/Movies/Shows"
 
 
 [system]

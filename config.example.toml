@@ -2,18 +2,10 @@
 # Copy this file to your config location and edit paths/values as needed.
 # Keep in sync with internal/config/defaults_darwin.toml and defaults_linux.toml (the embedded bootstrap copies).
 
-[paths]
-# Folder watched for incoming media (drop zone).
-# Use an absolute path or "~" if mintmedia expands it.
-drop_folder = "~/Downloads/MintDrop"
-
-
-# State directory (history, internal bookkeeping, etc.)
-# macOS idiomatic:   "~/Library/Application Support/mintmedia"
-# Linux/XDG default: "~/.local/state/mintmedia"
-state_dir = "~/Library/Application Support/mintmedia"
-
-
+# -----------------------------------------------------------------------------
+# START HERE: dest_dir_movies and dest_dir_shows below are the settings you're
+# most likely to need to change -- where mintmedia puts your organized library.
+# -----------------------------------------------------------------------------
 [destinations]
 # Destination for processed movies
 # macOS default: "~/Movies/Movies"
@@ -24,6 +16,18 @@ dest_dir_movies = "~/Movies/Movies"
 # macOS default: "~/Movies/Shows"
 # Linux default: "~/Videos/Shows"
 dest_dir_shows = "~/Movies/Shows"
+
+
+[paths]
+# Folder watched for incoming media (drop zone).
+# Use an absolute path or "~" if mintmedia expands it.
+drop_folder = "~/Downloads/MintDrop"
+
+
+# State directory (history, internal bookkeeping, etc.)
+# macOS idiomatic:   "~/Library/Application Support/mintmedia"
+# Linux/XDG default: "~/.local/state/mintmedia"
+state_dir = "~/Library/Application Support/mintmedia"
 
 
 [system]
