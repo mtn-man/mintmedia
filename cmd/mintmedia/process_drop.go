@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/mtn-man/mintmedia/internal/console"
@@ -131,6 +132,7 @@ func processDropFolder(
 	// small top-level candidates finishing back-to-back.
 	const doneSoundCooldown = 3 * time.Second
 	var soundDebounce notify.Debouncer
+	var soundWG sync.WaitGroup
 	playDoneCount := func(count int) {
 		for i := 0; i < count; i++ {
 			if !soundDebounce.Allow(time.Now(), doneSoundCooldown) {
@@ -141,9 +143,18 @@ func processDropFolder(
 			// reading it lazily in the goroutine could race with a test's
 			// cleanup restoring it after processDropFolder has returned.
 			play := playDoneSound
-			go func() { _ = play(context.WithoutCancel(ctx), soundDone) }()
+			soundWG.Add(1)
+			go func() {
+				defer soundWG.Done()
+				_ = play(context.WithoutCancel(ctx), soundDone)
+			}()
 		}
 	}
+	// The caller (main) exits the process immediately after this function
+	// returns, so any in-flight done-sound playback must be joined here --
+	// otherwise the last file's sound can be killed mid-playback or never
+	// scheduled at all.
+	defer soundWG.Wait()
 
 	for _, path := range candidates {
 		if ctx.Err() != nil {
