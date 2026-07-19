@@ -11,6 +11,7 @@ import (
 
 	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/paths"
+	"github.com/mtn-man/mintmedia/internal/transfer"
 )
 
 // plan is the internal implementation behind (*processorImpl).Plan().
@@ -514,6 +515,9 @@ func planForMain(
 	if _, err := os.Stat(pl.DestMainPath); err == nil {
 		pl.Duplicate = true
 	} else if !os.IsNotExist(err) {
+		if transfer.IsDestinationUnavailable(err) {
+			return Plan{}, &DestinationUnavailableError{Category: pl.Category, Err: err}
+		}
 		return Plan{}, fmt.Errorf("stat destination: %w", err)
 	}
 
