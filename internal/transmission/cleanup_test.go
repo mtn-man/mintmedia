@@ -112,7 +112,7 @@ func TestRemoveCompleted_NoCompletedReturnsZero(t *testing.T) {
 		{"id": 9, "percentDone": 0.72},
 	}
 
-	ts := newRPCServer(t, func(method string, args json.RawMessage) interface{} {
+	ts := newRPCServer(t, func(method string, _ json.RawMessage) interface{} {
 		if method == "torrent-get" {
 			return map[string]interface{}{"torrents": torrents}
 		}
