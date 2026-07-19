@@ -29,6 +29,10 @@ func (s *stubRunProcessor) SortCandidates(_ context.Context, paths []string) ([]
 	return paths, nil, nil
 }
 
+func (s *stubRunProcessor) CountMainMedia(context.Context, string) (int, error) {
+	return 0, nil
+}
+
 func TestProcessEach_Streaming(t *testing.T) {
 	want := []Result{
 		{Applied: true, Reason: ""},

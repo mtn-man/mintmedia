@@ -132,6 +132,7 @@ type Processor interface {
 	Apply(ctx context.Context, plans []Plan) ([]Result, error)
 	Process(ctx context.Context, req Request) error
 	SortCandidates(ctx context.Context, paths []string) ([]string, []SortError, error)
+	CountMainMedia(ctx context.Context, path string) (int, error)
 }
 
 // Transferer moves a file from src -> dst.

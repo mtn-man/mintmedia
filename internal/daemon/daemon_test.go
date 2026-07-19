@@ -1140,6 +1140,10 @@ func (s *stubProcessor) SortCandidates(_ context.Context, paths []string) ([]str
 	return paths, nil, nil
 }
 
+func (s *stubProcessor) CountMainMedia(context.Context, string) (int, error) {
+	return 0, nil
+}
+
 func waitForPath(t *testing.T, ch <-chan string, timeout time.Duration) string {
 	t.Helper()
 

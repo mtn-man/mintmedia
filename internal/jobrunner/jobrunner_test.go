@@ -32,6 +32,10 @@ func (f *fakeProcessor) SortCandidates(_ context.Context, paths []string) ([]str
 	return paths, nil, nil
 }
 
+func (f *fakeProcessor) CountMainMedia(context.Context, string) (int, error) {
+	return 0, nil
+}
+
 type resultCollector struct {
 	mu      sync.Mutex
 	results []processor.Result

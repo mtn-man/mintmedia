@@ -282,7 +282,7 @@ runLoop:
 					d.logSortParseError(se.Path, se.Err)
 				}
 
-				fileCount, _ := processor.CountPlans(ctx, d.Proc, sortedPaths)
+				fileCount, _ := processor.CountMainMedia(ctx, d.Proc, sortedPaths)
 				noun := resultformat.Pluralize(fileCount, "file", "files")
 				d.logConsoleInfo(
 					logging.EventSystemDestinationsReady,
@@ -583,6 +583,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 	planner := notify.NewDoneSoundPlanner(d.DoneNotificationMode)
 	emit := func(r processor.Result) {
 		dur := time.Since(start).Round(time.Second)
+		start = time.Now()
 		if r.Applied {
 			d.logConsoleInfo(
 				logging.EventProcessorMoveMainApplied,

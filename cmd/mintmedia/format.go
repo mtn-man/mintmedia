@@ -70,9 +70,13 @@ func PrintProcessDropNoFiles() {
 }
 
 // PrintProcessDropCandidates writes process-drop candidate discovery output.
+// count is a cheap estimate (extension-only, no naming/hint resolution): the
+// real, fully-planned count may end up slightly lower if some files turn out
+// unparseable. "Detected" matches the wording PrintProcessDropNoFiles already
+// uses for the zero-file case.
 func PrintProcessDropCandidates(count int) {
 	noun := resultformat.Pluralize(count, "file", "files")
-	fmt.Printf("INFO     Discovered %d %s.\n\n", count, noun)
+	fmt.Printf("INFO     Detected %d %s.\n\n", count, noun)
 }
 
 // PrintFatalError writes a labeled, colorized error line to stderr, matching

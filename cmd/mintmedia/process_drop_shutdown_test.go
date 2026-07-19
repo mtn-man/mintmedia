@@ -538,6 +538,10 @@ func (s *processDropStubProcessor) SortCandidates(_ context.Context, paths []str
 	return paths, nil, nil
 }
 
+func (s *processDropStubProcessor) CountMainMedia(context.Context, string) (int, error) {
+	return 1, nil
+}
+
 func (s *processDropStubProcessor) Calls() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
