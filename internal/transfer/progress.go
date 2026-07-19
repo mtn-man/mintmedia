@@ -328,18 +328,18 @@ func terminalWidth(out *os.File) (int, bool) {
 	return width - 1, true
 }
 
-func truncateWithEllipsis(s string, max int) string {
-	if max <= 0 {
+func truncateWithEllipsis(s string, maxLen int) string {
+	if maxLen <= 0 {
 		return ""
 	}
 	r := []rune(s)
-	if len(r) <= max {
+	if len(r) <= maxLen {
 		return s
 	}
-	if max == 1 {
+	if maxLen == 1 {
 		return "…"
 	}
-	return string(r[:max-1]) + "…"
+	return string(r[:maxLen-1]) + "…"
 }
 
 func humanBytes(n int64) string {
