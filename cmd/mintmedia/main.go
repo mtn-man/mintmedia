@@ -97,13 +97,15 @@ func main() {
 	}
 
 	pflag.Parse()
-	if pflag.Lookup("plan").Changed && pflag.Lookup("dry-run").Changed {
+	planChanged := pflag.Lookup("plan").Changed
+	dryRunChanged := pflag.Lookup("dry-run").Changed
+	if planChanged && dryRunChanged {
 		die(errors.New("use --plan or --dry-run, not both"), exitUsage)
 	}
-	if pflag.Lookup("dry-run").Changed {
+	if dryRunChanged {
 		planPath = dryRunPath
-		pflag.Lookup("plan").Changed = true
 	}
+	planRequested := planChanged || dryRunChanged
 	if *planPath == planDropSentinel {
 		*planPath = ""
 	}
@@ -175,7 +177,7 @@ func main() {
 		fmt.Println(console.ColorizePrefixOut(fmt.Sprintf("CREATED  %s", dir)))
 	}
 
-	planDrop := pflag.Lookup("plan").Changed && *planPath == ""
+	planDrop := planRequested && *planPath == ""
 	mode, err := resolveModePolicy(
 		*planPath,
 		planDrop,
