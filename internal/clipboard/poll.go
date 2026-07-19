@@ -10,6 +10,7 @@ import (
 	"github.com/mtn-man/mintmedia/internal/magnet"
 )
 
+// ErrUnsupportedPlatform indicates no clipboard backend is available on this platform/build.
 var ErrUnsupportedPlatform = errors.New("clipboard backend unsupported on this platform")
 
 // Poller polls clipboard content using a platform-specific backend.
@@ -46,8 +47,11 @@ func NewPoller(interval time.Duration) (*Poller, error) {
 	}, nil
 }
 
+// Events returns the channel of detected magnet URIs.
 func (p *Poller) Events() <-chan string { return p.events }
-func (p *Poller) Errors() <-chan error  { return p.errs }
+
+// Errors returns the channel of backend errors encountered while polling.
+func (p *Poller) Errors() <-chan error { return p.errs }
 
 // Start begins polling. It returns immediately; polling happens in a goroutine.
 // Stop is handled by ctx cancellation.
