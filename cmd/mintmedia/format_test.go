@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +53,35 @@ func TestProcessDropCompactLine_Skipped(t *testing.T) {
 	want := "SKIPPED  Unknown.Release -- no main media found in directory"
 	if got != want {
 		t.Fatalf("processDropCompactLine(skipped) = %q, want %q", got, want)
+	}
+}
+
+func TestPrintPlan_DuplicateLine(t *testing.T) {
+	pl := processor.Plan{
+		Category:       processor.CategoryMovie,
+		MainSourcePath: "/tmp/drop/Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv",
+		DestMainPath:   "/Volumes/media/Movies/Get Smart (2008)/Get Smart (2008).mkv",
+		MovieTitle:     "Get Smart (2008)",
+		Duplicate:      true,
+	}
+
+	out := captureStdout(t, func() { printPlan(pl) })
+	if !strings.Contains(out, "Duplicate:    yes") {
+		t.Fatalf("expected a Duplicate line in plan output, got:\n%s", out)
+	}
+}
+
+func TestPrintPlan_NoDuplicateLineWhenNotDuplicate(t *testing.T) {
+	pl := processor.Plan{
+		Category:       processor.CategoryMovie,
+		MainSourcePath: "/tmp/drop/Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv",
+		DestMainPath:   "/Volumes/media/Movies/Get Smart (2008)/Get Smart (2008).mkv",
+		MovieTitle:     "Get Smart (2008)",
+	}
+
+	out := captureStdout(t, func() { printPlan(pl) })
+	if strings.Contains(out, "Duplicate:") {
+		t.Fatalf("expected no Duplicate line in plan output, got:\n%s", out)
 	}
 }
 

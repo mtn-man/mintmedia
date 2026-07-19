@@ -55,6 +55,10 @@ func printPlanBody(pl processor.Plan) {
 	for _, mv := range pl.Associated {
 		fmt.Printf("  - %s -> %s\n", mv.Source, mv.Dest)
 	}
+
+	if pl.Duplicate {
+		fmt.Println("Duplicate:    yes (already exists at DestMain)")
+	}
 }
 
 // PrintResults writes result output to stdout.

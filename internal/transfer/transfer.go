@@ -27,6 +27,18 @@ func IsDestinationUnavailable(err error) bool {
 		errors.Is(err, fs.ErrPermission)
 }
 
+// ErrDestinationExists is wrapped into the error Move returns when it
+// refuses to overwrite an existing destination file.
+var ErrDestinationExists = errors.New("destination already exists")
+
+// IsDestinationExists reports whether err indicates Move refused to
+// overwrite an existing destination file, as opposed to some other move
+// failure. Callers can use this to treat the collision as an expected,
+// gracefully-handled outcome rather than an operational error.
+func IsDestinationExists(err error) bool {
+	return errors.Is(err, ErrDestinationExists)
+}
+
 // Options configures transfer behavior.
 type Options struct {
 	// Reporter receives structured progress snapshots (preferred for progress bars).
@@ -110,7 +122,7 @@ func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 
 	// Fail-safe: do not overwrite an existing destination.
 	if _, err := os.Stat(dst); err == nil {
-		return fmt.Errorf("destination already exists: %s", dst)
+		return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("stat destination: %w", err)
 	}
@@ -146,7 +158,7 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 
 	// Fail-safe: do not overwrite an existing destination.
 	if _, err := os.Stat(dst); err == nil {
-		return fmt.Errorf("destination already exists: %s", dst)
+		return fmt.Errorf("%w: %s", ErrDestinationExists, dst)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("stat destination: %w", err)
 	}

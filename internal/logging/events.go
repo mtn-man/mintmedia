@@ -30,6 +30,7 @@ const (
 	EventProcessorMoveAssociatedApplied          Event = "processor.move.associated.applied"
 	EventProcessorMoveAssociatedFailed           Event = "processor.move.associated.failed"
 	EventProcessorCleanupSkippedAssociatedFailed Event = "processor.cleanup.skipped.associated.failed"
+	EventProcessorCleanupSkippedDuplicate        Event = "processor.cleanup.skipped.duplicate"
 	EventProcessorCleanupSkippedFailed           Event = "processor.cleanup.skipped.failed"
 	EventProcessorCleanupSourceFailed            Event = "processor.cleanup.source.failed"
 	EventProcessorInputMaxDepthNoMedia           Event = "processor.input.max.depth.no.media"
@@ -37,6 +38,7 @@ const (
 	EventProcessorInputSkippedParseError         Event = "processor.input.skipped.parse.error"
 	EventProcessorInputSkippedNotMedia           Event = "processor.input.skipped.not.media"
 	EventProcessorInputSkippedNoMainMedia        Event = "processor.input.skipped.no.main.media"
+	EventProcessorInputSkippedDuplicate          Event = "processor.input.skipped.duplicate"
 	EventProcessorMoviePackSkipUnparseable       Event = "processor.movie.pack.skip.unparseable"
 	EventProcessorShowFolderQualifiedGuess       Event = "processor.show.folder.qualified.guess"
 	EventProcessorShowFileSkipUnparseable        Event = "processor.show.file.skip.unparseable"
@@ -67,6 +69,7 @@ func AllOperationalEvents() []Event {
 		EventProcessorMoveAssociatedApplied,
 		EventProcessorMoveAssociatedFailed,
 		EventProcessorCleanupSkippedAssociatedFailed,
+		EventProcessorCleanupSkippedDuplicate,
 		EventProcessorCleanupSkippedFailed,
 		EventProcessorCleanupSourceFailed,
 		EventProcessorInputMaxDepthNoMedia,
@@ -74,6 +77,7 @@ func AllOperationalEvents() []Event {
 		EventProcessorInputSkippedParseError,
 		EventProcessorInputSkippedNotMedia,
 		EventProcessorInputSkippedNoMainMedia,
+		EventProcessorInputSkippedDuplicate,
 		EventProcessorMoviePackSkipUnparseable,
 		EventProcessorShowFolderQualifiedGuess,
 		EventProcessorShowFileSkipUnparseable,
@@ -96,6 +100,7 @@ func DefaultHistoryInfoAllowlist() []Event {
 		EventProcessorInputSkippedNoMainMedia,
 		EventProcessorInputSkippedInputMissing,
 		EventProcessorInputSkippedParseError,
+		EventProcessorInputSkippedDuplicate,
 		EventDaemonMagnetAdded,
 		EventDaemonTxCleanupRemoved,
 		EventDaemonPathDuplicate,

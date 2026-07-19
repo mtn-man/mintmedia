@@ -510,7 +510,14 @@ func planForMain(
 		return Plan{}, ErrUncategorized
 	}
 
-	// 4) Associated file mapping
+	// 4) Duplicate detection: does this exact destination already exist?
+	if _, err := os.Stat(pl.DestMainPath); err == nil {
+		pl.Duplicate = true
+	} else if !os.IsNotExist(err) {
+		return Plan{}, fmt.Errorf("stat destination: %w", err)
+	}
+
+	// 5) Associated file mapping
 	assoc, err := planAssociatedMoves(ctx, p, pl)
 	if err != nil {
 		return Plan{}, err
