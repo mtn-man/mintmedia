@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// ANSI color escape codes used to colorize labeled console output.
 const (
 	Reset  = "\033[0m"
 	Red    = "\033[31m"
