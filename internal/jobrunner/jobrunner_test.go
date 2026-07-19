@@ -63,7 +63,7 @@ func (c *resultCollector) snapshot() []processor.Result {
 
 func TestRun_CompletesNormally_NoShutdown(t *testing.T) {
 	proc := &fakeProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(_ context.Context, req processor.Request) error {
 			req.OnResult(processor.Result{Applied: true, Reason: "one"})
 			return nil
 		},
@@ -86,7 +86,7 @@ func TestRun_CompletesNormally_NoShutdown(t *testing.T) {
 
 func TestRun_StreamsMultipleResultsInOrder(t *testing.T) {
 	proc := &fakeProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(_ context.Context, req processor.Request) error {
 			for i := range 3 {
 				req.OnResult(processor.Result{Reason: string(rune('a' + i))})
 			}
@@ -118,7 +118,7 @@ func TestRun_StreamsMultipleResultsInOrder(t *testing.T) {
 func TestRun_ForwardsUnderlyingProcessError(t *testing.T) {
 	sentinel := errors.New("boom")
 	proc := &fakeProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(_ context.Context, _ processor.Request) error {
 			return sentinel
 		},
 	}
@@ -140,7 +140,7 @@ func TestRun_ForwardsUnderlyingProcessError(t *testing.T) {
 func TestRun_GraceWindow_JobFinishesDuringGrace(t *testing.T) {
 	release := make(chan struct{})
 	proc := &fakeProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(_ context.Context, req processor.Request) error {
 			<-release // blocks on something unrelated to ctx; released within grace
 			req.OnResult(processor.Result{Applied: true})
 			return nil
@@ -235,7 +235,7 @@ func TestRun_ForceTimeout_JobIgnoresCancellationEntirely(t *testing.T) {
 	release := make(chan struct{})
 	started := make(chan struct{}, 1)
 	proc := &fakeProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(_ context.Context, _ processor.Request) error {
 			select {
 			case started <- struct{}{}:
 			default:
@@ -284,7 +284,7 @@ func TestRun_ForceTimeout_DropsLateOnResultCallback(t *testing.T) {
 	started := make(chan struct{}, 1)
 	workerDone := make(chan struct{})
 	proc := &fakeProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(_ context.Context, req processor.Request) error {
 			select {
 			case started <- struct{}{}:
 			default:
@@ -330,7 +330,7 @@ func TestRun_ForceTimeout_DropsLateOnResultCallback(t *testing.T) {
 func TestRun_HooksInvokedWithCorrectDurations(t *testing.T) {
 	release := make(chan struct{})
 	proc := &fakeProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(ctx context.Context, _ processor.Request) error {
 			<-ctx.Done()
 			return nil
 		},
@@ -367,7 +367,7 @@ func TestRun_NilHooksDoNotPanic(t *testing.T) {
 	release := make(chan struct{})
 	started := make(chan struct{}, 1)
 	proc := &fakeProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(_ context.Context, _ processor.Request) error {
 			select {
 			case started <- struct{}{}:
 			default:
