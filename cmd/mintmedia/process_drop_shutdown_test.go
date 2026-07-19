@@ -25,7 +25,7 @@ func TestProcessDropFolder_InterruptStopsAfterCurrentItem(t *testing.T) {
 	block := make(chan struct{})
 	started := make(chan struct{}, 1)
 	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(_ context.Context, req processor.Request) error {
 			if filepath.Base(req.InputPath) == "first.mkv" {
 				select {
 				case started <- struct{}{}:
@@ -90,7 +90,7 @@ func TestProcessDropFolder_ForceTimeoutWhenItemIgnoresCancel(t *testing.T) {
 	block := make(chan struct{})
 	started := make(chan struct{}, 1)
 	proc := &processDropStubProcessor{
-		processFn: func(ctx context.Context, req processor.Request) error {
+		processFn: func(_ context.Context, req processor.Request) error {
 			select {
 			case started <- struct{}{}:
 			default:

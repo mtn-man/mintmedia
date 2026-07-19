@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestResolveModePolicy(t *testing.T) {
 	t.Parallel()
@@ -72,7 +75,6 @@ func TestResolveModePolicy(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -88,7 +90,7 @@ func TestResolveModePolicy(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error %v, got nil", tt.wantErr)
 				}
-				if err != tt.wantErr {
+				if !errors.Is(err, tt.wantErr) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)
 				}
 				return
