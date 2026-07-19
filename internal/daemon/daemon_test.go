@@ -921,6 +921,32 @@ func TestDaemon_ProcessPathAsync_DoneNotificationModes_StreamedResults(t *testin
 	}
 }
 
+// TestDaemon_PlaySoundAsync_DebouncesRapidTriggers guards against the
+// overlapping-sound-effect regression: per-file mode on a fast batch fires
+// many applied results within milliseconds of each other, and without
+// coalescing each one plays a full, overlapping done sound. With a real
+// (non-zero) SoundDoneCooldown, only the first of several rapid triggers
+// should actually play; once the cooldown elapses, a later trigger should
+// play again.
+func TestDaemon_PlaySoundAsync_DebouncesRapidTriggers(t *testing.T) {
+	soundCalls := make(chan struct{}, 16)
+	d := &Daemon{
+		SoundDoneCooldown: 200 * time.Millisecond,
+		playSoundFn:       func(context.Context, string) error { soundCalls <- struct{}{}; return nil },
+	}
+
+	for i := 0; i < 5; i++ {
+		d.playSoundAsync(context.Background(), "/tmp/done.aiff")
+	}
+
+	waitForSoundCount(t, soundCalls, 1, 2*time.Second)
+	assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
+
+	time.Sleep(250 * time.Millisecond)
+	d.playSoundAsync(context.Background(), "/tmp/done.aiff")
+	waitForSoundCount(t, soundCalls, 1, 2*time.Second)
+}
+
 // TestDaemon_RunWorkerCancelDuringQueue_DrainsOnlyCurrentItem guards against a
 // regression where runWorker's unbiased select between <-runCtx.Done() and
 // <-queue could, after cancellation, keep dequeuing additional already-queued

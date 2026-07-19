@@ -59,6 +59,15 @@ type Daemon struct {
 	// done notification policy: per_file | per_job | off
 	DoneNotificationMode string
 
+	// Minimum spacing between done-sound plays. Per-file mode on a fast,
+	// same-filesystem batch can trigger many done signals within
+	// milliseconds of each other; without coalescing they'd overlap into a
+	// cacophony rather than distinct dings. If <= 0, defaults to 3s.
+	SoundDoneCooldown time.Duration
+
+	// internal: coalesces rapid-fire done-sound triggers (see SoundDoneCooldown).
+	soundDebounce notify.Debouncer
+
 	// Time to wait for in-flight processing jobs to finish after shutdown is requested.
 	ShutdownGraceDuration time.Duration
 
@@ -158,6 +167,11 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	if d.CleanupCooldown <= 0 {
 		d.CleanupCooldown = 120 * time.Second
+	}
+	if d.SoundDoneCooldown <= 0 {
+		// afplay on the default done sound runs ~2s; add a 1s margin so back-
+		// to-back plays don't clip into each other's tail.
+		d.SoundDoneCooldown = 3 * time.Second
 	}
 	if strings.TrimSpace(d.DoneNotificationMode) == "" {
 		d.DoneNotificationMode = notify.DoneNotificationPerFile
@@ -666,6 +680,9 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 func (d *Daemon) playSoundAsync(ctx context.Context, soundPath string) {
 	soundPath = strings.TrimSpace(soundPath)
 	if soundPath == "" {
+		return
+	}
+	if !d.soundDebounce.Allow(time.Now(), d.SoundDoneCooldown) {
 		return
 	}
 	play := d.playSoundFn
