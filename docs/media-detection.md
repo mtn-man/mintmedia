@@ -13,10 +13,21 @@ individual episode files), a signal on either one counts.
 
 | Signal | Recognizes |
 |---|---|
-| Season | `S01`, `s1` (as part of `S01E02`); `Season 1`, `Seasons.01` (season-only folder); `S01-S04`, `Season 1-4` (season-range folder) |
-| Episode | `E02`, `e2` (as part of `S01E02`); `Episode 1`, `Episodes.010` |
+| Season | `S01`, `s1` (as part of `S01E02`); `1x02`-style season digit; `Season 1`, `Seasons.01` (season-only folder); `S01-S04`, `Season 1-4` (season-range folder) |
+| Episode | `E02`, `e2` (as part of `S01E02`); `1x02`-style episode digit; `Episode 1`, `Episodes.010` |
 
-There is no support for `1x02`-style episode notation -- only `SxxExx`.
+`1x02`-style notation (season and episode separated by a bare `x`, e.g.
+`1x01`, `12x345`) is recognized on its own -- either part is a strong enough
+signal by itself, just like `SxxExx`.
+
+Bare concatenated digits with no separator at all (e.g. `201` meaning season 2
+episode 01) are *not* a classification signal -- that shape is genuinely
+ambiguous with numbered movie titles/catalog numbers (e.g. a `101
+Dalmations.1961...` pack). It's only ever interpreted as `SxxEyy` when the
+containing folder already pins down a specific season (see the season-hint
+note in [Folder processing](folder-processing.md#show-hints-from-folder-names)),
+and even then only when the leading digits aren't shaped like a movie's
+catalog-number prefix (a bare number immediately followed later by a year).
 
 ## Year
 
@@ -55,11 +66,14 @@ or last.
 | `[EZTVx.to] Fallout S01E02 1080p WEB-DL.mkv` | Show | `Fallout`, S01E02 |
 | `X-Men.Days.of.Future.Past.2014.mkv` | Movie | `X-Men Days of Future Past`, 2014 |
 | `Show.S01E01.mkv` (inside a `Show S01-S04` folder) | Show | `Show` (from folder), S01E01 |
+| `show_-_1x01_-_title.avi` | Show | `Show`, S01E01 |
+| `Show 201 Episode Title.avi` (inside a `Show Season 2` folder) | Show | `Show` (from folder), S02E01 |
+| `101.Dalmations.1961.720p.BluRay.x264.mkv` (no season folder) | Movie | `101 Dalmations`, 1961 |
 
 ## Patterns that don't match
 
 | Input | Category | Why |
 |---|---|---|
 | `Show.S01.1080p.mkv` | Movie | Has a season signal but no episode signal, so it falls through to the movie path -- and since there's no year either, it likely won't parse as a clean movie title |
-| `Show.1x02.mkv` | Movie | `1x02` isn't a recognized pattern -- only `SxxExx` is |
 | `Show.Name.mkv` | Movie | No season/episode signal at all, and no year to anchor a movie parse either -- likely reported as unparseable |
+| `Show 201 Episode Title.avi` (no season folder, no other signal) | Movie | Bare `201` alone is never a classification signal -- without a folder pinning down season 2, it stays Movie |

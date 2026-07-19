@@ -36,9 +36,36 @@ as a fallback when the filename alone doesn't parse cleanly.
 
 Season-range folders (`S01-S04`, `Season 1-4`) carry a hint: if an episode
 filename inside doesn't include the show name (e.g. a bare `S01E01.mkv`), the
-show name and year are pulled from the folder name instead. Plain `Season NN`
-folders and flat dumps don't need this, since the show name is expected to be
-present on each episode filename or a parent folder in that case.
+show name and year are pulled from the folder name instead.
+
+A plain single-season folder (`Season 2`, `Season 04`) carries a narrower
+version of the same hint: the specific season number it names. This exists
+for old-style releases where individual episode files carry no separator at
+all between season and episode digits (`Show 201 Episode Title.avi` meaning
+season 2, episode 01) -- a shape that's genuinely ambiguous with a numbered
+movie title (`101 Dalmations.1961...`), so it's only ever read as an episode
+number when the folder has already pinned down which season it must be, and
+even then only when the file doesn't also look like a movie (see
+[Media detection](media-detection.md#movie-vs-show)). Flat dumps with no
+season folder at all don't get this hint, since there's no trusted season
+number to anchor the ambiguous digits to -- the show name and season/episode
+are expected to be present on each episode filename in that case. This check
+looks at each file's own immediate parent folder, not just the top-level
+input, so a single-season subfolder nested inside a larger season-range
+container (`Show S01-S04/Season 2/Show 201 Title.avi`) is still recognized.
+
+### Keeping one show folder per batch
+
+When a batch mixes numbering styles across seasons -- some episode filenames
+carry the show name and season/episode on their own, others only resolve via
+a folder hint -- each file is first checked against how the rest of the batch
+would parse. If sibling files would otherwise land on two different show
+names (e.g. one season's filenames are self-sufficient while another's rely
+entirely on the hint), every file in the batch is forced to the folder-hint
+name instead, so the whole batch always lands in one show folder. A batch
+that already agrees with itself is left alone, since a name parsed from a
+clean filename is often less noisy than one built from a release-tag-heavy
+folder name.
 
 ## Subtitles and other sidecars
 

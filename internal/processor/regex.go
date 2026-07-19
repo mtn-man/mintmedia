@@ -26,6 +26,31 @@ var (
 	// Matches worded episode tokens, e.g. "Episode 1", "Episodes.010".
 	reEpisodeWord = regexp.MustCompile(`(?i)\bEpisodes?\s*[\s._-]*(\d{1,3})\b`)
 
+	// Matches "NxNN" season/episode tokens, e.g. "1x01", "12x345". Uses a
+	// custom non-digit boundary rather than \b: old-school release names
+	// often use underscores as delimiters (e.g. "show_-_1x01_-_title.avi"),
+	// and underscore is a \w character, so \b would silently fail to match
+	// at the digit/underscore transition. The [^0-9] boundary also rejects
+	// resolution-style tokens like "1920x1080".
+	reSeasonEpisodeX = regexp.MustCompile(`(?i)(?:^|[^0-9x])([0-9]{1,2})x([0-9]{2,3})(?:[^0-9]|$)`)
+
+	// Matches bare concatenated SxxEyy digits with no separator, e.g. "201"
+	// (season 2, episode 01), "514" (season 5, episode 14). Deliberately
+	// ambiguous with numbered movie titles/catalog numbers (e.g. "101
+	// Dalmations") -- callers must only use this once a trusted season
+	// number is already known from other context (see
+	// parseBareSeasonEpisode) and must never wire it into classification.
+	//
+	// Uses a custom non-alphanumeric boundary rather than \b, for the same
+	// reason as reSeasonEpisodeX: underscore is a \w character, so \b
+	// silently fails to match at an underscore/digit transition (e.g.
+	// "show_-_201_-_title.avi"), even though old-school release names
+	// commonly use underscores as delimiters. Excluding letters as well as
+	// digits (not just digits, like reSeasonEpisodeX's boundary) keeps this
+	// pattern from merging into an adjacent word or release tag, e.g.
+	// "Season201.avi" or "720p".
+	reBareSeasonEpisode = regexp.MustCompile(`(?:^|[^0-9A-Za-z])([1-9])(\d{2})(?:[^0-9A-Za-z]|$)`)
+
 	// Removes bracketed tags like "[EZTVx.to]" or "[YTS]".
 	reBracketedTag = regexp.MustCompile(`\[[^\]]*\]`)
 

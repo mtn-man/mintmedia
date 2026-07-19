@@ -38,7 +38,7 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 		if !isExtInSet(ext, p.mainExtSet) {
 			return nil, ErrNotMedia
 		}
-		pl, err := planForMain(ctx, p, req, abs, abs, showHint{}, movieParseFolderFirst)
+		pl, err := planForMain(ctx, p, req, abs, abs, showHint{}, movieParseFolderFirst, false, "", false)
 		if err != nil {
 			return nil, err
 		}
@@ -46,8 +46,8 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 
 	case st.IsDir():
 		hint := showHint{}
-		if name, year, ok := deriveShowHintFromFolder(p.blacklist, filepath.Base(abs)); ok {
-			hint = showHint{name: name, year: year, ok: true}
+		if name, year, season, seasonOK, ok := deriveShowHintFromFolder(p.blacklist, filepath.Base(abs)); ok {
+			hint = showHint{name: name, year: year, ok: true, season: season, seasonOK: seasonOK}
 		}
 
 		mainPaths, hitMaxDepth, err := listMainMediaFromDir(ctx, p, abs)
@@ -61,14 +61,70 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 			}
 			return nil, err
 		}
+		multiFile := len(mainPaths) >= 2
 		movieMode := movieParseFolderFirst
-		if len(mainPaths) >= 2 {
+		if multiFile {
 			movieMode = movieParseFileOnly
 		}
+
+		// Pre-scan for show-name and show-year disagreement within the batch.
+		// Name and year are reconciled independently, since a batch can
+		// disagree on either one without disagreeing on the other:
+		//
+		//   - Name: if a folder hint exists and at least two distinct show
+		//     names would result from parsing each file on its own (e.g. one
+		//     file's naming convention is self-sufficient while a sibling's
+		//     is only resolvable via the hint fallback), every file in the
+		//     batch is forced to the hint name so they all land in the same
+		//     show folder instead of splitting in two.
+		//   - Year: a year carries more information than no year, so if the
+		//     batch's years are all empty except one distinct value, every
+		//     file is forced to that value. (If no file has a year at all,
+		//     there's nothing to reconcile here -- the existing per-file
+		//     fallback to the folder hint's year, below in planForMain,
+		//     already covers that case uniformly.) If two files disagree on
+		//     two different *actual* years, that's a genuine ambiguity --
+		//     each file's own parse is left alone rather than guessing.
+		//
+		// A batch that already agrees with itself on both is left alone,
+		// since a name/year individual files already parsed cleanly is often
+		// better than one rebuilt from a release-tag-heavy folder name.
+		forceHintName := false
+		reconciledYear := ""
+		if hint.ok && hint.name != "" && multiFile {
+			names := make(map[string]struct{}, len(mainPaths))
+			years := make(map[string]struct{}, len(mainPaths))
+			for _, main := range mainPaths {
+				sn, sy, _, _, _, err := resolveShowIdentity(p, filepath.Base(abs), main, hint, true)
+				if err != nil {
+					continue
+				}
+				names[sn] = struct{}{}
+				years[sy] = struct{}{}
+			}
+			if len(names) > 1 {
+				forceHintName = true
+			}
+			if len(years) > 1 {
+				// years has more than one distinct key, and a map can hold
+				// at most one "" key, so at least one non-empty year is
+				// guaranteed to exist here.
+				nonEmpty := make([]string, 0, len(years))
+				for y := range years {
+					if y != "" {
+						nonEmpty = append(nonEmpty, y)
+					}
+				}
+				if len(nonEmpty) == 1 {
+					reconciledYear = nonEmpty[0]
+				}
+			}
+		}
+
 		plans := make([]Plan, 0, len(mainPaths))
 		issues := make([]PlanIssue, 0)
 		for _, main := range mainPaths {
-			pl, err := planForMain(ctx, p, req, abs, main, hint, movieMode)
+			pl, err := planForMain(ctx, p, req, abs, main, hint, movieMode, forceHintName, reconciledYear, true)
 			if err != nil {
 				if isSkippablePlanError(err) {
 					issues = append(issues, PlanIssue{Path: main, Err: err})
@@ -179,6 +235,13 @@ type showHint struct {
 	name string
 	year string
 	ok   bool
+
+	// season/seasonOK are set only when the folder name pins down a single,
+	// specific season (e.g. "Season 2 [dummy]"), as opposed to a season-range
+	// folder (e.g. "Season 1-5") covering multiple seasons at once. Used to
+	// anchor ambiguous bare-digit episode parsing -- see parseBareSeasonEpisode.
+	season   int
+	seasonOK bool
 }
 
 func isSkippablePlanError(err error) bool {
@@ -267,6 +330,66 @@ func planAssociatedMoves(ctx context.Context, p *processorImpl, pl Plan) ([]Move
 
 // --- plan construction ------------------------------------------------------
 
+// resolveShowIdentity parses the show name/year/season/episode for a single
+// main media file, given the top-level folder it came from, its full path,
+// and an optional showHint derived from that top-level folder. This is the
+// one place that combines direct parsing with the hint fallback chain (plain
+// SxxEyy, then the ambiguous bare-digit form), so both the batch-wide
+// pre-scan in plan() and the real per-file plan in planForMain go through
+// identical logic and can never disagree about what a given file parses to
+// in isolation.
+//
+// The passed-in hint only ever reflects the top-level input folder (e.g. a
+// season-range container like "Show S01-S04"), which has no specific season
+// number to anchor the bare-digit fallback to. When a file sits nested under
+// its own single-season subfolder (e.g. "Show S01-S04/Season 2/Show 201
+// Title.avi"), that subfolder's name is also checked for a singular-season
+// hint and merged in -- preferring the top-level hint's name (for batch-wide
+// consistency) but filling in the season number from the immediate parent
+// when the top-level hint doesn't have one of its own.
+//
+// dirMode must be false when the input being planned is a single file (see
+// plan()'s regular-file branch, which always passes an empty hint precisely
+// to signal "judge this file on its own name, ignore surrounding folders").
+// Without this gate, a single file processed directly (not as part of a
+// directory) would still pick up a name from its literal parent directory --
+// reintroducing the folder context that single-file mode deliberately opts
+// out of.
+func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint showHint, dirMode bool) (showName, showYear string, season, episode int, inputHadYear bool, err error) {
+	mainBaseName := filepath.Base(mainPath)
+
+	effHint := hint
+	if dirMode {
+		if lname, lyear, lseason, lseasonOK, lok := deriveShowHintFromFolder(p.blacklist, filepath.Base(filepath.Dir(mainPath))); lok {
+			if !effHint.ok {
+				effHint = showHint{name: lname, year: lyear, ok: true, season: lseason, seasonOK: lseasonOK}
+			} else if !effHint.seasonOK && lseasonOK {
+				effHint.season = lseason
+				effHint.seasonOK = true
+			}
+		}
+	}
+
+	showName, showYear, season, episode, err = parseShowFromName(p.blacklist, folderBaseName, mainBaseName)
+	inputHadYear = err == nil && showYear != ""
+	if err != nil && effHint.ok && effHint.name != "" {
+		if s, e, ok := parseSeasonEpisode(mainBaseName); ok {
+			showName = effHint.name
+			showYear = effHint.year
+			season = s
+			episode = e
+			err = nil
+		} else if s, e, ok := parseBareSeasonEpisode(effHint, mainBaseName); ok {
+			showName = effHint.name
+			showYear = effHint.year
+			season = s
+			episode = e
+			err = nil
+		}
+	}
+	return showName, showYear, season, episode, inputHadYear, err
+}
+
 func planForMain(
 	ctx context.Context,
 	p *processorImpl,
@@ -275,6 +398,9 @@ func planForMain(
 	mainPath string,
 	hint showHint,
 	movieMode movieParseMode,
+	forceHintName bool,
+	reconciledYear string,
+	dirMode bool,
 ) (Plan, error) {
 	pl := Plan{
 		InputPath:    inputPath,
@@ -299,19 +425,33 @@ func planForMain(
 	// 3) Parse identity + compute destination
 	switch pl.Category {
 	case CategoryShow:
-		showName, showYear, season, episode, err := parseShowFromName(p.blacklist, filepath.Base(pl.InputPath), pl.MainBaseName)
-		inputHadYear := err == nil && showYear != ""
-		if err != nil && hint.ok && hint.name != "" {
-			if s, e, ok := parseSeasonEpisode(pl.MainBaseName); ok {
-				showName = hint.name
-				showYear = hint.year
-				season = s
-				episode = e
-				err = nil
-			}
-		}
+		showName, showYear, season, episode, inputHadYear, err := resolveShowIdentity(p, filepath.Base(pl.InputPath), pl.MainSourcePath, hint, dirMode)
 		if err != nil {
 			return Plan{}, err
+		}
+		// forceHintName is set by the caller only when a pre-scan of the
+		// whole batch (see plan()) found sibling files that would otherwise
+		// resolve to *different* show names -- e.g. one episode's filename
+		// is self-sufficient (an unambiguous "1x01" token) while another
+		// only resolves via the folder hint (an ambiguous bare "201"). In
+		// that case the folder-level hint always wins, so the whole batch
+		// converges on one show folder. When the batch already agrees with
+		// itself, this stays false and each file keeps its own best parse
+		// (which is often cleaner than a release-tag-heavy folder name).
+		if forceHintName && hint.ok && hint.name != "" {
+			showName = hint.name
+		}
+		// reconciledYear is set independently of forceHintName -- a batch
+		// can disagree on the year without disagreeing on the name (e.g.
+		// every file agrees on "Show" but only one file's own filename
+		// happened to carry a year). Since a year is more information than
+		// no year, every file adopts it. The pre-scan (see plan()) only sets
+		// this when the batch's non-empty years all agree on a single value,
+		// so a genuine conflict between two different actual years is left
+		// alone rather than guessed at.
+		if reconciledYear != "" && showYear != reconciledYear {
+			showYear = reconciledYear
+			inputHadYear = true
 		}
 		if showYear == "" && hint.ok && hint.year != "" {
 			showYear = hint.year

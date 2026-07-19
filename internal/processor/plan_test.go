@@ -232,6 +232,449 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowFolder_SingleSeason_NxNN_UnderscoreDelimited",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "X-Men TAS [HQ] Season 1 [vpc]")
+				mainName := "x-men_-_1x01_-_night_of_the_sentinels_-_part_1_[vpc].avi"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+
+				pl := plans[0]
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				// The NxNN token alone carries both season and episode, so
+				// parseShowFromName succeeds directly on the filename (which
+				// only says "x-men", not "TAS") without ever needing the
+				// folder hint -- this matches how these files are actually
+				// named in the wild.
+				if pl.ShowName != "X-Men" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "X-Men")
+				}
+				if pl.Season != 1 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 1/1", pl.Season, pl.Episode)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_SingleSeason_BareDigitSEE",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "X-Men TAS [HQ] Season 2 [dummy]")
+				mainName := "X-Men TAS 201 'Til Death Do Us Part 1of2 [dummy].avi"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+
+				pl := plans[0]
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "X-Men Tas" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "X-Men Tas")
+				}
+				if pl.Season != 2 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 2/1", pl.Season, pl.Episode)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_SingleSeason_BareDigitSEE_UnderscoreDelimited",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				// Same old-school underscore-delimited naming convention as
+				// the NxNN case above, but using bare concatenated digits
+				// instead. reBareSeasonEpisode originally used \b, which
+				// (like reSeasonEpisodeX before it was fixed) silently fails
+				// to match across underscore delimiters, since underscore is
+				// a \w character.
+				root := filepath.Join(p.cfg.DropFolder, "Show Season 2 [dummy]")
+				mainName := "show_-_201_-_title.avi"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+
+				pl := plans[0]
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.Season != 2 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 2/1", pl.Season, pl.Episode)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_SingleSeason_BareDigitSEE_TwoDigitEpisode",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "X-Men TAS [HQ] Season 5 [dummy]")
+				mainName := "X-Men TAS 514 Graduation Day [dummy].avi"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+
+				pl := plans[0]
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.Season != 5 || pl.Episode != 14 {
+					t.Fatalf("Season/Episode = %d/%d, want 5/14", pl.Season, pl.Episode)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_MixedNumberingAcrossSeasons_ReconcilesToOneShowName",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "X-Men TAS [HQ] Season 1-5")
+				writeFile(t, filepath.Join(root, "X-Men TAS [HQ] Season 1 [vpc]", "x-men_-_1x01_-_night_of_the_sentinels_-_part_1_[vpc].avi"), "dummy")
+				writeFile(t, filepath.Join(root, "X-Men TAS [HQ] Season 2 [dummy]", "X-Men TAS 201 'Til Death Do Us Part 1of2 [dummy].avi"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 2 {
+					t.Fatalf("expected 2 plans, got %d", len(plans))
+				}
+
+				// Season 1's filename is self-sufficient (the "1x01" token
+				// carries both season and episode on its own), while Season
+				// 2's bare "201" can only resolve via the folder hint. Left
+				// unreconciled, these would parse to two different show
+				// names ("X-Men" vs "X-Men Tas") and split one show across
+				// two folders. Both must land under the same show name.
+				names := make(map[string]int)
+				for _, pl := range plans {
+					if pl.Category != CategoryShow {
+						t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+					}
+					names[pl.ShowName]++
+				}
+				if len(names) != 1 {
+					t.Fatalf("expected all plans to share one ShowName, got %v", names)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_YearOnOneSiblingOnly_ReconciledAcrossBatch",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Firefly Season 1-2")
+				writeFile(t, filepath.Join(root, "Firefly Season 1", "Firefly.2002.1x01.Title.mkv"), "dummy")
+				writeFile(t, filepath.Join(root, "Firefly Season 2", "Firefly 201 Other Title.avi"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 2 {
+					t.Fatalf("expected 2 plans, got %d", len(plans))
+				}
+
+				// Both files already agree on ShowName ("Firefly"), but only
+				// the first's filename carries a year. A year is more
+				// information than no year, so both must resolve to the same
+				// year and land in the same destination folder -- otherwise
+				// "Firefly (2002)/" and "Firefly/" would silently split one
+				// show across two folders despite sharing a ShowName.
+				dests := make(map[string]int)
+				for _, pl := range plans {
+					if pl.ShowYear != "2002" {
+						t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2002")
+					}
+					dests[filepath.Dir(pl.DestDir)]++
+				}
+				if len(dests) != 1 {
+					t.Fatalf("expected both plans under one show folder, got %v", dests)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_GenuinelyConflictingYears_LeftUnreconciled",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Show Season 1-2")
+				writeFile(t, filepath.Join(root, "Show Season 1", "Show.1999.1x01.Title.mkv"), "dummy")
+				writeFile(t, filepath.Join(root, "Show Season 2", "Show.2005.2x01.Title.mkv"), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 2 {
+					t.Fatalf("expected 2 plans, got %d", len(plans))
+				}
+
+				// Two siblings each carry their own distinct, real year --
+				// a genuine ambiguity with no objectively "right" answer, so
+				// each file's own parse must be left alone rather than
+				// forcibly guessed at.
+				years := make(map[string]int)
+				for _, pl := range plans {
+					years[pl.ShowYear]++
+				}
+				if len(years) != 2 || years["1999"] != 1 || years["2005"] != 1 {
+					t.Fatalf("expected years 1999 and 2005 preserved independently, got %v", years)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_BareDigitSEE_StrayEarlierNumberNotBlocking",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Show Season 2 [dummy]")
+				mainName := "Show - Anniversary 300 Cut - 201 Title [dummy].avi"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+
+				// The stray "300" earlier in the filename doesn't match the
+				// folder's trusted season (2), so it must not block the
+				// real "201" token later in the name from being found.
+				pl := plans[0]
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.Season != 2 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 2/1", pl.Season, pl.Episode)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_BareDigitSEE_AmbiguousCandidates_Skipped",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				root := filepath.Join(p.cfg.DropFolder, "Show Season 2 [dummy]")
+				mainName := "Show 201 vs 245 Title [dummy].avi"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				// Two candidate tokens ("201" and "245") both match the
+				// folder's trusted season (2) -- which one is the real
+				// episode code is genuinely ambiguous, so the file must be
+				// skipped and reported rather than guessed at.
+				var ppe *PartialPlanError
+				if !errors.As(err, &ppe) {
+					t.Fatalf("expected PartialPlanError, got %v (plans=%v)", err, plans)
+				}
+				if len(ppe.Issues) != 1 {
+					t.Fatalf("expected 1 skipped issue, got %d", len(ppe.Issues))
+				}
+			},
+		},
+		{
+			name: "ShowFolder_MovieInsideSeasonFolder_SkippedNotMisfiled",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				// A movie file happens to sit inside a folder literally
+				// named "Season N" (e.g. a bonus-feature folder). The
+				// folder's singular-season hint forces this file to be
+				// planned as a show, but it doesn't parse as an episode by
+				// any method -- it must be skipped and reported for human
+				// review, not silently misfiled as a garbage "movie" or
+				// "show".
+				root := filepath.Join(p.cfg.DropFolder, "Bonus Season 2 Movie")
+				mainName := "101 Dalmations 1961 720p BluRay.mkv"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				var ppe *PartialPlanError
+				if !errors.As(err, &ppe) {
+					t.Fatalf("expected PartialPlanError, got %v (plans=%v)", err, plans)
+				}
+				if len(ppe.Issues) != 1 {
+					t.Fatalf("expected 1 skipped issue, got %d", len(ppe.Issues))
+				}
+				var pse *ParseShowError
+				if !errors.As(ppe.Issues[0].Err, &pse) {
+					t.Fatalf("expected *ParseShowError, got %v", ppe.Issues[0].Err)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_MovieWithBracketTagPrefix_StillSkippedNotMisfiled",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				// Same as ShowFolder_MovieInsideSeasonFolder_SkippedNotMisfiled,
+				// but with a release-group bracket tag before the catalog
+				// number. The movie-shape guard must see past this noise --
+				// it previously only recognized the catalog number as
+				// "leading" when it sat at literal byte offset 0.
+				root := filepath.Join(p.cfg.DropFolder, "Bonus Season 1 Movie")
+				mainName := "[GRP] 101 Dalmations 1961.mkv"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				var ppe *PartialPlanError
+				if !errors.As(err, &ppe) {
+					t.Fatalf("expected PartialPlanError, got %v (plans=%v)", err, plans)
+				}
+				if len(ppe.Issues) != 1 {
+					t.Fatalf("expected 1 skipped issue, got %d", len(ppe.Issues))
+				}
+			},
+		},
+		{
+			name: "SingleFile_ParentFolderSeasonHint_NotLeaked",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				// Processing this file directly (not its containing
+				// directory) -- single-file mode passes an empty showHint
+				// specifically to judge the file on its own name. It must
+				// not pick up "MyShow" from its immediate parent directory
+				// just because that directory happens to look like a season
+				// folder; with no title of its own, this file genuinely
+				// doesn't have enough info and should fail to parse rather
+				// than guess from surrounding folder context it was never
+				// asked to consider.
+				src := filepath.Join(p.cfg.DropFolder, "MyShow Season 5", "S02E01.mkv")
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				var pse *ParseShowError
+				if !errors.As(err, &pse) {
+					t.Fatalf("expected *ParseShowError, got %v (plan=%+v)", err, pl)
+				}
+			},
+		},
+		{
+			name: "ShowFolder_BareDigitSEE_UnrelatedYearBeforeMatch_NotMisparsedAsMovie",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				// The bracketed "[2020]" tag is an unrelated upload/release
+				// date, not a movie release year -- it sits BEFORE the bare
+				// episode code, not after it. The movie-catalog-number guard
+				// must only reject a year that appears after the matched
+				// digits (the "101.Dalmations.1961..." shape); a coincidental
+				// year earlier in the filename must not count.
+				root := filepath.Join(p.cfg.DropFolder, "Show Season 2 [dummy]")
+				mainName := "[2020] 201 Title.avi"
+				writeFile(t, filepath.Join(root, mainName), "dummy")
+				return root
+			},
+			checkMany: func(t *testing.T, p *processorImpl, inputPath string, plans []Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if len(plans) != 1 {
+					t.Fatalf("expected 1 plan, got %d", len(plans))
+				}
+
+				pl := plans[0]
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.Season != 2 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 2/1", pl.Season, pl.Episode)
+				}
+			},
+		},
+		{
+			name: "MovieFile_BareDigitPrefixBeforeYear_NotMisparsedAsEpisode",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "101.Dalmations.1961.720p.BluRay.x264-x0r.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, inputPath string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryMovie {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryMovie)
+				}
+			},
+		},
+		{
 			name: "ShowFolder_SeasonPack_PartialSkip_UnparseableFile",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
