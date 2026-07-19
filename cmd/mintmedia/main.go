@@ -80,8 +80,9 @@ func main() {
 		}
 		write("Usage: %s [flags]\n\n", filepath.Base(os.Args[0]))
 		writeln("Modes (choose one; default is -p/--process-drop when features.enable_processing=true):")
-		writeln("  --plan [path]        Preview what would happen (no changes); omit path to preview drop folder")
-		writeln("  --dry-run [path]     Alias for --plan")
+		writeln("  --plan[=path]        Preview what would happen (no changes); omit path to preview drop folder")
+		writeln("                       (use --plan=path, not --plan path -- the path is only optional with =)")
+		writeln("  --dry-run[=path]     Alias for --plan")
 		writeln("  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
 		writeln("  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
 		writeln("  -d, --daemon         Run the daemon (watch/poll/automations)")
