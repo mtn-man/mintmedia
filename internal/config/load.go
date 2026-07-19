@@ -173,10 +173,10 @@ func applyDefaults(cfg *Config) {
 // writeDefaultConfig writes the embedded defaults.toml to path,
 // creating any missing parent directories.
 func writeDefaultConfig(path string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create config directory: %w", err)
 	}
-	if err := os.WriteFile(path, platformDefaultConfig(), 0o644); err != nil {
+	if err := os.WriteFile(path, platformDefaultConfig(), 0o600); err != nil {
 		return fmt.Errorf("write default config: %w", err)
 	}
 	return nil
