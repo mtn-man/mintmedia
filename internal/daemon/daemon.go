@@ -84,9 +84,8 @@ type Daemon struct {
 	// Cooldown between Transmission cleanup attempts. If <= 0, defaults to 120s.
 	CleanupCooldown time.Duration
 
-	// internal: last cleanup time (guarded by cleanupMu)
-	cleanupMu     sync.Mutex
-	lastCleanupAt time.Time
+	// internal: coalesces rapid-fire Transmission cleanup attempts (see CleanupCooldown).
+	cleanupDebounce notify.Debouncer
 
 	// internal: tracks in-flight paths to suppress duplicate processing
 	inFlightMu sync.Mutex
@@ -701,14 +700,9 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 	}
 
 	// Cooldown gate
-	now := time.Now()
-	d.cleanupMu.Lock()
-	if !d.lastCleanupAt.IsZero() && now.Sub(d.lastCleanupAt) < d.CleanupCooldown {
-		d.cleanupMu.Unlock()
+	if !d.cleanupDebounce.Allow(time.Now(), d.CleanupCooldown) {
 		return
 	}
-	d.lastCleanupAt = now
-	d.cleanupMu.Unlock()
 
 	// RemoveCompleted obeys caller context. Detach from shutdown cancellation,
 	// but keep a hard timeout so cleanup cannot hang indefinitely.
