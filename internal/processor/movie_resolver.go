@@ -24,7 +24,7 @@ type movieFuzzyMatch struct {
 //   - neither: both sides have a year and they differ -- treated as strong
 //     evidence of two different movies, not reported at all.
 func findFuzzyMovieMatches(moviesDir, incomingTitle, incomingYear string) (tier1, tier2 []movieFuzzyMatch, err error) {
-	key := normalizeMovieTitleKey(incomingTitle)
+	key := normalizeTitleKey(incomingTitle)
 	if key == "" {
 		return nil, nil, nil
 	}
@@ -49,17 +49,15 @@ func findFuzzyMovieMatches(moviesDir, incomingTitle, incomingYear string) (tier1
 		if !ok {
 			base, folderYear = name, ""
 		}
-		if normalizeMovieTitleKey(base) != key {
+		if normalizeTitleKey(base) != key {
 			continue
 		}
 
 		match := movieFuzzyMatch{folder: name, year: folderYear}
-		switch {
-		case folderYear == "" && incomingYear == "":
+		switch classifyYearMatch(folderYear, incomingYear) {
+		case yearMatchAgree:
 			tier1 = append(tier1, match)
-		case folderYear != "" && incomingYear != "" && folderYear == incomingYear:
-			tier1 = append(tier1, match)
-		case folderYear == "" || incomingYear == "":
+		case yearMatchAsymmetric:
 			tier2 = append(tier2, match)
 		}
 	}

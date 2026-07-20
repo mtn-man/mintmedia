@@ -98,6 +98,7 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 		if folder, ok, err := tryQualifiedFallback(p, showsDir, showName, otherQualifiedFolders); ok {
 			return folder, "", err
 		}
+		warnPossibleDuplicateShowFolder(p, showsDir, entries, showName, showYear)
 		return fmt.Sprintf("%s (%s)", showName, showYear), showYear, nil
 	}
 
@@ -120,6 +121,7 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 	}
 
 	// Rule 5: No matches at all; fall back to the plain show name.
+	warnPossibleDuplicateShowFolder(p, showsDir, entries, showName, "")
 	return showName, "", nil
 }
 
@@ -177,4 +179,70 @@ func normalizeFolderKey(s string) string {
 	}
 	s = strings.ToLower(s)
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// splitShowFolderTitleYear strips a trailing "(YYYY)" qualifier from a
+// folder name if present, treating any other qualifier (e.g. "(UK)") as
+// part of the base title rather than a year signal -- unlike
+// parseShowFolderYear, which discards the base entirely for a non-year
+// qualifier, this is only used for fuzzy-title comparison, where the title
+// portion should still be compared regardless of qualifier type.
+func splitShowFolderTitleYear(name string) (base, year string) {
+	base, qualifier, ok := parseShowFolderQualifier(name)
+	if !ok {
+		return name, ""
+	}
+	if reFourDigitYear.MatchString(qualifier) {
+		return base, qualifier
+	}
+	return base, ""
+}
+
+// findFuzzyShowFolderMatches scans entries for folders whose title
+// fuzzy-matches showName. Only called from resolveShowFolder's two
+// "create a brand-new folder" branches, i.e. after every exact-match rule
+// has already failed to resolve a folder -- so any fuzzy hit here is, by
+// construction, not an exact-base match. Candidates with yearMatchDisagree
+// (both sides have an explicit, differing year) are excluded: two explicit
+// years disagreeing is evidence of a reboot/different show, not ambiguity.
+func findFuzzyShowFolderMatches(entries []os.DirEntry, showName, showYear string) []string {
+	key := normalizeTitleKey(showName)
+	if key == "" {
+		return nil
+	}
+
+	var matches []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		base, folderYear := splitShowFolderTitleYear(name)
+		if normalizeTitleKey(base) != key {
+			continue
+		}
+		if classifyYearMatch(folderYear, showYear) == yearMatchDisagree {
+			continue
+		}
+		matches = append(matches, name)
+	}
+	return matches
+}
+
+// warnPossibleDuplicateShowFolder logs one non-blocking WARNING (never
+// zero-to-many -- a single combined line naming every match) if
+// findFuzzyShowFolderMatches finds anything, mirroring
+// tryQualifiedFallback's existing "best-effort guess, proceed anyway"
+// warning pattern above. It never changes the folder resolveShowFolder
+// returns -- Shows only ever warn on a fuzzy match, never auto-reroute,
+// since a wrong guess here would misfile an episode into another show's
+// folder rather than just skip a single file.
+func warnPossibleDuplicateShowFolder(p *processorImpl, showsDir string, entries []os.DirEntry, showName, showYear string) {
+	matches := findFuzzyShowFolderMatches(entries, showName, showYear)
+	if len(matches) == 0 {
+		return
+	}
+	logWarn(p, logging.EventProcessorShowPossibleDuplicateFolder,
+		fmt.Sprintf("possible duplicate show: %q may match existing folder(s): %s", showName, strings.Join(matches, ", ")),
+		nil, logging.Fields{"path": showsDir, "show": showName, "candidates": strings.Join(matches, ", ")})
 }
