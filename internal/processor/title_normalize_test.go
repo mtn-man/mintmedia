@@ -2,7 +2,7 @@ package processor
 
 import "testing"
 
-func TestNormalizeMovieTitleKey(t *testing.T) {
+func TestNormalizeTitleKey(t *testing.T) {
 	tests := []struct {
 		name string
 		a    string
@@ -18,18 +18,40 @@ func TestNormalizeMovieTitleKey(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ka := normalizeMovieTitleKey(tt.a)
-			kb := normalizeMovieTitleKey(tt.b)
+			ka := normalizeTitleKey(tt.a)
+			kb := normalizeTitleKey(tt.b)
 			got := ka == kb
 			if got != tt.want {
-				t.Fatalf("normalizeMovieTitleKey(%q)=%q, normalizeMovieTitleKey(%q)=%q, equal=%v, want %v", tt.a, ka, tt.b, kb, got, tt.want)
+				t.Fatalf("normalizeTitleKey(%q)=%q, normalizeTitleKey(%q)=%q, equal=%v, want %v", tt.a, ka, tt.b, kb, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestNormalizeMovieTitleKey_Empty(t *testing.T) {
-	if got := normalizeMovieTitleKey(""); got != "" {
-		t.Fatalf("normalizeMovieTitleKey(\"\") = %q, want empty", got)
+func TestNormalizeTitleKey_Empty(t *testing.T) {
+	if got := normalizeTitleKey(""); got != "" {
+		t.Fatalf("normalizeTitleKey(\"\") = %q, want empty", got)
+	}
+}
+
+func TestClassifyYearMatch(t *testing.T) {
+	tests := []struct {
+		name string
+		a    string
+		b    string
+		want yearMatchTier
+	}{
+		{"both empty", "", "", yearMatchAgree},
+		{"both equal", "2001", "2001", yearMatchAgree},
+		{"both non-empty, differ", "2000", "2006", yearMatchDisagree},
+		{"a empty, b set", "", "2000", yearMatchAsymmetric},
+		{"a set, b empty", "2000", "", yearMatchAsymmetric},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifyYearMatch(tt.a, tt.b); got != tt.want {
+				t.Fatalf("classifyYearMatch(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
+			}
+		})
 	}
 }

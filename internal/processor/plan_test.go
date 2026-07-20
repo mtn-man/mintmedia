@@ -2381,3 +2381,56 @@ func TestPlan_Duplicate_MovieFuzzy_ArticleNotDropped(t *testing.T) {
 		t.Fatalf("Duplicate = true, want false (leading article must not be dropped by normalization)")
 	}
 }
+
+// TestPlan_Duplicate_ShowFuzzy_DiacriticNewFolder covers Shows' warn-only
+// fuzzy matching: an existing show folder that's a diacritic-only spelling
+// variant of the incoming show name must NOT be routed into -- Shows never
+// auto-reroute on a fuzzy match, only warn (see show_resolver.go's
+// warnPossibleDuplicateShowFolder) -- so the episode still lands in a
+// brand-new folder under its own parsed name.
+func TestPlan_Duplicate_ShowFuzzy_DiacriticNewFolder(t *testing.T) {
+	p := newTestProcessor(t)
+
+	existing := filepath.Join(p.cfg.ShowsDir, "Amélie Show", "Season 01", "Amélie Show - S01E01.mkv")
+	writeFile(t, existing, "already here")
+
+	src := filepath.Join(p.cfg.DropFolder, "Amelie.Show.S01E02.1080p.HEVC.x265-MeGusta.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	wantDestDir := filepath.Join(p.cfg.ShowsDir, "Amelie Show", "Season 01")
+	if pl.DestDir != wantDestDir {
+		t.Fatalf("DestDir = %q, want %q (must create its own folder, not reroute into the existing diacritic variant)", pl.DestDir, wantDestDir)
+	}
+}
+
+// TestPlan_Duplicate_ShowFuzzy_DifferentYearsNoAction covers the
+// no-ambiguity case mirroring the movie side: an existing fuzzy-matching
+// show folder with an explicit, differing year is treated as evidence of a
+// different show (e.g. a reboot), not a possible duplicate -- the new
+// folder is still created under its own year, same as if no fuzzy match
+// existed at all.
+func TestPlan_Duplicate_ShowFuzzy_DifferentYearsNoAction(t *testing.T) {
+	p := newTestProcessor(t)
+
+	existing := filepath.Join(p.cfg.ShowsDir, "Amélie Show (2010)", "Season 01", "Amélie Show (2010) - S01E01.mkv")
+	writeFile(t, existing, "already here")
+
+	src := filepath.Join(p.cfg.DropFolder, "Amelie.Show.2020.S01E02.1080p.HEVC.x265-MeGusta.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	wantDestDir := filepath.Join(p.cfg.ShowsDir, "Amelie Show (2020)", "Season 01")
+	if pl.DestDir != wantDestDir {
+		t.Fatalf("DestDir = %q, want %q", pl.DestDir, wantDestDir)
+	}
+	if pl.ShowYear != "2020" {
+		t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2020")
+	}
+}

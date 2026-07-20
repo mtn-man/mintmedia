@@ -42,6 +42,7 @@ const (
 	EventProcessorMoviePackSkipUnparseable       Event = "processor.movie.pack.skip.unparseable"
 	EventProcessorMoviePossibleDuplicate         Event = "processor.movie.duplicate.possible"
 	EventProcessorShowFolderQualifiedGuess       Event = "processor.show.folder.qualified.guess"
+	EventProcessorShowPossibleDuplicateFolder    Event = "processor.show.folder.duplicate.possible"
 	EventProcessorShowFileSkipUnparseable        Event = "processor.show.file.skip.unparseable"
 )
 
@@ -82,6 +83,7 @@ func AllOperationalEvents() []Event {
 		EventProcessorMoviePackSkipUnparseable,
 		EventProcessorMoviePossibleDuplicate,
 		EventProcessorShowFolderQualifiedGuess,
+		EventProcessorShowPossibleDuplicateFolder,
 		EventProcessorShowFileSkipUnparseable,
 	}
 }
