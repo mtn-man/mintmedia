@@ -40,6 +40,7 @@ const (
 	EventProcessorInputSkippedNoMainMedia        Event = "processor.input.skipped.no.main.media"
 	EventProcessorInputSkippedDuplicate          Event = "processor.input.skipped.duplicate"
 	EventProcessorMoviePackSkipUnparseable       Event = "processor.movie.pack.skip.unparseable"
+	EventProcessorMoviePossibleDuplicate         Event = "processor.movie.duplicate.possible"
 	EventProcessorShowFolderQualifiedGuess       Event = "processor.show.folder.qualified.guess"
 	EventProcessorShowFileSkipUnparseable        Event = "processor.show.file.skip.unparseable"
 )
@@ -79,6 +80,7 @@ func AllOperationalEvents() []Event {
 		EventProcessorInputSkippedNoMainMedia,
 		EventProcessorInputSkippedDuplicate,
 		EventProcessorMoviePackSkipUnparseable,
+		EventProcessorMoviePossibleDuplicate,
 		EventProcessorShowFolderQualifiedGuess,
 		EventProcessorShowFileSkipUnparseable,
 	}

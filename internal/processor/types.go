@@ -72,6 +72,13 @@ type Plan struct {
 	// report a graceful skip instead.
 	Duplicate bool
 
+	// DuplicateMatchPath is the actual existing-library path that caused
+	// Duplicate to be set, when it differs from DestMainPath (a fuzzy title
+	// match against a differently-spelled existing folder, e.g. incoming
+	// "Amelie (2001)" matching an existing "Amélie (2001)" folder). Empty
+	// when Duplicate was set by the literal DestMainPath collision.
+	DuplicateMatchPath string
+
 	// Cleanup intent (optional; not all Apply implementations will honor this initially)
 	DeleteEmptyInputDir bool
 }

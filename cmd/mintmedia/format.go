@@ -57,7 +57,11 @@ func printPlanBody(pl processor.Plan) {
 	}
 
 	if pl.Duplicate {
-		fmt.Println("Duplicate:    yes (already exists at DestMain)")
+		if pl.DuplicateMatchPath != "" {
+			fmt.Printf("Duplicate:    yes (matches existing library entry: %s)\n", pl.DuplicateMatchPath)
+		} else {
+			fmt.Println("Duplicate:    yes (already exists at DestMain)")
+		}
 	}
 }
 

@@ -478,6 +478,10 @@ func planForMain(
 		pl.DestDir = filepath.Join(p.cfg.ShowsDir, showFolder, seasonFolder)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
+		if err := checkExactDuplicate(&pl); err != nil {
+			return Plan{}, err
+		}
+
 	case CategoryMovie:
 		var (
 			title string
@@ -507,18 +511,33 @@ func planForMain(
 		pl.DestDir = filepath.Join(p.cfg.MoviesDir, pl.MovieTitle)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
+		// 4) Duplicate detection: exact path first (cheap fast path), then a
+		// fuzzy title/year fallback that catches diacritic/punctuation
+		// variants and near-miss year mismatches an exact stat can't see.
+		if err := checkExactDuplicate(&pl); err != nil {
+			return Plan{}, err
+		}
+		if !pl.Duplicate {
+			tier1, tier2, err := findFuzzyMovieMatches(p.cfg.MoviesDir, title, year)
+			if err != nil {
+				return Plan{}, err
+			}
+			if len(tier1) > 0 {
+				pl.Duplicate = true
+				pl.DuplicateMatchPath = filepath.Join(p.cfg.MoviesDir, tier1[0].folder)
+			} else if len(tier2) > 0 {
+				folders := make([]string, len(tier2))
+				for i, m := range tier2 {
+					folders[i] = m.folder
+				}
+				logWarn(p, logging.EventProcessorMoviePossibleDuplicate,
+					fmt.Sprintf("possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
+					nil, logging.Fields{"movies_dir": p.cfg.MoviesDir, "incoming": pl.MovieTitle, "candidates": strings.Join(folders, ", ")})
+			}
+		}
+
 	default:
 		return Plan{}, ErrUncategorized
-	}
-
-	// 4) Duplicate detection: does this exact destination already exist?
-	if _, err := os.Stat(pl.DestMainPath); err == nil {
-		pl.Duplicate = true
-	} else if !os.IsNotExist(err) {
-		if transfer.IsDestinationUnavailable(err) {
-			return Plan{}, &DestinationUnavailableError{Category: pl.Category, Err: err}
-		}
-		return Plan{}, fmt.Errorf("stat destination: %w", err)
 	}
 
 	// 5) Associated file mapping
@@ -529,6 +548,21 @@ func planForMain(
 	pl.Associated = assoc
 
 	return pl, nil
+}
+
+// checkExactDuplicate stats pl.DestMainPath and sets pl.Duplicate on a
+// literal collision. Returns a plan error for anything but "not exist".
+func checkExactDuplicate(pl *Plan) error {
+	if _, err := os.Stat(pl.DestMainPath); err == nil {
+		pl.Duplicate = true
+		return nil
+	} else if !os.IsNotExist(err) {
+		if transfer.IsDestinationUnavailable(err) {
+			return &DestinationUnavailableError{Category: pl.Category, Err: err}
+		}
+		return fmt.Errorf("stat destination: %w", err)
+	}
+	return nil
 }
 
 // CountMainMedia counts main media files under path using the same

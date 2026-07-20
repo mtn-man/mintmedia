@@ -203,10 +203,15 @@ func skipDuplicateResult(p *processorImpl, pl Plan, duplicateSkippedByInput map[
 	if pl.InputPath != "" && duplicateSkippedByInput != nil {
 		duplicateSkippedByInput[pl.InputPath] = true
 	}
-	reason := fmt.Sprintf("already in library: %s", pl.DestMainPath)
+	matchPath := pl.DuplicateMatchPath
+	if matchPath == "" {
+		matchPath = pl.DestMainPath
+	}
+	reason := fmt.Sprintf("already in library: %s", matchPath)
 	logInfoHistoryOnly(p, logging.EventProcessorInputSkippedDuplicate, logging.Fields{
 		"input_path": pl.InputPath,
 		"dest_path":  pl.DestMainPath,
+		"match_path": matchPath,
 	})
 	return Result{Plan: pl, Applied: false, Handled: true, Reason: reason}
 }

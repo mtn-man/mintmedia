@@ -2213,3 +2213,171 @@ func TestPlan_Duplicate_DifferentTitleNotFlagged(t *testing.T) {
 		t.Fatalf("Duplicate = true, want false")
 	}
 }
+
+// TestPlan_Duplicate_MovieFuzzyDiacritic covers tier 1 of fuzzy movie
+// duplicate detection: a diacritic-only spelling difference against an
+// existing folder, same year, must be treated as a confident duplicate.
+func TestPlan_Duplicate_MovieFuzzyDiacritic(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Amelie.2001.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	existing := filepath.Join(p.cfg.MoviesDir, "Amélie (2001)", "Amélie (2001).mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true")
+	}
+	wantMatch := filepath.Join(p.cfg.MoviesDir, "Amélie (2001)")
+	if pl.DuplicateMatchPath != wantMatch {
+		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, wantMatch)
+	}
+}
+
+// TestPlan_Duplicate_MovieFuzzyPunctuation covers tier 1 via
+// punctuation/whitespace-only differences (e.g. a hyphen vs. a space).
+func TestPlan_Duplicate_MovieFuzzyPunctuation(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Spider-Man.2002.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Spider Man (2002)", "Spider Man (2002).mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true")
+	}
+}
+
+// TestPlan_Duplicate_MovieFuzzyBothNoYear covers tier 1 when neither side
+// carries a year at all -- still a confident match if the normalized
+// titles agree.
+func TestPlan_Duplicate_MovieFuzzyBothNoYear(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Amelie.mkv")
+	writeFile(t, src, "dummy")
+
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Amélie", "Amélie.mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true")
+	}
+}
+
+// TestPlan_Duplicate_MovieFuzzyPossible_ExistingHasYear covers tier 2: the
+// existing library folder carries a year the incoming file doesn't. This
+// must not skip -- the new folder is still created -- since we can't tell
+// from the title alone whether it's the same movie or a different one.
+func TestPlan_Duplicate_MovieFuzzyPossible_ExistingHasYear(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Survivor.mkv")
+	writeFile(t, src, "dummy")
+
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Survivor (2000)", "Survivor (2000).mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false (tier 2 should warn, not skip)")
+	}
+}
+
+// TestPlan_Duplicate_MovieFuzzyPossible_IncomingHasYear mirrors
+// TestPlan_Duplicate_MovieFuzzyPossible_ExistingHasYear with the year
+// asymmetry reversed: the incoming file has a year, the existing folder
+// doesn't.
+func TestPlan_Duplicate_MovieFuzzyPossible_IncomingHasYear(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Survivor.2000.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Survivor", "Survivor.mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false (tier 2 should warn, not skip)")
+	}
+}
+
+// TestPlan_Duplicate_MovieFuzzyPossible_MultipleCandidates covers the case
+// where more than one existing folder fuzzy-matches the incoming title
+// under tier 2 -- Plan must still proceed (create normally) rather than
+// erroring or picking one arbitrarily.
+func TestPlan_Duplicate_MovieFuzzyPossible_MultipleCandidates(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Survivor.mkv")
+	writeFile(t, src, "dummy")
+
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Survivor (2000)", "Survivor (2000).mkv"), "already here")
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Survivor (2015)", "Survivor (2015).mkv"), "already here too")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false (tier 2 should warn, not skip)")
+	}
+}
+
+// TestPlan_Duplicate_MovieFuzzy_DifferentYearsNoAction covers the
+// no-ambiguity case: both sides carry a year and they disagree, which is
+// treated as evidence of two different movies, not a possible duplicate.
+func TestPlan_Duplicate_MovieFuzzy_DifferentYearsNoAction(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Survivor.2006.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Survivor (2000)", "Survivor (2000).mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false (different years means different movies)")
+	}
+}
+
+// TestPlan_Duplicate_MovieFuzzy_ArticleNotDropped proves the normalizer
+// never drops words: a leading article difference must not fuzzy-match,
+// even though every other character is identical.
+func TestPlan_Duplicate_MovieFuzzy_ArticleNotDropped(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "The.Amazing.Spiderman.2012.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Amazing Spiderman (2012)", "Amazing Spiderman (2012).mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false (leading article must not be dropped by normalization)")
+	}
+}

@@ -566,6 +566,52 @@ func TestApply_Duplicate_SkipsWithoutMoving(t *testing.T) {
 	}
 }
 
+// TestApply_FuzzyDuplicate_ReasonCitesExistingFolder covers the fuzzy
+// (tier 1) duplicate case: the skip reason must cite the actual existing
+// library folder that caused the match (pl.DuplicateMatchPath), not
+// pl.DestMainPath, since that's the incoming file's own never-created path
+// and would be misleading here (it names a folder spelled differently from
+// what's actually in the library).
+func TestApply_FuzzyDuplicate_ReasonCitesExistingFolder(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+
+	mainName := "Amelie.2001.1080p.BluRay.x264-GROUP.mkv"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	writeFile(t, mainSrc, "dummy")
+
+	existing := filepath.Join(p.cfg.MoviesDir, "Amélie (2001)", "Amélie (2001).mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true")
+	}
+
+	p.xfer = failIfCalledTransferer{t: t}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Applied {
+		t.Fatalf("Applied = true, want false")
+	}
+	if strings.Contains(res.Reason, "Amelie (2001)") {
+		t.Fatalf("Reason = %q, must not cite the incoming file's own never-created path", res.Reason)
+	}
+	if !strings.Contains(res.Reason, "Amélie (2001)") {
+		t.Fatalf("Reason = %q, want it to cite the existing library folder", res.Reason)
+	}
+}
+
 // TestApply_DuplicateRace_DowngradesToGracefulSkip covers the TOCTOU case:
 // Plan saw no duplicate (pl.Duplicate == false), but another job/batch item
 // claimed the destination before this Move ran. The real transfer.RenameOrCopy
