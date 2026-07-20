@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -106,7 +107,8 @@ func main() {
 		planPath = dryRunPath
 	}
 	planRequested := planChanged || dryRunChanged
-	if *planPath == planDropSentinel {
+	planWasBare := *planPath == planDropSentinel
+	if planWasBare {
 		*planPath = ""
 	}
 	if *help {
@@ -121,6 +123,16 @@ func main() {
 	cfg, resolved, bootstrapped, err := config.Load(*configPath)
 	if err != nil {
 		die(err, exitError)
+	}
+	if planRequested && planWasBare && pflag.NArg() > 0 {
+		flagName := "--plan"
+		if dryRunChanged {
+			flagName = "--dry-run"
+		}
+		die(fmt.Errorf(
+			"%s doesn't take a path as a separate argument (got %q)\nuse:\n  %s %s=%s\nor use bare %s to preview the drop folder (%s)",
+			flagName, strings.Join(pflag.Args(), " "), filepath.Base(os.Args[0]), flagName, pflag.Arg(0), flagName, resolved.DropFolderAbs,
+		), exitUsage)
 	}
 	if *statusFlag {
 		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
