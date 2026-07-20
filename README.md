@@ -15,7 +15,6 @@ With the daemon running and Transmission integration enabled, the full workflow 
 
 ## Installation
 
-
 ### [Homebrew](https://brew.sh/) Install
 
 ```
@@ -32,7 +31,7 @@ go install github.com/mtn-man/mintmedia/cmd/mintmedia@latest
 
 This requires Go 1.25.5 or newer ([install Go](https://go.dev/doc/install) if you don't have it), and installs to `$(go env GOPATH)/bin` (or `$GOBIN` if set) -- make sure that directory is on your `PATH`. To pin to a specific release instead of the latest commit on `main`, use a tag in place of `@latest`, e.g. `@v1.3.0`.
 
-On Linux, clipboard-based magnet link detection additionally requires a Wayland session with `wl-clipboard` installed (`wl-paste` must be on `PATH`) -- see [Transmission Integration](#transmission-integration)
+On Linux, clipboard-based magnet link detection additionally requires a Wayland session with `wl-clipboard` installed (`wl-paste` must be on `PATH`) -- see [Transmission Integration](#transmission-integration).
 
 ## Quick Start
 
