@@ -15,11 +15,14 @@ With the daemon running and Transmission integration enabled, the full workflow 
 
 ## Installation
 
+
+### [Homebrew](https://brew.sh/) Install
+
 ```
 brew install mtn-man/tap/mintmedia
 ```
 
-### Go Install
+### [Go](https://go.dev/) Install
 
 If you'd rather not add a Homebrew tap (or it's not available on your platform), install directly with Go:
 
