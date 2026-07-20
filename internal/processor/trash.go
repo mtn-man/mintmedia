@@ -118,4 +118,3 @@ func moveToTrashWithDir(src, trashDir string) error {
 
 	return fmt.Errorf("unable to find available trash name for %q", base)
 }
-
