@@ -16,6 +16,20 @@ import (
 
 // plan is the internal implementation behind (*processorImpl).Plan().
 // It is split out to keep processor.go as wiring-only.
+//
+// A single input path moves through five phases:
+//
+//	Discover  -- locate the main media file(s) under the input path
+//	Classify  -- decide Movie vs Show for a given file
+//	Reconcile -- for a multi-file batch, force disagreeing siblings onto
+//	             one show name/year before any of them plan individually
+//	Resolve   -- parse title/season/episode and resolve the destination
+//	             show/movie folder
+//	BuildPlan -- compute destination paths, run duplicate detection, and
+//	             map associated (subtitle/etc.) files
+//
+// Discover and Reconcile are batch-wide and live here in plan(); Classify,
+// Resolve, and BuildPlan run per file inside planForMain.
 func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 	in := strings.TrimSpace(req.InputPath)
 	if in == "" {
@@ -32,13 +46,16 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 		return nil, fmt.Errorf("stat input path: %w", err)
 	}
 
-	// 1) Select main media file
+	// --- Phase: Discover -- select main media file(s) --------------------
 	switch {
 	case st.Mode().IsRegular():
 		ext := strings.ToLower(filepath.Ext(abs))
 		if !isExtInSet(ext, p.mainExtSet) {
 			return nil, ErrNotMedia
 		}
+		// A lone file has no batch to reconcile against and no folder
+		// hint to classify with, so it goes straight into
+		// Classify/Resolve/BuildPlan via planForMain.
 		pl, err := planForMain(ctx, p, req, abs, abs, showHint{}, movieParseFolderFirst, false, "", false)
 		if err != nil {
 			return nil, err
@@ -68,7 +85,8 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 			movieMode = movieParseFileOnly
 		}
 
-		// Pre-scan for show-name and show-year disagreement within the batch.
+		// --- Phase: Reconcile -- pre-scan for show-name and show-year
+		// disagreement within the batch.
 		// Name and year are reconciled independently, since a batch can
 		// disagree on either one without disagreeing on the other:
 		//
@@ -122,6 +140,7 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 			}
 		}
 
+		// --- Phases: Classify / Resolve / BuildPlan (per file, in planForMain) ---
 		plans := make([]Plan, 0, len(mainPaths))
 		issues := make([]PlanIssue, 0)
 		for _, main := range mainPaths {
@@ -412,7 +431,7 @@ func planForMain(
 	pl.MainExt = strings.ToLower(filepath.Ext(mainPath))
 	pl.MainBaseName = filepath.Base(mainPath)
 
-	// 2) Determine category (Movies vs Shows)
+	// --- Phase: Classify -- determine category (Movies vs Shows) ---------
 	cat := normalizeCategory(req.CategoryHint)
 	if cat == "" {
 		if hint.ok {
@@ -423,9 +442,9 @@ func planForMain(
 	}
 	pl.Category = cat
 
-	// 3) Parse identity + compute destination
 	switch pl.Category {
 	case CategoryShow:
+		// --- Phase: Resolve (show) -- parse identity, resolve show folder ---
 		showName, showYear, season, episode, inputHadYear, err := resolveShowIdentity(p, filepath.Base(pl.InputPath), pl.MainSourcePath, hint, dirMode)
 		if err != nil {
 			return Plan{}, err
@@ -462,6 +481,7 @@ func planForMain(
 			return Plan{}, err
 		}
 
+		// --- Phase: BuildPlan (show) -- compute destination paths --------
 		pl.ShowName = showName
 		pl.ShowYear = resolvedYear
 		pl.Season = season
@@ -483,6 +503,7 @@ func planForMain(
 		}
 
 	case CategoryMovie:
+		// --- Phase: Resolve (movie) -- parse title/year -------------------
 		var (
 			title string
 			year  string
@@ -507,13 +528,14 @@ func planForMain(
 			pl.MovieTitle = title
 		}
 
+		// --- Phase: BuildPlan (movie) -- compute destination paths, then
+		// duplicate detection: exact path first (cheap fast path), then a
+		// fuzzy title/year fallback that catches diacritic/punctuation
+		// variants and near-miss year mismatches an exact stat can't see.
 		pl.DestRadix = pl.MovieTitle
 		pl.DestDir = filepath.Join(p.cfg.MoviesDir, pl.MovieTitle)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
-		// 4) Duplicate detection: exact path first (cheap fast path), then a
-		// fuzzy title/year fallback that catches diacritic/punctuation
-		// variants and near-miss year mismatches an exact stat can't see.
 		if err := checkExactDuplicate(&pl); err != nil {
 			return Plan{}, err
 		}
@@ -540,7 +562,7 @@ func planForMain(
 		return Plan{}, ErrUncategorized
 	}
 
-	// 5) Associated file mapping
+	// --- Phase: BuildPlan (shared) -- associated file mapping -------------
 	assoc, err := planAssociatedMoves(ctx, p, pl)
 	if err != nil {
 		return Plan{}, err
