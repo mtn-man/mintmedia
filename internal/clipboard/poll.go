@@ -129,8 +129,10 @@ func (p *Poller) trySendEvent(magnet string) {
 	}
 }
 
-// extractMagnetURIs finds magnet:? URIs inside text.
-// v1: simple parsing; later you can tighten validation.
+// extractMagnetURIs finds magnet:? URIs inside text. Extraction here is
+// deliberately permissive (token-prefix matching, not full validation) --
+// callers (see loop()) run each result through magnet.IsValid before acting
+// on it, so this only needs to narrow down candidates.
 func extractMagnetURIs(text string) []string {
 	// Fast path: whole clipboard is a magnet link.
 	if strings.HasPrefix(text, "magnet:?") {

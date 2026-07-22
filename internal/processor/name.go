@@ -51,10 +51,6 @@ var lowerTitleWords = map[string]struct{}{
 	"with": {},
 }
 
-// Note: This file relies on shared, package-level helpers declared elsewhere in the
-// processor package (e.g., reSeasonEpisode, reBracketedTag, and reYear).
-// If you later remove those declarations from other files, move them here.
-
 // --- categorization ---------------------------------------------------------
 
 func determineCategoryFromName(name string) Category {
