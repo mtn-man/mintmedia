@@ -37,6 +37,42 @@ func NewCaffeinate() *Caffeinate {
 	return &Caffeinate{}
 }
 
+// CaffeinateHooks lets StartCaffeinate's callers route its informational/
+// warning output through their own mechanism -- raw console output for the
+// CLI one-shot paths, the daemon's structured logging.Logger for the daemon
+// -- rather than this package hardcoding one.
+type CaffeinateHooks struct {
+	OnUnsupported func()      // sleep inhibition unavailable on this platform (expected, non-fatal)
+	OnStartWarn   func(error) // Start failed for any other reason
+	OnStopWarn    func(error) // Stop failed
+}
+
+// StartCaffeinate best-effort inhibits idle sleep via a controller from
+// newCaff, reporting failures through hooks, and returns a stop func the
+// caller must defer to release it. Single shared implementation for every
+// caller that needs sleep inhibition (CLI one-shot paths, process-drop, the
+// daemon) -- previously duplicated three times with only the output
+// mechanism differing.
+func StartCaffeinate(newCaff func() CaffeinateController, hooks CaffeinateHooks) (stop func()) {
+	caffCtx, cancelCaff := context.WithCancel(context.Background())
+	caff := newCaff()
+	if err := caff.Start(caffCtx); err != nil {
+		if errors.Is(err, ErrInhibitUnsupported) {
+			if hooks.OnUnsupported != nil {
+				hooks.OnUnsupported()
+			}
+		} else if hooks.OnStartWarn != nil {
+			hooks.OnStartWarn(err)
+		}
+	}
+	return func() {
+		cancelCaff()
+		if err := caff.Stop(); err != nil && hooks.OnStopWarn != nil {
+			hooks.OnStopWarn(err)
+		}
+	}
+}
+
 // Start launches the platform sleep-inhibit command in the background if not already running.
 // On unsupported platforms, this is a no-op.
 func (c *Caffeinate) Start(_ context.Context) error {

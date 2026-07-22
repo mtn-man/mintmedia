@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
 
@@ -14,27 +12,19 @@ var newMainCaffeinate = func() notify.CaffeinateController {
 	return notify.NewCaffeinate()
 }
 
-func withCaffeinate(fn func() error) error {
-	caffCtx, cancelCaff := context.WithCancel(context.Background())
-	caff := newMainCaffeinate()
-	if caff != nil {
-		if err := caff.Start(caffCtx); err != nil {
-			if errors.Is(err, notify.ErrInhibitUnsupported) {
-				fmt.Println(console.ColorizePrefixOut("INFO     caffeinate: sleep inhibition not available on this platform"))
-			} else {
-				fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate: %v", err)))
-			}
-		}
-	}
-	defer func() {
-		cancelCaff()
-		if caff == nil {
-			return
-		}
-		if err := caff.Stop(); err != nil {
+// cliCaffeinateHooks builds the notify.CaffeinateHooks shared by every CLI
+// one-shot path (--process, --process-drop): plain console output, matching
+// the wording used before notify.StartCaffeinate existed.
+func cliCaffeinateHooks() notify.CaffeinateHooks {
+	return notify.CaffeinateHooks{
+		OnUnsupported: func() {
+			fmt.Println(console.ColorizePrefixOut("INFO     caffeinate: sleep inhibition not available on this platform"))
+		},
+		OnStartWarn: func(err error) {
+			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate: %v", err)))
+		},
+		OnStopWarn: func(err error) {
 			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate stop: %v", err)))
-		}
-	}()
-
-	return fn()
+		},
+	}
 }
