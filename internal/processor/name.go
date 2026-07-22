@@ -13,6 +13,24 @@ import (
 
 var reRomanNumeral = regexp.MustCompile(`^(?i)(M{0,4})(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$`)
 
+// Common acronyms worth preserving even if input arrives in lowercase.
+// "US" is handled separately (see titleCaseSimple) so we can avoid forcing
+// uppercase in the middle of regular titles like "All of Us Strangers".
+var titleCaseAcronyms = map[string]struct{}{
+	"AI":   {},
+	"CIA":  {},
+	"DEA":  {},
+	"EU":   {},
+	"FBI":  {},
+	"NASA": {},
+	"NYC":  {},
+	"UAE":  {},
+	"UFC":  {},
+	"UK":   {},
+	"USA":  {},
+	"WWE":  {},
+}
+
 var lowerTitleWords = map[string]struct{}{
 	"a":    {},
 	"an":   {},
@@ -467,24 +485,6 @@ func titleCaseSimple(s string) string {
 
 	caser := cases.Title(language.English)
 
-	// Common acronyms worth preserving even if input arrives in lowercase.
-	// "US" is handled separately so we can avoid forcing uppercase in the middle
-	// of regular titles like "All of Us Strangers".
-	acronyms := map[string]struct{}{
-		"AI":   {},
-		"CIA":  {},
-		"DEA":  {},
-		"EU":   {},
-		"FBI":  {},
-		"NASA": {},
-		"NYC":  {},
-		"UAE":  {},
-		"UFC":  {},
-		"UK":   {},
-		"USA":  {},
-		"WWE":  {},
-	}
-
 	for i := range parts {
 		tok := parts[i]
 		prefix, core, suffix := tokenParts(tok)
@@ -508,7 +508,7 @@ func titleCaseSimple(s string) string {
 		}
 
 		// Preserve allowlisted acronyms regardless of case.
-		if _, ok := acronyms[coreUp]; ok {
+		if _, ok := titleCaseAcronyms[coreUp]; ok {
 			parts[i] = prefix + coreUp + suffix
 			continue
 		}
