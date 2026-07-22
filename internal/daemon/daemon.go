@@ -591,10 +591,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 				resultformat.CompactLine(r, resultformat.CleanName(r.Plan.MainSourcePath), dur),
 				logging.Fields{"path": pth, "dest_path": r.Plan.DestMainPath, "duration": dur.String()},
 			)
-			playCount := planner.OnAppliedMain()
-			for i := 0; i < playCount; i++ {
-				d.playSoundAsync(jobCtx, d.SoundDone)
-			}
+			d.playDoneCount(jobCtx, planner.OnAppliedMain())
 			return
 		}
 		if processor.IsSuppressedResult(r) {
@@ -653,10 +650,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 		return false
 	}
 
-	playCount := planner.OnJobComplete()
-	for i := 0; i < playCount; i++ {
-		d.playSoundAsync(jobCtx, d.SoundDone)
-	}
+	d.playDoneCount(jobCtx, planner.OnJobComplete())
 
 	if planner.HasAppliedMain() {
 		d.cleanupCompletedTorrents(jobCtx)
@@ -664,20 +658,16 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 	return false
 }
 
-func (d *Daemon) playSoundAsync(ctx context.Context, soundPath string) {
-	soundPath = strings.TrimSpace(soundPath)
-	if soundPath == "" {
-		return
+// playDoneCount plays d.SoundDone up to count times, debounced against
+// d.soundDebounce/d.SoundDoneCooldown, fire-and-forget -- the daemon process
+// keeps running after this returns, so there's nothing to join.
+func (d *Daemon) playDoneCount(ctx context.Context, count int) {
+	player := notify.DoneSoundPlayer{
+		Debounce: &d.soundDebounce,
+		Cooldown: d.SoundDoneCooldown,
+		Play:     d.playSoundFn,
 	}
-	if !d.soundDebounce.Allow(time.Now(), d.SoundDoneCooldown) {
-		return
-	}
-	play := d.playSoundFn
-	if play == nil {
-		play = notify.PlaySound
-	}
-	base := context.WithoutCancel(ctx)
-	go func() { _ = play(base, soundPath) }()
+	player.PlayCount(ctx, d.SoundDone, count)
 }
 
 func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {

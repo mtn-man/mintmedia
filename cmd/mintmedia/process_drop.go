@@ -120,22 +120,15 @@ func processDropFolder(
 	const doneSoundCooldown = 3 * time.Second
 	var soundDebounce notify.Debouncer
 	var soundWG sync.WaitGroup
-	playDoneCount := func(count int) {
-		for i := 0; i < count; i++ {
-			if !soundDebounce.Allow(time.Now(), doneSoundCooldown) {
-				continue
-			}
-			// Capture playDoneSound synchronously here rather than inside the
-			// goroutine: it's a package-level var swapped out by tests, and
-			// reading it lazily in the goroutine could race with a test's
-			// cleanup restoring it after processDropFolder has returned.
-			play := playDoneSound
-			soundWG.Add(1)
-			go func() {
-				defer soundWG.Done()
-				_ = play(context.WithoutCancel(ctx), soundDone)
-			}()
-		}
+	// playDoneSound is read once here rather than inside DoneSoundPlayer's
+	// goroutines: it's a package-level var swapped out by tests, and reading
+	// it lazily could race with a test's cleanup restoring it after
+	// processDropFolder has returned.
+	player := notify.DoneSoundPlayer{
+		Debounce: &soundDebounce,
+		Cooldown: doneSoundCooldown,
+		Play:     playDoneSound,
+		Wait:     &soundWG,
 	}
 	// The caller (main) exits the process immediately after this function
 	// returns, so any in-flight done-sound playback must be joined here --
@@ -163,7 +156,7 @@ func processDropFolder(
 			summary.Results++
 			if r.Applied {
 				summary.Applied++
-				playDoneCount(planner.OnAppliedMain())
+				player.PlayCount(ctx, soundDone, planner.OnAppliedMain())
 				return
 			}
 			summary.Skipped++
@@ -186,8 +179,7 @@ func processDropFolder(
 			errCount++
 		}
 
-		playCount := planner.OnJobComplete()
-		playDoneCount(playCount)
+		player.PlayCount(ctx, soundDone, planner.OnJobComplete())
 
 		if interrupted {
 			break
