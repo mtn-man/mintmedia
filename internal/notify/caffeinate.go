@@ -32,7 +32,7 @@ type Caffeinate struct {
 }
 
 // NewCaffeinate returns a new controller.
-// On unsupported platforms, Start() returns nil immediately.
+// On unsupported platforms, Start() returns ErrInhibitUnsupported.
 func NewCaffeinate() *Caffeinate {
 	return &Caffeinate{}
 }
