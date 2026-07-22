@@ -1,11 +1,32 @@
 package daemon
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/mtn-man/mintmedia/internal/console"
 	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/notify"
 )
+
+// caffeinateHooks builds the notify.CaffeinateHooks used for the daemon's
+// lifetime sleep-inhibition (see Run), routing through the daemon's own
+// console-only logger methods -- identical wording/events to what Run had
+// inlined before notify.StartCaffeinate existed, and still gated by the
+// user's configured console_level like every other daemon log line.
+func (d *Daemon) caffeinateHooks() notify.CaffeinateHooks {
+	return notify.CaffeinateHooks{
+		OnUnsupported: func() {
+			d.logConsoleInfo(logging.EventSystemStartup, "INFO     caffeinate: sleep inhibition not available on this platform", nil)
+		},
+		OnStartWarn: func(err error) {
+			d.logConsoleWarn(logging.EventSystemStartup, fmt.Sprintf("WARNING  caffeinate: %v", err), err, nil)
+		},
+		OnStopWarn: func(err error) {
+			d.logConsoleWarn(logging.EventSystemShutdownComplete, fmt.Sprintf("WARNING  caffeinate stop: %v", err), err, nil)
+		},
+	}
+}
 
 func (d *Daemon) logHistoryInfo(event logging.Event, fields logging.Fields) {
 	if d == nil || d.Logger == nil {

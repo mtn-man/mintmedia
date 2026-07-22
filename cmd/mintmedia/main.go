@@ -18,6 +18,7 @@ import (
 	"github.com/mtn-man/mintmedia/internal/console"
 	"github.com/mtn-man/mintmedia/internal/daemon"
 	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/notify"
 	"github.com/mtn-man/mintmedia/internal/processor"
 	"github.com/mtn-man/mintmedia/internal/state"
 	"github.com/mtn-man/mintmedia/internal/transfer"
@@ -265,12 +266,14 @@ func main() {
 
 	if mode.ProcessPath != "" {
 		var res []processor.Result
-		err := withCaffeinate(func() error {
+		err := func() error {
+			stop := notify.StartCaffeinate(newMainCaffeinate, cliCaffeinateHooks())
+			defer stop()
 			return proc.Process(ctx, processor.Request{
 				InputPath: mode.ProcessPath,
 				OnResult:  func(r processor.Result) { res = append(res, r) },
 			})
-		})
+		}()
 		if err != nil {
 			die(err, exitError)
 		}

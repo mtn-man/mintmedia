@@ -46,21 +46,8 @@ func processDropFolder(
 	policy := shutdown.ResolvePolicy(shutdownGrace, shutdownForce)
 
 	// Prevent macOS idle sleep for the lifetime of this process-drop run (best-effort).
-	caffCtx, cancelCaff := context.WithCancel(context.Background())
-	caff := newProcessDropCaffeinate()
-	if err := caff.Start(caffCtx); err != nil {
-		if errors.Is(err, notify.ErrInhibitUnsupported) {
-			fmt.Println(console.ColorizePrefixOut("INFO     caffeinate: sleep inhibition not available on this platform"))
-		} else {
-			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate: %v", err)))
-		}
-	}
-	defer func() {
-		cancelCaff()
-		if err := caff.Stop(); err != nil {
-			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf("WARNING  caffeinate stop: %v", err)))
-		}
-	}()
+	stop := notify.StartCaffeinate(newProcessDropCaffeinate, cliCaffeinateHooks())
+	defer stop()
 
 	candidates, errCount, readErr, sortErr := discoverDropPaths(ctx, proc, dropRoot)
 	if readErr != nil {

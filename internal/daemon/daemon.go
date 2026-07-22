@@ -145,21 +145,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 
 	// Prevent macOS idle sleep for the lifetime of the daemon (best-effort).
-	caffCtx, cancelCaff := context.WithCancel(context.Background())
-	caff := newDaemonCaffeinate()
-	if err := caff.Start(caffCtx); err != nil {
-		if errors.Is(err, notify.ErrInhibitUnsupported) {
-			d.logConsoleInfo(logging.EventSystemStartup, "INFO     caffeinate: sleep inhibition not available on this platform", nil)
-		} else {
-			d.logConsoleWarn(logging.EventSystemStartup, fmt.Sprintf("WARNING  caffeinate: %v", err), err, nil)
-		}
-	}
-	defer func() {
-		cancelCaff()
-		if err := caff.Stop(); err != nil {
-			d.logConsoleWarn(logging.EventSystemShutdownComplete, fmt.Sprintf("WARNING  caffeinate stop: %v", err), err, nil)
-		}
-	}()
+	stop := notify.StartCaffeinate(newDaemonCaffeinate, d.caffeinateHooks())
+	defer stop()
 
 	// Defaults
 	if d.MagnetTimeout <= 0 {
