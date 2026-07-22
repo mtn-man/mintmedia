@@ -1,17 +1,19 @@
 # mintmedia
 
-**mintmedia** turns messy downloads into a clean library, automatically -- no database, no web UI, nothing to run but this program:
+**mintmedia** turns messy downloads into a clean library, automatically -- no database, no web UI or internet connection, nothing but this program:
 
 ```
 input:   Stranger.Things.S04E07.2160p.BluRay.x265.mkv
 output:  Shows/Stranger Things/Season 04/Stranger Things - S04E07.mkv
 ```
 
-Drop a file or folder into the watch folder and mintmedia figures out what it is -- recursing into season folders and collections as needed -- renames it cleanly, and moves it to your Movies or Shows library.
+Drop a file or folder into the MintDrop folder (typically ~/Downloads/MintDrop) and mintmedia will figure what it is, rename it cleanly, and move it to your Movies or Shows library - "automagically."
 
-With the daemon running and Transmission integration enabled, the full workflow is hands-free: copy a magnet link, and mintmedia handles the rest -- queuing the download, organizing the files when it finishes, and dropping them into a library structure ready for Plex, Infuse, Jellyfin, or any other player.
+Advanced "hands-free" workflows are also fully supported:
 
-> **Beta software.** mintmedia is pre-1.0 -- CLI flags, config format, and defaults may still change between releases. Back up any media libraries before pointing mintmedia at them, and check release notes before upgrading.
+With the daemon running and Transmission integration enabled, the fully automated mintmedia workflow comes online: copy a magnet link, and mintmedia handles the rest -- queuing the download, organizing the files when it finishes, and dropping them into a library structure ready for Plex, Infuse, Jellyfin, or any other player.
+
+> **Beta software.** mintmedia is pre-1.0 -- CLI flags, config format, and defaults may still change between releases. Always use --plan or --dry-run before pointing mintmedia at important files, and check release notes before upgrading.
 
 ## Installation
 
