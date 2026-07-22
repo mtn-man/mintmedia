@@ -1,17 +1,24 @@
 # mintmedia
 
-**mintmedia** turns messy downloads into a clean library, automatically -- no database, no web UI or internet connection, nothing but this program:
+**mintmedia** turns messy downloads into a clean library, automatically -- simple to set up, simple to use, and built to stay out of your way.
 
 ```
 input:   Stranger.Things.S04E07.2160p.BluRay.x265.mkv
 output:  Shows/Stranger Things/Season 04/Stranger Things - S04E07.mkv
 ```
+Whether your library lives on your computer, a NAS, or any other mounted filesystem, mintmedia organizes it the same way.
+Drop a file or folder into the MintDrop folder (typically ~/Downloads/MintDrop) and mintmedia will figure out what it is, rename it cleanly, and move it to your Movies or Shows library - "automagically."
 
-Drop a file or folder into the MintDrop folder (typically ~/Downloads/MintDrop) and mintmedia will figure what it is, rename it cleanly, and move it to your Movies or Shows library - "automagically."
+Want to automate the whole thing?
 
-Advanced "hands-free" workflows are also fully supported:
+Once you've enabled Transmission integration and started the daemon (mintmedia -d), all you have to do is copy a magnet link, and mintmedia handles the rest: queuing the download, organizing the files when it finishes, and sorting them into a library structure ready for media servers like Plex, Infuse, Jellyfin, or any local media player.
 
-With the daemon running and Transmission integration enabled, the fully automated mintmedia workflow comes online: copy a magnet link, and mintmedia handles the rest -- queuing the download, organizing the files when it finishes, and dropping them into a library structure ready for Plex, Infuse, Jellyfin, or any other player.
+By design, mintmedia keeps things simple:
+
+- No web UI -- everything is CLI and daemon
+- No outside internet connection -- sorting is done entirely from filenames, on your machine
+- No database -- state lives in a plain JSONL history log
+- Single binary -- one executable, no runtime dependencies to install
 
 > **Beta software.** mintmedia is pre-1.0 -- CLI flags, config format, and defaults may still change between releases. Always use --plan or --dry-run before pointing mintmedia at important files, and check release notes before upgrading.
 
@@ -60,7 +67,7 @@ When mintmedia processes a file or folder, it:
 
 If a subtitle or other accompanying file can't be moved, the main media is still moved and you'll see a warning. The source folder is left in place if anything was left behind.
 
-Use `--plan` to preview what mintmedia would do without touching anything. Pass a path with `=` to preview a specific item (`--plan=/path/to/item` -- the space-separated form, `--plan /path/to/item`, is parsed as no path given, since the path is optional), or omit it entirely to preview the whole drop folder.
+Use `--plan` to preview what mintmedia would do without touching anything -- see [CLI Reference](#cli-reference) for the path syntax.
 
 See [Media detection](docs/media-detection.md) for exactly which filename patterns are recognized, and [Folder processing](docs/folder-processing.md) for how season packs, movie collections, and mixed folders are handled.
 
@@ -69,8 +76,8 @@ See [Media detection](docs/media-detection.md) for exactly which filename patter
 Shows are organized by season, with the episode renamed to a clean `Show Name - SxxExx` format:
 
 ```
-input:   Stranger.Things.S04E07.2160p.BluRay.x265.mkv
-output:  Shows/Stranger Things/Season 04/Stranger Things - S04E07.mkv
+input:   Breaking.Bad.S03E07.1080p.HEVC.x265-[GROUP].mkv
+output:  Shows/Breaking Bad/Season 03/Breaking Bad - S03E07.mkv
 ```
 
 Movies get their own subdirectory named after the title:
