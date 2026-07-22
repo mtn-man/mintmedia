@@ -921,29 +921,29 @@ func TestDaemon_ProcessPathAsync_DoneNotificationModes_StreamedResults(t *testin
 	}
 }
 
-// TestDaemon_PlaySoundAsync_DebouncesRapidTriggers guards against the
-// overlapping-sound-effect regression: per-file mode on a fast batch fires
-// many applied results within milliseconds of each other, and without
-// coalescing each one plays a full, overlapping done sound. With a real
-// (non-zero) SoundDoneCooldown, only the first of several rapid triggers
-// should actually play; once the cooldown elapses, a later trigger should
-// play again.
-func TestDaemon_PlaySoundAsync_DebouncesRapidTriggers(t *testing.T) {
+// TestDaemon_PlayDoneCount_WiresCooldownAndDebounceState guards against a
+// regression in playDoneCount's wiring of d.soundDebounce/d.SoundDoneCooldown/
+// d.playSoundFn into notify.DoneSoundPlayer: with a real (non-zero)
+// SoundDoneCooldown, rapid calls must coalesce into a single play, and
+// d.soundDebounce's state must persist across separate playDoneCount calls
+// (not reset each time, e.g. via a fresh Debouncer).
+func TestDaemon_PlayDoneCount_WiresCooldownAndDebounceState(t *testing.T) {
 	soundCalls := make(chan struct{}, 16)
 	d := &Daemon{
+		SoundDone:         "/tmp/done.aiff",
 		SoundDoneCooldown: 200 * time.Millisecond,
 		playSoundFn:       func(context.Context, string) error { soundCalls <- struct{}{}; return nil },
 	}
 
 	for i := 0; i < 5; i++ {
-		d.playSoundAsync(context.Background(), "/tmp/done.aiff")
+		d.playDoneCount(context.Background(), 1)
 	}
 
 	waitForSoundCount(t, soundCalls, 1, 2*time.Second)
 	assertNoExtraSoundCalls(t, soundCalls, 150*time.Millisecond)
 
 	time.Sleep(250 * time.Millisecond)
-	d.playSoundAsync(context.Background(), "/tmp/done.aiff")
+	d.playDoneCount(context.Background(), 1)
 	waitForSoundCount(t, soundCalls, 1, 2*time.Second)
 }
 
