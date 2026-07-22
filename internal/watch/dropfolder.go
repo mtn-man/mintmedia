@@ -321,11 +321,10 @@ func (d *DropFolderWatcher) addWatchesRecursively(rootDir string) error {
 		return nil
 	}
 
-	// Always add the directory itself if possible.
+	// Always add the directory itself if possible. Subdirectory adds below
+	// are best-effort (transient dirs are common during a settle window);
+	// this top-level add is not -- its error propagates to the caller.
 	if err := d.watcher.Add(rootDir); err != nil {
-		// Some directories may be transient; return error for root, ignore for subdirs.
-		// We'll treat all adds as best-effort except for the main root, which is handled by caller.
-		// Here: we return err; caller decides.
 		return fmt.Errorf("watcher.Add(%s): %w", rootDir, err)
 	}
 
