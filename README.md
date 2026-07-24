@@ -1,21 +1,22 @@
 # mintmedia
 
-**mintmedia** turns messy downloads into a clean library, automatically -- simple to set up, simple to use, and built to stay out of your way.
+**mintmedia** turns messy downloads into a clean library, automatically -- no fuss to set up, nothing extra to run, and built to stay out of your way.
 
 ```
 input:   Stranger.Things.S04E07.2160p.BluRay.x265.mkv
 output:  Shows/Stranger Things/Season 04/Stranger Things - S04E07.mkv
 ```
-Whether your library lives on your computer, a NAS, or any other mounted filesystem, mintmedia organizes it the same way.
 Drop a file or folder into the MintDrop folder (typically ~/Downloads/MintDrop) and mintmedia will figure out what it is, rename it cleanly, and move it to your Movies or Shows library - "automagically."
 
-Want to automate the whole thing?
+Want to automate your entire media workflow?
 
 Once you've enabled Transmission integration and started the daemon (mintmedia -d), all you have to do is copy a magnet link, and mintmedia handles the rest: queuing the download, organizing the files when it finishes, and sorting them into a library structure ready for media servers like Plex, Infuse, Jellyfin, or any local media player.
 
-By design, mintmedia keeps things simple:
+mintmedia leans on an old idea: a tool should do one thing, and do it well.
 
-- No web UI -- everything is CLI and daemon
+By design, that means keeping things simple:
+
+- No web UI -- everything runs from the command line
 - No outside internet connection -- sorting is done entirely from filenames, on your machine
 - No database -- state lives in a plain JSONL history log
 - Single binary -- one executable, no runtime dependencies to install
@@ -23,6 +24,8 @@ By design, mintmedia keeps things simple:
 > **Beta software.** mintmedia is pre-1.0 -- CLI flags, config format, and defaults may still change between releases. Always use --plan or --dry-run before pointing mintmedia at important files, and check release notes before upgrading.
 
 ## Installation
+
+`mintmedia` works natively on both macOS and Linux (x86-64 & arm64):
 
 ### [Homebrew](https://brew.sh/) Install
 
@@ -38,13 +41,13 @@ If you'd rather not add a Homebrew tap (or it's not available on your platform),
 go install github.com/mtn-man/mintmedia/cmd/mintmedia@latest
 ```
 
-This requires Go 1.25.5 or newer ([install Go](https://go.dev/doc/install) if you don't have it), and installs to `$(go env GOPATH)/bin` (or `$GOBIN` if set) -- make sure that directory is on your `PATH`. To pin to a specific release instead of the latest commit on `main`, use a tag in place of `@latest`, e.g. `@v1.3.0`.
+This requires Go 1.25.5 or newer ([install Go](https://go.dev/doc/install) if you don't have it), and installs to `$(go env GOPATH)/bin` (or `$GOBIN` if set) -- make sure that directory is on your `PATH`. To pin to a specific release instead of the latest commit on `main`, use a tag in place of `@latest`, e.g. `@v0.1.5`.
 
 On Linux, clipboard-based magnet link detection additionally requires a Wayland session with `wl-clipboard` installed (`wl-paste` must be on `PATH`) -- see [Transmission Integration](#transmission-integration).
 
 ## Quick Start
 
-1. Run `mintmedia`. A default config is written to `~/.config/mintmedia/config.toml` with sensible defaults (drop folder `~/Downloads/MintDrop`, movies and shows libraries under `~/Movies` on macOS or `~/Videos` on Linux). Edit the config file if you want different paths.
+1. Run `mintmedia`. A default config will be written to `~/.config/mintmedia/config.toml` with sensible defaults (drop folder `~/Downloads/MintDrop`, movies and shows libraries under `~/Movies` on macOS or `~/Videos` on Linux). Edit the config file if you want different paths.
 2. Drop some media into the drop folder, then preview what mintmedia would do with it before touching anything:
    ```
    mintmedia --plan
@@ -59,7 +62,7 @@ On Linux, clipboard-based magnet link detection additionally requires a Wayland 
 
 When mintmedia processes a file or folder, it:
 
-1. Finds the main media file (by extension -- `.mkv`, `.mp4`, etc.), searching recursively so season folders, whole-show dumps, and movie collections all work the same as a single file
+1. Finds the main media file by extension (`.mkv`, `.mp4`, etc.), digging into subfolders as needed -- so a season folder, a whole-show dump, or a movie collection all work just like a single file
 2. Figures out whether it's a movie or a show from the filename
 3. Parses the title, year, and season/episode information
 4. Moves everything -- main file and any subtitles -- to the right destination with a clean name
@@ -95,9 +98,7 @@ Stranger.Things.S04E07.en.srt  →  Stranger Things - S04E07.en.srt
 
 ### Library awareness
 
-For shows, mintmedia reads your existing library folder before deciding on a destination. If your Shows directory already has a `Survivor (2000)` folder, a new episode that parses as `Survivor` will be routed there -- no duplicate folders, no year guessing.
-
-mintmedia uses a few heuristics to match an incoming episode to the right existing folder. If it doesn't find a match, it creates a new folder for the show. If it's ever unsure which folder is correct, it won't guess -- it skips the file and reports it so you can sort it manually. This lets mintmedia slot into an existing library without renaming folders or creating duplicates. See [Show folder matching](docs/show-folder-matching.md) for the exact rules.
+mintmedia scans your existing library before choosing a destination. For shows, a new episode that parses as `Survivor` is routed to an existing `Survivor (2000)` folder instead of creating a duplicate -- see [Show folder matching](docs/show-folder-matching.md) for the exact rules. For movies, spelling and punctuation variants of a title already in your library (e.g. `Leon` vs. an existing `Léon (1994)` folder) are recognized as the same movie, not filed as a new one. Either way, if mintmedia is ever unsure, it won't guess -- it skips the file and reports it so you can sort it manually.
 
 ## CLI Reference
 
@@ -131,11 +132,7 @@ The config file lives at `~/.config/mintmedia/config.toml` and is created automa
 | `dest_dir_shows` | `~/Movies/Shows` (macOS), `~/Videos/Shows` (Linux) | Where processed shows go |
 | `done_notification_mode` | `per_file` | Sound after processing: `per_file`, `per_job`, or `off` |
 
-Everything else -- log levels, drop-folder settle timing, and more -- is documented inline in `config.example.toml`, which is the fully annotated reference for every setting.
-
-**A few things worth knowing:**
-- Movies and Shows destinations must be different directories -- one can't be inside the other.
-- `defer_destination_checks = true` (the default) lets the daemon start before your library destinations are mounted. Files that arrive while they're unavailable are queued and processed once they come back -- useful for NAS or Tailscale-mounted shares.
+Everything else -- log levels, drop-folder settle timing, and more -- is documented inline in `config.example.toml`, which is the fully annotated reference for every setting. See [Configuration reference](docs/configuration.md) for destination-directory constraints and NAS/mounted-filesystem timing.
 
 ## Logs
 
