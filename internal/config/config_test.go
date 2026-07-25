@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +49,7 @@ associated_file_extensions = [".srt"]
 	}
 	if res == nil {
 		t.Fatalf("expected resolved config, got nil")
+		return
 	}
 
 	if res.DropFolderAbs != drop {
@@ -1087,7 +1089,7 @@ func TestLoad_TomlSyntaxErrorPreservesParseError(t *testing.T) {
 func TestPlatformDefaultsSameKeys(t *testing.T) {
 	t.Parallel()
 
-	var darwin, linux map[string]interface{}
+	var darwin, linux map[string]any
 	if _, err := toml.Decode(string(defaultConfigDarwin), &darwin); err != nil {
 		t.Fatalf("parse defaults_darwin.toml: %v", err)
 	}
@@ -1166,14 +1168,14 @@ func TestDefaultsAgreeAcrossSources(t *testing.T) {
 	}
 }
 
-func collectTomlKeys(m map[string]interface{}, prefix string) []string {
+func collectTomlKeys(m map[string]any, prefix string) []string {
 	var keys []string
 	for k, v := range m {
 		full := k
 		if prefix != "" {
 			full = prefix + "." + k
 		}
-		if nested, ok := v.(map[string]interface{}); ok {
+		if nested, ok := v.(map[string]any); ok {
 			keys = append(keys, collectTomlKeys(nested, full)...)
 		} else {
 			keys = append(keys, full)
@@ -1183,12 +1185,7 @@ func collectTomlKeys(m map[string]interface{}, prefix string) []string {
 }
 
 func sliceContains(s []string, target string) bool {
-	for _, v := range s {
-		if v == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, target)
 }
 
 func writeConfigFile(t *testing.T, dir string, contents string) string {

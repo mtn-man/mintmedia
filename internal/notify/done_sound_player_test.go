@@ -130,7 +130,7 @@ func TestDoneSoundPlayer_PlayCount_NilWaitDoesNotBlock(t *testing.T) {
 	close(release)
 }
 
-func waitForDoneSoundCalls(t *testing.T, ch <-chan struct{}, want int, timeout time.Duration) {
+func waitForDoneSoundCalls(t *testing.T, ch <-chan struct{}, want int, timeout time.Duration) { //nolint:unparam // general-purpose test helper; today's callers happen to share a timeout
 	t.Helper()
 	deadline := time.After(timeout)
 	got := 0

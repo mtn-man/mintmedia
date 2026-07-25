@@ -1,0 +1,46 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - unconvert
+    - unparam
+    - revive
+    - prealloc
+    - misspell
+    - copyloopvar
+    - gocritic
+    - bodyclose
+    - errorlint
+    - modernize
+  exclusions:
+    rules:
+      # Permissive dir/file perms and dynamic os.ReadFile/os.Open/os.WriteFile
+      # paths in test fixtures are never a real risk -- they're always
+      # t.TempDir()-rooted, never external input. Production code needs a
+      # targeted inline nolint for the same gosec rules instead.
+      - path: '_test\.go'
+        linters:
+          - gosec
+        text: 'G301|G302|G304|G306|G703'
+      # Transferer/transferer is the correct agent-noun form and an exported
+      # interface name used throughout internal/processor and internal/transfer,
+      # not a typo of "Transferred".
+      - linters:
+          - misspell
+        text: 'Transferer|transferer'
+      # Every file in the repo starts with a "// path/to/file.go" path-echo
+      # header instead of a godoc package comment -- a deliberate repo-wide
+      # convention, not an oversight.
+      - linters:
+          - revive
+        text: 'package-comments'
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

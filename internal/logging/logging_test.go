@@ -242,7 +242,7 @@ func TestRuntimeLogger_ConcurrentHistoryWritesAreValidJSONL(t *testing.T) {
 	const n = 64
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		go func(i int) {
 			defer wg.Done()
 			l.Warn("daemon", EventDaemonWatchError, "", errors.New("boom"), Fields{"idx": i})

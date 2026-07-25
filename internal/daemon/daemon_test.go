@@ -935,7 +935,7 @@ func TestDaemon_PlayDoneCount_WiresCooldownAndDebounceState(t *testing.T) {
 		playSoundFn:       func(context.Context, string) error { soundCalls <- struct{}{}; return nil },
 	}
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		d.playDoneCount(context.Background(), 1)
 	}
 
@@ -972,9 +972,9 @@ func TestDaemon_RunWorkerCancelDuringQueue_DrainsOnlyCurrentItem(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	var waitStarts int32
+	var waitStarts atomic.Int32
 	hooks := shutdown.Hooks{
-		OnWaitStart: func(time.Duration) { atomic.AddInt32(&waitStarts, 1) },
+		OnWaitStart: func(time.Duration) { waitStarts.Add(1) },
 	}
 	policy := shutdown.Policy{Grace: 2 * time.Second, Force: 2 * time.Second}
 
@@ -1003,7 +1003,7 @@ func TestDaemon_RunWorkerCancelDuringQueue_DrainsOnlyCurrentItem(t *testing.T) {
 	if len(calls) != 1 {
 		t.Fatalf("Process called %d times (%v), want 1 -- items b/c must not be dequeued after shutdown", len(calls), calls)
 	}
-	if got := atomic.LoadInt32(&waitStarts); got != 1 {
+	if got := waitStarts.Load(); got != 1 {
 		t.Fatalf("OnWaitStart called %d times, want 1 -- shutdown must bound to one grace+force window regardless of queue depth", got)
 	}
 }
@@ -1182,7 +1182,7 @@ func waitForPath(t *testing.T, ch <-chan string, timeout time.Duration) string {
 	}
 }
 
-func waitForSoundCount(t *testing.T, ch <-chan struct{}, want int, timeout time.Duration) {
+func waitForSoundCount(t *testing.T, ch <-chan struct{}, want int, timeout time.Duration) { //nolint:unparam // general-purpose test helper; today's callers happen to share a timeout
 	t.Helper()
 	deadline := time.After(timeout)
 	got := 0
@@ -1236,7 +1236,7 @@ func expectNoPath(t *testing.T, ch <-chan string, timeout time.Duration) {
 	}
 }
 
-func waitForSignal(t *testing.T, ch <-chan struct{}, timeout time.Duration) {
+func waitForSignal(t *testing.T, ch <-chan struct{}, timeout time.Duration) { //nolint:unparam // general-purpose test helper; today's callers happen to share a timeout
 	t.Helper()
 
 	select {
@@ -1254,7 +1254,7 @@ func mkdirAll(t *testing.T, dir string) {
 	}
 }
 
-func writeFile(t *testing.T, path string, contents string) {
+func writeFile(t *testing.T, path string, contents string) { //nolint:unparam // general-purpose test helper; today's callers happen to share contents
 	t.Helper()
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)

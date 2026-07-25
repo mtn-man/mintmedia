@@ -193,7 +193,7 @@ func startWatcher(t *testing.T, root string, settle time.Duration) *DropFolderWa
 	return w
 }
 
-func waitForEvents(t *testing.T, ch <-chan string, want []string, timeout time.Duration) {
+func waitForEvents(t *testing.T, ch <-chan string, want []string, timeout time.Duration) { //nolint:unparam // general-purpose test helper; today's callers happen to share a timeout
 	t.Helper()
 
 	wantSet := make(map[string]struct{}, len(want))

@@ -116,7 +116,7 @@ func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { //nolint:gosec // library dest dirs need group+other read for the media server
 		return fmt.Errorf("create destination directory: %w", err)
 	}
 
@@ -170,7 +170,7 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 	}
 	tmp := tmpFile.Name()
 
-	in, err := os.Open(src)
+	in, err := os.Open(src) //nolint:gosec // src is always built internally from resolved config/plan paths, never external input
 	if err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmp)
@@ -292,7 +292,7 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 	}
 
 	// Set final file permissions before atomic rename.
-	_ = os.Chmod(tmp, 0o644)
+	_ = os.Chmod(tmp, 0o644) //nolint:gosec // library files need group+other read for the media server
 
 	// Atomic finalize on destination filesystem
 	if err := os.Rename(tmp, dst); err != nil {

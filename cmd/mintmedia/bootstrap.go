@@ -90,7 +90,7 @@ func offerEditConfig(configPath, nextStepsMsg string) {
 	editor := strings.TrimSpace(os.Getenv("EDITOR"))
 	if isInteractiveStdin() && editor != "" && promptYesNo(fmt.Sprintf("Open the config file in %s now?", editor), true) {
 		parts := strings.Fields(editor)
-		cmd := exec.Command(parts[0], append(parts[1:], configPath)...)
+		cmd := exec.Command(parts[0], append(parts[1:], configPath)...) //nolint:gosec // parts comes from $EDITOR, the user's own env var, not external input
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 		if err := cmd.Run(); err != nil {
 			fmt.Println(console.ColorizePrefixErr(fmt.Sprintf("WARNING  failed to launch %s: %v", editor, err)))

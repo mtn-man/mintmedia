@@ -51,7 +51,7 @@ func CheckLock(lockPath string) (LockInfo, bool, error) {
 // always nil (a missing lock file is not an error). When exists is true, err
 // is non-nil if the file could not be read or parsed.
 func readLockFile(lockPath string) (info LockInfo, exists bool, err error) {
-	b, err := os.ReadFile(lockPath)
+	b, err := os.ReadFile(lockPath) //nolint:gosec // lockPath is always built internally from resolved config, never external input
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return LockInfo{}, false, nil
@@ -134,7 +134,7 @@ func AcquireLock(lockPath string) (ReleaseFunc, error) {
 	}
 
 	// Ensure parent directory exists.
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil { //nolint:gosec // state dir stays 0o755 for consistency with the shared mkdirTracked call
 		return nil, fmt.Errorf("create lock dir: %w", err)
 	}
 
@@ -191,7 +191,7 @@ func checkStaleness(lockPath string) (pid int, alive bool, err error) {
 }
 
 func tryCreateLock(lockPath string) (ReleaseFunc, error) {
-	f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644) //nolint:gosec // lock file (PID, timestamp) isn't credential-sensitive
 	if err != nil {
 		return nil, fmt.Errorf("create lock file: %w", err)
 	}

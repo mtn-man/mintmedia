@@ -497,6 +497,7 @@ func TestApply_MultiEpisodeDir_DuplicateSiblingBlocksCleanup(t *testing.T) {
 	}
 	if dupResult == nil || appliedResult == nil {
 		t.Fatalf("expected one duplicate and one applied result, got: %+v", results)
+		return
 	}
 	if dupResult.Applied {
 		t.Fatalf("duplicate result Applied = true, want false")
@@ -774,7 +775,7 @@ type failIfCalledTransferer struct {
 	t *testing.T
 }
 
-func (f failIfCalledTransferer) Move(ctx context.Context, src, dst string) error {
+func (f failIfCalledTransferer) Move(_ context.Context, src, dst string) error {
 	f.t.Helper()
 	f.t.Fatalf("Move(%q, %q) should not have been called", src, dst)
 	return nil
