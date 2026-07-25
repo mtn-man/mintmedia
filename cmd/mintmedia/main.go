@@ -259,7 +259,7 @@ func main() {
 
 	if mode.PlanDrop {
 		if errCount := planDropFolder(ctx, proc, resolved.DropFolderAbs); errCount > 0 {
-			os.Exit(exitError)
+			os.Exit(exitError) //nolint:gocritic // the earlier defer cancel() (--stop path) always returns before reaching here
 		}
 		return
 	}

@@ -56,8 +56,8 @@ func (c *Client) rpcURL() string {
 }
 
 type rpcRequest struct {
-	Method    string      `json:"method"`
-	Arguments interface{} `json:"arguments,omitempty"`
+	Method    string `json:"method"`
+	Arguments any    `json:"arguments,omitempty"`
 }
 
 type rpcResponse struct {
@@ -67,7 +67,7 @@ type rpcResponse struct {
 
 // rpc sends a Transmission JSON-RPC call, handling the CSRF session-ID handshake.
 // On a 409 response the session ID is refreshed and the request is retried once.
-func (c *Client) rpc(ctx context.Context, method string, args interface{}) (json.RawMessage, error) {
+func (c *Client) rpc(ctx context.Context, method string, args any) (json.RawMessage, error) {
 	body, err := json.Marshal(rpcRequest{Method: method, Arguments: args})
 	if err != nil {
 		return nil, fmt.Errorf("marshal rpc request: %w", err)

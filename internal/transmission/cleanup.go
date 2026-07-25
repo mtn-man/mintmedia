@@ -36,7 +36,7 @@ func (c *Client) RemoveCompleted(ctx context.Context) (int, error) {
 }
 
 func (c *Client) listCompletedIDs(ctx context.Context) ([]int, error) {
-	args, err := c.rpc(ctx, "torrent-get", map[string]interface{}{
+	args, err := c.rpc(ctx, "torrent-get", map[string]any{
 		"fields": []string{"id", "percentDone"},
 	})
 	if err != nil {
@@ -67,7 +67,7 @@ func (c *Client) listCompletedIDs(ctx context.Context) ([]int, error) {
 }
 
 func (c *Client) removeTorrent(ctx context.Context, id int) error {
-	_, err := c.rpc(ctx, "torrent-remove", map[string]interface{}{
+	_, err := c.rpc(ctx, "torrent-remove", map[string]any{
 		"ids":               []int{id},
 		"delete-local-data": false,
 	})

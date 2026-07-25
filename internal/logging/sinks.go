@@ -61,10 +61,10 @@ func (s *HistorySink) Write(entry Entry) (retErr error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec // state dir stays 0o755 for consistency with the shared mkdirTracked call
 		return fmt.Errorf("create history dir: %w", err)
 	}
-	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec // history.jsonl isn't credential-sensitive
 	if err != nil {
 		return fmt.Errorf("open history file: %w", err)
 	}

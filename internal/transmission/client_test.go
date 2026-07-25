@@ -14,7 +14,7 @@ import (
 // session-ID handshake and dispatches each RPC call to handle.
 // handle receives the method name and raw arguments JSON; its return value is
 // marshalled as the "arguments" field in the success response.
-func newRPCServer(t *testing.T, handle func(method string, args json.RawMessage) interface{}) *httptest.Server {
+func newRPCServer(t *testing.T, handle func(method string, args json.RawMessage) any) *httptest.Server {
 	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Transmission-Session-Id") == "" {
@@ -108,7 +108,7 @@ func TestAddMagnet_SendsTorrentAddRPC(t *testing.T) {
 	var gotMethod string
 	var gotFilename string
 
-	ts := newRPCServer(t, func(method string, args json.RawMessage) interface{} {
+	ts := newRPCServer(t, func(method string, args json.RawMessage) any {
 		gotMethod = method
 		var a map[string]string
 		_ = json.Unmarshal(args, &a)

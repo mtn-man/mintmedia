@@ -63,7 +63,7 @@ func TestRemoveCompleted_NoArgumentsKeyReturnsZero(t *testing.T) {
 }
 
 func TestRemoveCompleted_RemovesOnlyCompletedIDs(t *testing.T) {
-	torrents := []map[string]interface{}{
+	torrents := []map[string]any{
 		{"id": 1, "percentDone": 1.0},
 		{"id": 2, "percentDone": 0.99},
 		{"id": 3, "percentDone": 1.0},
@@ -72,10 +72,10 @@ func TestRemoveCompleted_RemovesOnlyCompletedIDs(t *testing.T) {
 	var mu sync.Mutex
 	var removedIDs []int
 
-	ts := newRPCServer(t, func(method string, args json.RawMessage) interface{} {
+	ts := newRPCServer(t, func(method string, args json.RawMessage) any {
 		switch method {
 		case "torrent-get":
-			return map[string]interface{}{"torrents": torrents}
+			return map[string]any{"torrents": torrents}
 		case "torrent-remove":
 			var a struct {
 				IDs []int `json:"ids"`
@@ -108,13 +108,13 @@ func TestRemoveCompleted_RemovesOnlyCompletedIDs(t *testing.T) {
 }
 
 func TestRemoveCompleted_NoCompletedReturnsZero(t *testing.T) {
-	torrents := []map[string]interface{}{
+	torrents := []map[string]any{
 		{"id": 9, "percentDone": 0.72},
 	}
 
-	ts := newRPCServer(t, func(method string, _ json.RawMessage) interface{} {
+	ts := newRPCServer(t, func(method string, _ json.RawMessage) any {
 		if method == "torrent-get" {
-			return map[string]interface{}{"torrents": torrents}
+			return map[string]any{"torrents": torrents}
 		}
 		t.Errorf("unexpected method %q; torrent-remove must not be called when none are complete", method)
 		return nil

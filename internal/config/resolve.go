@@ -85,10 +85,10 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	}
 
 	// Durations
-	settle, _ := parseDurationFieldMin(&errs, "watch.drop_settle_duration", cfg.Watch.DropSettleDuration, "3s", 500*time.Millisecond)
-	poll, _ := parseDurationFieldMin(&errs, "clipboard.poll_interval", cfg.Clipboard.PollInterval, "250ms", 250*time.Millisecond)
-	shutdownGrace, _ := parseDurationFieldPositive(&errs, "system.shutdown_grace_duration", cfg.System.ShutdownGraceDuration, "10m")
-	shutdownForce, _ := parseDurationFieldPositive(&errs, "system.shutdown_force_timeout", cfg.System.ShutdownForceTimeout, "15s")
+	settle := parseDurationFieldMin(&errs, "watch.drop_settle_duration", cfg.Watch.DropSettleDuration, "3s", 500*time.Millisecond)
+	poll := parseDurationFieldMin(&errs, "clipboard.poll_interval", cfg.Clipboard.PollInterval, "250ms", 250*time.Millisecond)
+	shutdownGrace := parseDurationFieldPositive(&errs, "system.shutdown_grace_duration", cfg.System.ShutdownGraceDuration, "10m")
+	shutdownForce := parseDurationFieldPositive(&errs, "system.shutdown_force_timeout", cfg.System.ShutdownForceTimeout, "15s")
 
 	// Required base paths
 	dropAbs, err := expandPath(cfg.Paths.DropFolder)
@@ -203,7 +203,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 			if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
 				createdDirs = append(createdDirs, dir)
 			}
-			if err := os.MkdirAll(dir, 0o755); err != nil {
+			if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // library/state dirs need group+other read for the media server
 				errs = append(errs, fmt.Errorf("failed to create directory %q: %w", dir, err))
 			}
 		}
@@ -294,30 +294,28 @@ func parseDurationField(errs *[]error, field, raw, example string) (d time.Durat
 
 // parseDurationFieldMin is parseDurationField plus a minimum-value check,
 // appending a single "too small" error when the parsed duration is below min.
-func parseDurationFieldMin(errs *[]error, field, raw, example string, minVal time.Duration) (d time.Duration, ok bool) {
-	d, ok = parseDurationField(errs, field, raw, example)
+func parseDurationFieldMin(errs *[]error, field, raw, example string, minVal time.Duration) time.Duration {
+	d, ok := parseDurationField(errs, field, raw, example)
 	if !ok {
-		return d, false
+		return d
 	}
 	if d < minVal {
 		*errs = append(*errs, fmt.Errorf("%s: %s is too small (minimum %s)", field, d, minVal))
-		return d, false
 	}
-	return d, true
+	return d
 }
 
 // parseDurationFieldPositive is parseDurationField plus a must-be-positive
 // check, appending a single error when the parsed duration is <= 0.
-func parseDurationFieldPositive(errs *[]error, field, raw, example string) (d time.Duration, ok bool) {
-	d, ok = parseDurationField(errs, field, raw, example)
+func parseDurationFieldPositive(errs *[]error, field, raw, example string) time.Duration {
+	d, ok := parseDurationField(errs, field, raw, example)
 	if !ok {
-		return d, false
+		return d
 	}
 	if d <= 0 {
 		*errs = append(*errs, fmt.Errorf("%s: must be > 0 (got %s)", field, d))
-		return d, false
 	}
-	return d, true
+	return d
 }
 
 func expandPath(p string) (string, error) {

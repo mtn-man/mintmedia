@@ -82,7 +82,7 @@ func TestStartCaffeinate_StopErrorCallsOnStopWarn(t *testing.T) {
 	}
 }
 
-func TestStartCaffeinate_NilHooksDoNotPanic(t *testing.T) {
+func TestStartCaffeinate_NilHooksDoNotPanic(t *testing.T) { //nolint:revive // t unused: this test's only assertion is that it doesn't panic
 	fake := &fakeCaffeinateController{
 		startErr: errors.New("start failed"),
 		stopErr:  errors.New("stop failed"),

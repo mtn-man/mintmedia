@@ -14,7 +14,7 @@ func playSound(ctx context.Context, cmd, soundPath string) error {
 	if soundPath == "" {
 		return nil
 	}
-	if err := exec.CommandContext(ctx, cmd, soundPath).Run(); err != nil {
+	if err := exec.CommandContext(ctx, cmd, soundPath).Run(); err != nil { //nolint:gosec // cmd is a hardcoded afplay/paplay, soundPath is our own resolved config path
 		return fmt.Errorf("play sound %q: %w", soundPath, err)
 	}
 	return nil
