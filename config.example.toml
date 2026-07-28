@@ -56,6 +56,11 @@ enable_processing = true
 # Default off in the example config to avoid surprises.
 enable_torrent_automation = false
 
+# Rewrite each sorted file's embedded container metadata "title" tag to match
+# its final sorted name (fixes stale titles showing in players like IINA).
+# Requires ffmpeg on PATH. Default off -- advanced/optional.
+enable_metadata_title_tagging = false
+
 [logging]
 # Console operational log filter (DEBUG | INFO | WARN | ERROR)
 console_level = "INFO"

@@ -72,7 +72,7 @@ func newTestProcessor(t *testing.T) *processorImpl {
 		},
 	}
 
-	pr, err := New(cfg, nil, nil)
+	pr, err := New(cfg, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("New() error: %v", err)
 	}

@@ -5,13 +5,14 @@ type Event string
 
 // Canonical event identifiers logged across the daemon/CLI.
 const (
-	EventSystemStartup              Event = "system.startup"
-	EventSystemDestinationsReady    Event = "system.destinations.ready"
-	EventSystemDestinationsWaiting  Event = "system.destinations.waiting"
-	EventSystemShutdownRequested    Event = "system.shutdown.requested"
-	EventSystemShutdownGraceElapsed Event = "system.shutdown.grace.elapsed"
-	EventSystemShutdownComplete     Event = "system.shutdown.complete"
-	EventSystemShutdownTimeout      Event = "system.shutdown.timeout"
+	EventSystemStartup                   Event = "system.startup"
+	EventSystemDestinationsReady         Event = "system.destinations.ready"
+	EventSystemDestinationsWaiting       Event = "system.destinations.waiting"
+	EventSystemShutdownRequested         Event = "system.shutdown.requested"
+	EventSystemShutdownGraceElapsed      Event = "system.shutdown.grace.elapsed"
+	EventSystemShutdownComplete          Event = "system.shutdown.complete"
+	EventSystemShutdownTimeout           Event = "system.shutdown.timeout"
+	EventSystemMetadataTaggerUnavailable Event = "system.metadata.tagger.unavailable"
 
 	EventDaemonPathDuplicate    Event = "daemon.path.duplicate"
 	EventDaemonWatchError       Event = "daemon.watch.error"
@@ -44,6 +45,8 @@ const (
 	EventProcessorShowFolderQualifiedGuess       Event = "processor.show.folder.qualified.guess"
 	EventProcessorShowPossibleDuplicateFolder    Event = "processor.show.folder.duplicate.possible"
 	EventProcessorShowFileSkipUnparseable        Event = "processor.show.file.skip.unparseable"
+	EventProcessorMetadataTitleWriteApplied      Event = "processor.metadata.title.write.applied"
+	EventProcessorMetadataTitleWriteFailed       Event = "processor.metadata.title.write.failed"
 )
 
 // AllOperationalEvents returns the complete set of production event constants.
@@ -56,6 +59,7 @@ func AllOperationalEvents() []Event {
 		EventSystemShutdownGraceElapsed,
 		EventSystemShutdownComplete,
 		EventSystemShutdownTimeout,
+		EventSystemMetadataTaggerUnavailable,
 		EventDaemonPathDuplicate,
 		EventDaemonWatchError,
 		EventDaemonClipboardError,
@@ -85,6 +89,8 @@ func AllOperationalEvents() []Event {
 		EventProcessorShowFolderQualifiedGuess,
 		EventProcessorShowPossibleDuplicateFolder,
 		EventProcessorShowFileSkipUnparseable,
+		EventProcessorMetadataTitleWriteApplied,
+		EventProcessorMetadataTitleWriteFailed,
 	}
 }
 
@@ -100,6 +106,7 @@ func DefaultHistoryInfoAllowlist() []Event {
 		EventSystemDestinationsReady,
 		EventProcessorMoveMainApplied,
 		EventProcessorMoveAssociatedApplied,
+		EventProcessorMetadataTitleWriteApplied,
 		EventProcessorInputSkippedNotMedia,
 		EventProcessorInputSkippedNoMainMedia,
 		EventProcessorInputSkippedInputMissing,

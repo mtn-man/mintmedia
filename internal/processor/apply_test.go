@@ -694,6 +694,294 @@ func TestApply_RefusesToDeleteDropFolderRoot_WhenInputIsRoot(t *testing.T) {
 	}
 }
 
+// TestApply_MetadataTagger_WriteTitleCalledBeforeMove_Movie covers the
+// reordering decision: WriteTitle must run against pl.MainSourcePath (the
+// pre-move, drop-folder location) before the main-media move, not
+// pl.DestMainPath afterward -- doing it before the move keeps ffmpeg's remux
+// on local disk instead of a possibly network-mounted destination. The fake
+// tagger records whether pl.MainSourcePath still existed at call time, which
+// would be false if this ever regressed to running after the move (the
+// osRenameTransferer test double removes the source via os.Rename).
+func TestApply_MetadataTagger_WriteTitleCalledBeforeMove(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		mainName string
+	}{
+		{"Movie", "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv"},
+		{"Show", "Deadwood.S01E01.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p := newTestProcessorWithExecDeps(t)
+
+			tagger := &fakeMetaTagger{}
+			p.metaTagger = tagger
+
+			mainSrc := filepath.Join(p.cfg.DropFolder, tc.mainName)
+			writeFile(t, mainSrc, strings.Repeat("m", 64))
+
+			pl, err := planOne(t, p, mainSrc)
+			if err != nil {
+				t.Fatalf("Plan() error: %v", err)
+			}
+
+			results, err := p.Apply(context.Background(), []Plan{pl})
+			if err != nil {
+				t.Fatalf("Apply() error: %v", err)
+			}
+			if len(results) != 1 || !results[0].Applied {
+				t.Fatalf("expected 1 applied result, got %+v", results)
+			}
+
+			if len(tagger.calls) != 1 {
+				t.Fatalf("expected 1 WriteTitle call, got %d", len(tagger.calls))
+			}
+			call := tagger.calls[0]
+			if call.Path != pl.MainSourcePath {
+				t.Fatalf("WriteTitle path = %q, want pl.MainSourcePath %q", call.Path, pl.MainSourcePath)
+			}
+			if call.Title != pl.DestRadix {
+				t.Fatalf("WriteTitle title = %q, want pl.DestRadix %q", call.Title, pl.DestRadix)
+			}
+			if !call.SourceExistedYet {
+				t.Fatalf("WriteTitle ran after the main-media move -- source no longer existed at call time")
+			}
+		})
+	}
+}
+
+// TestApply_MetadataTagger_WriteTitleErrorIsNonFatal covers the non-blocking
+// contract: a WriteTitle failure must log and continue, never prevent the
+// main-media move or flip Result.Applied to false.
+func TestApply_MetadataTagger_WriteTitleErrorIsNonFatal(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+
+	tagger := &fakeMetaTagger{err: errors.New("forced ffmpeg failure for test")}
+	p.metaTagger = tagger
+
+	mainName := "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	writeFile(t, mainSrc, strings.Repeat("m", 64))
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if !results[0].Applied {
+		t.Fatalf("Applied = false, want true -- a WriteTitle failure must not block the move")
+	}
+	if len(tagger.calls) != 1 {
+		t.Fatalf("expected 1 WriteTitle call, got %d", len(tagger.calls))
+	}
+	if _, err := os.Stat(pl.DestMainPath); err != nil {
+		t.Fatalf("main media should still have been moved despite the tag failure: %v", err)
+	}
+}
+
+// TestApply_MetadataTagger_WriteTitleFailure_EmitsConsoleWarn mirrors
+// TestApply_AssociatedMoveFailure_EmitsConsoleWarn: a WriteTitle failure must
+// actually reach the console, not just get swallowed as a silent no-op.
+func TestApply_MetadataTagger_WriteTitleFailure_EmitsConsoleWarn(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	var consoleBuf strings.Builder
+	logger, err := logging.New(logging.Options{
+		Stdout:               &consoleBuf,
+		Stderr:               &consoleBuf,
+		ConsoleLevel:         "WARN",
+		HistoryLevel:         "WARN",
+		HistoryFile:          filepath.Join(root, "history.jsonl"),
+		HistoryInfoAllowlist: nil,
+	})
+	if err != nil {
+		t.Fatalf("logging.New: %v", err)
+	}
+
+	cfg := Config{
+		DropFolder:               drop,
+		MoviesDir:                movies,
+		ShowsDir:                 shows,
+		MainMediaExtensions:      []string{".mkv"},
+		AssociatedFileExtensions: []string{".srt"},
+		MediaTagBlacklist:        []string{"1080p", "x265"},
+	}
+	tagger := &fakeMetaTagger{err: errors.New("forced ffmpeg failure for test")}
+	pr, err := New(cfg, &osRenameTransferer{}, tagger, logger)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	impl := pr.(*processorImpl)
+
+	mainSrc := filepath.Join(drop, "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, mainSrc, strings.Repeat("m", 64))
+
+	pl, err := planOne(t, impl, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+
+	if _, err := impl.Apply(context.Background(), []Plan{pl}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	out := consoleBuf.String()
+	if !strings.Contains(out, "metadata title tag not updated") {
+		t.Fatalf("expected console warning about the metadata tag failure; got:\n%s", out)
+	}
+	if !strings.Contains(out, filepath.Base(pl.MainSourcePath)) {
+		t.Fatalf("expected main source filename in console warning; got:\n%s", out)
+	}
+}
+
+// TestApply_MetadataTagger_NilTaggerNeverCalled covers the feature-disabled
+// default: a nil metaTagger must never be dereferenced, and Apply must
+// proceed exactly as it did before this feature existed.
+func TestApply_MetadataTagger_NilTaggerNeverCalled(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+	// p.metaTagger is nil by default (feature disabled) -- if apply.go ever
+	// called through it unconditionally, this would panic on a nil interface.
+
+	mainName := "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	writeFile(t, mainSrc, strings.Repeat("m", 64))
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 || !results[0].Applied {
+		t.Fatalf("expected 1 applied result, got %+v", results)
+	}
+	if _, err := os.Stat(pl.DestMainPath); err != nil {
+		t.Fatalf("main media should have been moved: %v", err)
+	}
+}
+
+// TestApply_MetadataTagger_UnsupportedExtensionSkipsCall covers the
+// extension-allowlist gate: an unsupported container (.avi here) is an
+// expected, normal case that must skip WriteTitle silently, not attempt and
+// fail it.
+func TestApply_MetadataTagger_UnsupportedExtensionSkipsCall(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+
+	tagger := &fakeMetaTagger{}
+	p.metaTagger = tagger
+
+	mainName := "Get.Smart.2008.1080p.BluRay.x264-GROUP.avi"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	writeFile(t, mainSrc, strings.Repeat("m", 64))
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.MainExt != ".avi" {
+		t.Fatalf("MainExt = %q, want .avi", pl.MainExt)
+	}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 || !results[0].Applied {
+		t.Fatalf("expected 1 applied result, got %+v", results)
+	}
+	if len(tagger.calls) != 0 {
+		t.Fatalf("expected no WriteTitle calls for an unsupported extension, got %d", len(tagger.calls))
+	}
+}
+
+// TestApply_MetadataTagger_SkipsWriteTitleWhenDestinationClaimedConcurrently
+// covers the duplicate-race narrowing fix: if another job has already
+// claimed pl.DestMainPath by the time this plan reaches the tagging step
+// (the same race TestApply_DuplicateRace_DowngradesToGracefulSkip covers for
+// the Move call itself), WriteTitle must never run -- the source file is
+// about to be left in place as an untouched duplicate skip, and mutating it
+// first would contradict that.
+func TestApply_MetadataTagger_SkipsWriteTitleWhenDestinationClaimedConcurrently(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessor(t)
+
+	tagger := &fakeMetaTagger{}
+	p.metaTagger = tagger
+
+	mainName := "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	const original = "dummy"
+	writeFile(t, mainSrc, original)
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false (nothing exists yet at plan time)")
+	}
+
+	// Simulate another job winning the race between Plan and this Apply call.
+	writeFile(t, pl.DestMainPath, "claimed by another job")
+
+	// The naive osRenameTransferer used by newTestProcessorWithExecDeps
+	// doesn't check for an existing destination before renaming over it --
+	// use the real transferer so the race is actually detected, exactly
+	// like TestApply_DuplicateRace_DowngradesToGracefulSkip does.
+	p.xfer = transfer.NewRenameOrCopy(transfer.Options{})
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Applied {
+		t.Fatalf("Applied = true, want false")
+	}
+	if !strings.Contains(res.Reason, "already in library") {
+		t.Fatalf("Reason = %q, want it to mention the library conflict", res.Reason)
+	}
+
+	if len(tagger.calls) != 0 {
+		t.Fatalf("expected no WriteTitle calls when the destination is already claimed, got %d", len(tagger.calls))
+	}
+	got, err := os.ReadFile(mainSrc)
+	if err != nil {
+		t.Fatalf("read source after Apply: %v", err)
+	}
+	if string(got) != original {
+		t.Fatalf("source file was modified despite being left as a duplicate skip: got %q, want %q", got, original)
+	}
+}
+
 func TestApply_AssociatedMoveFailure_EmitsConsoleWarn(t *testing.T) {
 	t.Parallel()
 
@@ -726,7 +1014,7 @@ func TestApply_AssociatedMoveFailure_EmitsConsoleWarn(t *testing.T) {
 		AssociatedFileExtensions: []string{".srt"},
 		MediaTagBlacklist:        []string{"1080p", "x265"},
 	}
-	pr, err := New(cfg, &osRenameTransferer{}, logger)
+	pr, err := New(cfg, &osRenameTransferer{}, nil, logger)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -779,6 +1067,31 @@ func (f failIfCalledTransferer) Move(_ context.Context, src, dst string) error {
 	f.t.Helper()
 	f.t.Fatalf("Move(%q, %q) should not have been called", src, dst)
 	return nil
+}
+
+// fakeMetaTagger is the fake MetadataTagger idiom used by the metadata
+// tagging tests, mirroring the fake-Transferer types below. SourceExistedYet
+// records whether path still existed on disk at call time, which lets tests
+// verify WriteTitle ran before the main-media move without needing to
+// instrument apply.go's control flow directly.
+type fakeMetaTaggerCall struct {
+	Path, Title      string
+	SourceExistedYet bool
+}
+
+type fakeMetaTagger struct {
+	calls []fakeMetaTaggerCall
+	err   error
+}
+
+func (f *fakeMetaTagger) WriteTitle(_ context.Context, path, title string) error {
+	_, statErr := os.Stat(path)
+	f.calls = append(f.calls, fakeMetaTaggerCall{
+		Path:             path,
+		Title:            title,
+		SourceExistedYet: statErr == nil,
+	})
+	return f.err
 }
 
 type osRenameTransferer struct{}
