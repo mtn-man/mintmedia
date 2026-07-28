@@ -258,6 +258,8 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 
 		AutoCleanupCompletedTorrents: cfg.Torrent.AutoCleanupCompletedTorrents,
 
+		EnableMetadataTitleTagging: cfg.Features.EnableMetadataTitleTagging,
+
 		CreatedDirs: createdDirs,
 	}, nil
 }

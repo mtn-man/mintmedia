@@ -154,6 +154,11 @@ type Transferer interface {
 	Move(ctx context.Context, src, dst string) error
 }
 
+// MetadataTagger rewrites a media file's embedded title tag in place.
+type MetadataTagger interface {
+	WriteTitle(ctx context.Context, path, title string) error
+}
+
 // Config contains the processor-relevant configuration.
 // This is a "resolved" config: paths should be absolute and validated.
 type Config struct {

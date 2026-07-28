@@ -18,6 +18,7 @@ import (
 	"github.com/mtn-man/mintmedia/internal/console"
 	"github.com/mtn-man/mintmedia/internal/daemon"
 	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/metadata"
 	"github.com/mtn-man/mintmedia/internal/notify"
 	"github.com/mtn-man/mintmedia/internal/processor"
 	"github.com/mtn-man/mintmedia/internal/state"
@@ -342,5 +343,18 @@ func newGoProcessor(res *config.Resolved, logger logging.Logger) (processor.Proc
 		UpdateEvery: defaultReportEvery,
 	})
 
-	return processor.New(pcfg, xfer, logger)
+	var metaTagger processor.MetadataTagger
+	if res.EnableMetadataTitleTagging {
+		tagger, err := metadata.NewFFmpegTagger()
+		if err != nil {
+			logger.ConsoleWarn("main", logging.EventSystemMetadataTaggerUnavailable,
+				console.ColorizePrefixErr("WARNING  metadata title tagging is enabled but ffmpeg was not found on PATH; continuing without it"),
+				err, nil)
+			logger.HistoryWarn("main", logging.EventSystemMetadataTaggerUnavailable, err, nil)
+		} else {
+			metaTagger = tagger
+		}
+	}
+
+	return processor.New(pcfg, xfer, metaTagger, logger)
 }

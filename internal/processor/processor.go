@@ -18,17 +18,19 @@ import (
 // - This file wires config + dependencies and prepares compiled helpers (regexes, extension sets).
 // - Keep this file "boring": constructor + internal helpers only.
 
-// New constructs a Processor with the provided dependencies.
+// New constructs a Processor with the provided dependencies. metaTagger may
+// be nil, meaning metadata title tagging is disabled.
 // cfg should already contain absolute, resolved paths.
-func New(cfg Config, xfer Transferer, logger logging.Logger) (Processor, error) {
+func New(cfg Config, xfer Transferer, metaTagger MetadataTagger, logger logging.Logger) (Processor, error) {
 	if err := validateConfig(cfg); err != nil {
 		return nil, err
 	}
 
 	p := &processorImpl{
-		cfg:    cfg,
-		xfer:   xfer,
-		logger: logger,
+		cfg:        cfg,
+		xfer:       xfer,
+		metaTagger: metaTagger,
+		logger:     logger,
 	}
 
 	// Normalize extension lists for predictable comparisons.
@@ -74,9 +76,10 @@ func New(cfg Config, xfer Transferer, logger logging.Logger) (Processor, error) 
 }
 
 type processorImpl struct {
-	cfg    Config
-	xfer   Transferer
-	logger logging.Logger
+	cfg        Config
+	xfer       Transferer
+	metaTagger MetadataTagger
+	logger     logging.Logger
 
 	// Prepared helpers
 	mainExtSet  map[string]struct{}

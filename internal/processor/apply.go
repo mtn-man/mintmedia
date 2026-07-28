@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/metadata"
 	"github.com/mtn-man/mintmedia/internal/transfer"
 )
 
@@ -69,6 +70,48 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			return Result{Plan: pl}, &DestinationUnavailableError{Category: pl.Category, Err: err}
 		}
 		return Result{Plan: pl}, fmt.Errorf("create destination dir %q: %w", pl.DestDir, err)
+	}
+
+	// Best-effort: rewrite the embedded container title tag to match the
+	// final sorted name before the move, so the remux runs on the file's
+	// pre-move (drop folder) location rather than a possibly network-mounted
+	// destination. WriteTitle's own temp-file-then-atomic-rename contract
+	// guarantees pl.MainSourcePath is either fully replaced or left
+	// completely untouched on its own failure, but that alone doesn't cover
+	// the case below: another job/batch item claiming pl.DestMainPath after
+	// Plan's own duplicate check ran. The recheck just below closes that
+	// pre-existing, unbounded (Plan-to-here) race window down to a single
+	// stat call; a race is still possible for the duration of the remux
+	// itself (a concurrent job could still claim the destination while
+	// ffmpeg is running), the same residual exposure Move's own
+	// stat-then-rename already carries and that IsDestinationExists below
+	// already exists to handle.
+	//
+	// The extension gate deliberately lives here rather than inside
+	// WriteTitle: keeping it a plain skip (not a call) lets this block avoid
+	// logging a spurious "applied" history event for formats WriteTitle
+	// never touches, without needing a second sentinel-error return path.
+	if p.metaTagger != nil && metadata.SupportsExtension(pl.MainExt) {
+		// Only an existing destination should suppress tagging; any other
+		// stat outcome (including the ordinary "doesn't exist yet" case)
+		// falls through to a normal tag attempt -- a tagging-only concern
+		// shouldn't block the move, and Move's own destination checks are
+		// what surface anything that actually matters. If the destination
+		// is already claimed, leave the source untouched here and let the
+		// Move call below report the now-familiar duplicate-race downgrade.
+		if _, statErr := os.Stat(pl.DestMainPath); statErr != nil {
+			if err := p.metaTagger.WriteTitle(ctx, pl.MainSourcePath, pl.DestRadix); err != nil {
+				logConsoleWarn(p, logging.EventProcessorMetadataTitleWriteFailed,
+					fmt.Sprintf("WARNING  metadata title tag not updated for %s", filepath.Base(pl.MainSourcePath)),
+					err, logging.Fields{"path": pl.MainSourcePath, "title": pl.DestRadix})
+				logWarnHistoryOnly(p, logging.EventProcessorMetadataTitleWriteFailed, err,
+					logging.Fields{"path": pl.MainSourcePath, "title": pl.DestRadix})
+			} else {
+				logInfoHistoryOnly(p, logging.EventProcessorMetadataTitleWriteApplied, logging.Fields{
+					"path": pl.MainSourcePath, "title": pl.DestRadix,
+				})
+			}
+		}
 	}
 
 	// Move main media first

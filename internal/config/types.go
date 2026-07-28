@@ -30,8 +30,9 @@ type Destinations struct {
 
 // Features toggles optional subsystems.
 type Features struct {
-	EnableTorrentAutomation bool `toml:"enable_torrent_automation"`
-	EnableProcessing        bool `toml:"enable_processing"`
+	EnableTorrentAutomation    bool `toml:"enable_torrent_automation"`
+	EnableProcessing           bool `toml:"enable_processing"`
+	EnableMetadataTitleTagging bool `toml:"enable_metadata_title_tagging"`
 }
 
 // Logging configures the console/history logging sinks.
@@ -129,4 +130,6 @@ type Resolved struct {
 	CreatedDirs []string
 
 	AutoCleanupCompletedTorrents bool
+
+	EnableMetadataTitleTagging bool
 }
