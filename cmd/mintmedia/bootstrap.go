@@ -127,8 +127,16 @@ func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
 		fmt.Printf("  Main extensions:    %d\n", len(resolved.MainMediaExtensions))
 		fmt.Printf("  Assoc extensions:   %d\n", len(resolved.AssociatedFileExtensions))
 		fmt.Printf("  Custom blacklist patterns: %d\n", len(cfg.Naming.MediaTagBlacklist))
+		fmt.Printf("  Metadata title tagging:    %s\n", enabledDisabled(resolved.EnableMetadataTitleTagging))
 	} else {
 		fmt.Println("Processing: disabled")
 	}
 	fmt.Println()
+}
+
+func enabledDisabled(v bool) string {
+	if v {
+		return "enabled"
+	}
+	return "disabled"
 }
