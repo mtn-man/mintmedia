@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/magnet"
 	"github.com/mtn-man/mintmedia/internal/notify"
+	"github.com/mtn-man/mintmedia/internal/paths"
 	"github.com/mtn-man/mintmedia/internal/processor"
 	"github.com/mtn-man/mintmedia/internal/resultformat"
 	"github.com/mtn-man/mintmedia/internal/shutdown"
@@ -104,7 +104,7 @@ type Daemon struct {
 	// goroutine, read by the main loop goroutine.
 	deferredRetry chan retryItem
 
-	// internal test seam; defaults to dirWritable when nil.
+	// internal test seam; defaults to paths.DirWritable when nil.
 	dirWritableFn func(string) bool
 
 	// internal test seam; defaults to notify.PlaySound when nil.
@@ -200,7 +200,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	d.destDegraded = make(map[processor.Category]struct{})
 	d.destMu.Unlock()
 	if d.dirWritableFn == nil {
-		d.dirWritableFn = dirWritable
+		d.dirWritableFn = paths.DirWritable
 	}
 	d.deferredRetry = make(chan retryItem, 128)
 
@@ -545,25 +545,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 	// hit ENOSPC. This only pays for a Plan() call while something is
 	// actually degraded; the common (healthy) case is a single map-length check.
 	if d.anyDestDegraded() {
-		plans, planErr := d.Proc.Plan(ctx, processor.Request{InputPath: pth})
-		// A category can be learned two ways here: plans came back non-empty
-		// (a clean success, or a *processor.PartialPlanError where some
-		// siblings in a directory hit a skippable parse error but others
-		// planned fine -- plans[0]'s category is authoritative either way),
-		// or planning itself failed outright because it needed to read the
-		// degraded destination (e.g. resolveShowFolder listing ShowsDir to
-		// match an existing show folder) -- that failure is itself a
-		// *processor.DestinationUnavailableError, which already names the
-		// category, so no plan is needed to identify it.
-		var cat processor.Category
-		var known bool
-		var planDestErr *processor.DestinationUnavailableError
-		switch {
-		case len(plans) > 0:
-			cat, known = plans[0].Category, true
-		case errors.As(planErr, &planDestErr):
-			cat, known = planDestErr.Category, true
-		}
+		cat, known := processor.CategoryForPath(ctx, d.Proc, pth)
 		if known && d.isDestDegraded(cat) {
 			d.logConsoleInfo(
 				logging.EventDaemonDestinationDeferred,
@@ -855,22 +837,7 @@ func (d *Daemon) destinationsReady() bool {
 	if strings.TrimSpace(d.MoviesDir) == "" || strings.TrimSpace(d.ShowsDir) == "" {
 		return false
 	}
-	return dirWritable(d.MoviesDir) && dirWritable(d.ShowsDir)
-}
-
-func dirWritable(dir string) bool {
-	st, err := os.Stat(dir)
-	if err != nil || !st.IsDir() {
-		return false
-	}
-	f, err := os.CreateTemp(dir, ".mintmedia-writetest-*")
-	if err != nil {
-		return false
-	}
-	name := f.Name()
-	_ = f.Close()
-	_ = os.Remove(name)
-	return true
+	return paths.DirWritable(d.MoviesDir) && paths.DirWritable(d.ShowsDir)
 }
 
 // --- Magnet formatting helpers ---------------------------------------------

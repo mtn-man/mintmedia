@@ -479,6 +479,12 @@ type processDropStubProcessor struct {
 	mu        sync.Mutex
 	calls     []string
 	processFn func(context.Context, processor.Request) error
+
+	// planFn, when non-nil, overrides Plan()'s hardcoded response -- needed
+	// to exercise processor.CategoryForPath's fast path (see
+	// internal/daemon/daemon_test.go's stubProcessor.planCategory for the
+	// equivalent seam on the daemon side).
+	planFn func(context.Context, processor.Request) ([]processor.Plan, error)
 }
 
 type fakeProcessDropCaffeinate struct {
@@ -525,7 +531,10 @@ func (f *fakeProcessDropCaffeinate) stopCallsCount() int {
 	return f.stopCalls
 }
 
-func (s *processDropStubProcessor) Plan(_ context.Context, req processor.Request) ([]processor.Plan, error) {
+func (s *processDropStubProcessor) Plan(ctx context.Context, req processor.Request) ([]processor.Plan, error) {
+	if s.planFn != nil {
+		return s.planFn(ctx, req)
+	}
 	return []processor.Plan{{InputPath: req.InputPath, MainSourcePath: req.InputPath}}, nil
 }
 

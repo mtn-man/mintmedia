@@ -88,6 +88,46 @@ func TestDirDepthFromRoot(t *testing.T) {
 	}
 }
 
+func TestDirWritable_MissingDir(t *testing.T) {
+	root := t.TempDir()
+	if DirWritable(filepath.Join(root, "does-not-exist")) {
+		t.Fatalf("DirWritable(missing) = true, want false")
+	}
+}
+
+func TestDirWritable_NotADir(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "plain-file")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if DirWritable(file) {
+		t.Fatalf("DirWritable(plain file) = true, want false")
+	}
+}
+
+func TestDirWritable_WritableDir(t *testing.T) {
+	root := t.TempDir()
+	if !DirWritable(root) {
+		t.Fatalf("DirWritable(%q) = false, want true", root)
+	}
+}
+
+func TestDirWritable_ReadOnlyDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permission bits")
+	}
+	root := t.TempDir()
+	roDir := filepath.Join(root, "readonly")
+	if err := os.Mkdir(roDir, 0o555); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(roDir, 0o755) })
+	if DirWritable(roDir) {
+		t.Fatalf("DirWritable(read-only dir) = true, want false")
+	}
+}
+
 func TestWithinMaxDepth(t *testing.T) {
 	tests := []struct {
 		name     string

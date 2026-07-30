@@ -107,7 +107,26 @@ func PrintProcessDropSortError(path string, err error) {
 // PrintProcessDropDestinationError writes a process-drop destination unavailable error to stderr.
 func PrintProcessDropDestinationError(dir string) {
 	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(
-		fmt.Sprintf("ERROR    destination unavailable: %s (directory missing or not yet mounted)", dir)))
+		fmt.Sprintf("ERROR    destination unavailable: %s (missing, not yet mounted, or not writable)", dir)))
+}
+
+// PrintProcessDropDestinationDegraded writes the one-time notice printed the
+// first time a destination category is detected degraded mid-run. Unlike the
+// daemon, --process-drop has no in-run retry/recovery loop, so remaining
+// candidates in cat are skipped for the rest of this invocation rather than
+// deferred for later retry.
+func PrintProcessDropDestinationDegraded(cat processor.Category, dir string, cause error, dur time.Duration) {
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf(
+		"ERROR    %s destination unavailable (%v); skipping remaining %s items for the rest of this run: %s%s",
+		cat, cause, cat, dir, resultformat.DurationSuffix(dur))))
+}
+
+// PrintProcessDropDestinationDegradedSkip writes a per-item line for a
+// candidate skipped without attempting a move because its destination
+// category was already known degraded earlier in this run.
+func PrintProcessDropDestinationDegradedSkip(path string, cat processor.Category) {
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf(
+		"ERROR    %s -- %s destination still unavailable, skipping", resultformat.CleanName(path), cat)))
 }
 
 // PrintProcessDropItemError writes a process-drop item error to stderr.
@@ -135,7 +154,12 @@ type ProcessDropSummary struct {
 	Applied int
 	Skipped int
 	Errors  int
-	Elapsed time.Duration
+	// DestDegraded is a subset of Errors: how many of them were caused by a
+	// destination category going degraded mid-run (the triggering item plus
+	// every subsequent item skipped for the same category), rather than an
+	// unrelated per-item failure.
+	DestDegraded int
+	Elapsed      time.Duration
 }
 
 // PrintProcessDropSummary writes process-drop completion summary.
@@ -163,10 +187,14 @@ func processDropSummaryLine(s ProcessDropSummary) string {
 		parts = append(parts, fmt.Sprintf("%d skipped", s.Skipped))
 	}
 	if s.Errors > 0 {
-		parts = append(parts, fmt.Sprintf("%d %s", s.Errors, resultformat.Pluralize(s.Errors, "error", "errors")))
+		part := fmt.Sprintf("%d %s", s.Errors, resultformat.Pluralize(s.Errors, "error", "errors"))
+		if s.DestDegraded > 0 {
+			part += fmt.Sprintf(" (%d destination unavailable)", s.DestDegraded)
+		}
+		parts = append(parts, part)
 	}
 
-	// Unlike the per-file duration suffix (resultformat.durationSuffix), the
+	// Unlike the per-file duration suffix (resultformat.DurationSuffix), the
 	// batch summary always shows an elapsed time, even sub-second -- a run
 	// that sorted 76 files in 400ms is worth reporting as fast, not silent.
 	// Precision scales with magnitude so the number stays meaningful instead

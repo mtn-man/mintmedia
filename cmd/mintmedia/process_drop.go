@@ -11,6 +11,7 @@ import (
 	"github.com/mtn-man/mintmedia/internal/console"
 	"github.com/mtn-man/mintmedia/internal/jobrunner"
 	"github.com/mtn-man/mintmedia/internal/notify"
+	"github.com/mtn-man/mintmedia/internal/paths"
 	"github.com/mtn-man/mintmedia/internal/processor"
 	"github.com/mtn-man/mintmedia/internal/resultformat"
 	"github.com/mtn-man/mintmedia/internal/shutdown"
@@ -20,6 +21,41 @@ type ProcessDropOutcome struct {
 	ErrorCount  int
 	Interrupted bool
 	TimedOut    bool
+}
+
+// destDegradedSet tracks destination categories (Movies/Shows) that have
+// gone bad during this one-shot run. Unlike daemon.Daemon's degraded-state
+// tracking, this needs no mutex: processDropFolder's candidate loop is
+// single-threaded and sequential, with no concurrent worker goroutine to
+// race against.
+type destDegradedSet map[processor.Category]struct{}
+
+// mark records cat as degraded, returning true only on the first
+// healthy->degraded transition, so callers can print the one-time notice
+// exactly once instead of on every subsequent occurrence.
+func (s destDegradedSet) mark(cat processor.Category) bool {
+	if _, ok := s[cat]; ok {
+		return false
+	}
+	s[cat] = struct{}{}
+	return true
+}
+
+func (s destDegradedSet) isDegraded(cat processor.Category) bool {
+	_, ok := s[cat]
+	return ok
+}
+
+func (s destDegradedSet) any() bool {
+	return len(s) > 0
+}
+
+// destDirFor maps a processor.Category to its configured destination directory.
+func destDirFor(cat processor.Category, moviesDir, showsDir string) string {
+	if cat == processor.CategoryShow {
+		return showsDir
+	}
+	return moviesDir
 }
 
 var playDoneSound = notify.PlaySound
@@ -89,14 +125,14 @@ func processDropFolder(
 	PrintProcessDropCandidates(fileCount)
 
 	for _, dir := range []string{moviesDir, showsDir} {
-		st, err := os.Stat(dir)
-		if err != nil || !st.IsDir() {
+		if !paths.DirWritable(dir) {
 			PrintProcessDropDestinationError(dir)
 			return ProcessDropOutcome{ErrorCount: 1}
 		}
 	}
 
 	summary := ProcessDropSummary{}
+	degraded := make(destDegradedSet)
 
 	interrupted := false
 	timedOut := false
@@ -144,6 +180,30 @@ func processDropFolder(
 			break
 		}
 
+		// Fast path: if a destination category is already known degraded,
+		// learn this item's category via a speculative Plan() and skip it
+		// outright rather than attempting a move that can only fail the same
+		// way -- a known-full disk still costs a real write if attempted,
+		// since RenameOrCopy's cross-device fallback copies the whole file
+		// into a temp file on the destination before Sync/Rename would hit
+		// ENOSPC. This only pays for the extra Plan() call once something is
+		// actually degraded; the common (healthy) case is a single
+		// map-length check.
+		if degraded.any() {
+			if cat, known := processor.CategoryForPath(ctx, proc, path); known && degraded.isDegraded(cat) {
+				errCount++
+				summary.DestDegraded++
+				PrintProcessDropDestinationDegradedSkip(path, cat)
+				if ctx.Err() != nil && !interrupted {
+					interrupted = true
+				}
+				if interrupted {
+					break
+				}
+				continue
+			}
+		}
+
 		planner := notify.NewDoneSoundPlanner(doneNotificationMode)
 		itemStart := time.Now()
 		recordResult := func(r processor.Result) {
@@ -174,7 +234,19 @@ func processDropFolder(
 			break
 		}
 
-		if runErr != nil {
+		var destErr *processor.DestinationUnavailableError
+		switch {
+		case errors.As(runErr, &destErr) && degraded.mark(destErr.Category):
+			// First occurrence for this category: recordResult above already
+			// reported this item's own Result correctly (including the
+			// Applied:true partial-move cases where the main file moved but
+			// an associated file's move triggered this error) -- there is
+			// nothing to roll back here. This only adds the one-time notice
+			// and marks the category degraded for the rest of this run.
+			errCount++
+			summary.DestDegraded++
+			PrintProcessDropDestinationDegraded(destErr.Category, destDirFor(destErr.Category, moviesDir, showsDir), destErr.Err, time.Since(itemStart).Round(time.Second))
+		case runErr != nil:
 			PrintProcessDropItemError(path, runErr, time.Since(itemStart).Round(time.Second))
 			errCount++
 		}
