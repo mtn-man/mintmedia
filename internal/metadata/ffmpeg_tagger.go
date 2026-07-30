@@ -2,7 +2,6 @@
 package metadata
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,6 +9,32 @@ import (
 	"path/filepath"
 	"strings"
 )
+
+// maxCapturedStderr bounds how much of ffmpeg's stderr tailWriter retains.
+// ffmpeg's stderr is normally just a rolling progress line, but scene-release
+// files with malformed timestamps can make it repeat a per-packet warning
+// hundreds of thousands of times during a stream-copy remux -- capturing that
+// unbounded would let a single problem file balloon process memory. Only the
+// tail is useful for the error message anyway.
+const maxCapturedStderr = 64 * 1024
+
+// tailWriter retains only the last max bytes written to it.
+type tailWriter struct {
+	max int
+	buf []byte
+}
+
+func (w *tailWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	if len(w.buf) > w.max {
+		w.buf = w.buf[len(w.buf)-w.max:]
+	}
+	return len(p), nil
+}
+
+func (w *tailWriter) String() string {
+	return string(w.buf)
+}
 
 // FFmpegTagger rewrites a media file's embedded container "title" metadata
 // tag by shelling out to ffmpeg. It remuxes (stream copy, no re-encode) into
@@ -82,8 +107,8 @@ func (t *FFmpegTagger) WriteTitle(ctx context.Context, path, title string) error
 	// path and title are always derived internally from a resolved Plan
 	// (DestMainPath's pre-move source, DestRadix), never external input.
 	cmd := exec.CommandContext(ctx, t.ffmpegPath, args...) //nolint:gosec // path/title come from an internally-computed Plan, not external input
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	stderr := &tailWriter{max: maxCapturedStderr}
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("ffmpeg: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}

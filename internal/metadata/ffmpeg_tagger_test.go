@@ -75,6 +75,64 @@ func leftoverTempFiles(t *testing.T, dir string) []string {
 	return tmp
 }
 
+// TestTailWriter_CapsRetainedBytesToTail guards against the unbounded
+// stderr-capture memory blowup this type replaced: a subprocess that repeats
+// a warning across an entire file (e.g. ffmpeg re-emitting a per-packet
+// non-monotonic-DTS warning on a scene-release rip with malformed
+// timestamps) must not grow the buffer past max, and what's retained must be
+// the most recent bytes, not the first ones -- the tail is what's useful in
+// an error message.
+func TestTailWriter_CapsRetainedBytesToTail(t *testing.T) {
+	w := &tailWriter{max: 16}
+	for _, chunk := range []string{"0123456789", "abcdefghij", "ZZZZZ"} {
+		if _, err := w.Write([]byte(chunk)); err != nil {
+			t.Fatalf("Write(%q): %v", chunk, err)
+		}
+	}
+	if got := w.String(); got != "9abcdefghijZZZZZ" || len(got) != 16 {
+		t.Fatalf("String() = %q, want the last 16 bytes written across all chunks", got)
+	}
+	if len(w.buf) > w.max {
+		t.Fatalf("buf grew to %d bytes, want capped at max=%d", len(w.buf), w.max)
+	}
+}
+
+// TestFFmpegTagger_WriteTitle_BoundsCapturedStderrOnFailure guards against
+// the memory-usage bug this fix addresses directly: a chatty failing ffmpeg
+// must not make WriteTitle's returned error balloon with the subprocess's
+// entire stderr output.
+func TestFFmpegTagger_WriteTitle_BoundsCapturedStderrOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "Get Smart (2008).mkv")
+	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
+		t.Fatalf("seed original file: %v", err)
+	}
+
+	script := "#!/bin/sh\n" +
+		"i=0\n" +
+		"while [ $i -lt 20000 ]; do\n" +
+		"  echo 'repeated warning: non-monotonic DTS' >&2\n" +
+		"  i=$((i + 1))\n" +
+		"done\n" +
+		"exit 1\n"
+	scriptPath := filepath.Join(dir, "chatty-fake-ffmpeg.sh")
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil { //nolint:gosec // test fixture script, not a real credential/secret
+		t.Fatalf("write fake ffmpeg script: %v", err)
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("fake ffmpeg stand-in is a POSIX shell script; not supported on windows")
+	}
+
+	tagger := &FFmpegTagger{ffmpegPath: scriptPath}
+	err := tagger.WriteTitle(context.Background(), path, "Get Smart (2008)")
+	if err == nil {
+		t.Fatalf("expected WriteTitle to return an error")
+	}
+	if got := len(err.Error()); got > maxCapturedStderr+1024 {
+		t.Fatalf("error message is %d bytes, want bounded near maxCapturedStderr=%d", got, maxCapturedStderr)
+	}
+}
+
 func TestFFmpegTagger_WriteTitle_SuccessRenamesOverOriginal(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "Get Smart (2008).mkv")
