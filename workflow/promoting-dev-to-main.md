@@ -44,4 +44,7 @@ release -- wait until there's a real user-facing change (a feature or a
 visible fix), not just internal refactors or chores, unless there's an
 explicit forcing reason. See `./scripts/release.sh` for the release process
 itself, which is run from `main` with a clean tree and green CI on the tip
-commit.
+commit. It must be run from a macOS host -- it cross-compiles darwin
+binaries with `CGO_ENABLED=1` for the cgo-based clipboard code
+(`internal/clipboard/pasteboard_darwin.go`), which requires the real macOS
+toolchain and fails under cross-compilation from Linux.
