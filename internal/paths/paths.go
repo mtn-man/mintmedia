@@ -83,3 +83,25 @@ func SameDevice(src, dst string) (bool, error) {
 
 	return srcStat.Dev == dstStat.Dev, nil
 }
+
+// DirWritable reports whether dir exists, is a directory, and currently
+// accepts writes. It performs a real create-then-remove probe rather than
+// just checking permission bits, since permission bits alone don't catch
+// every real operational failure (a full disk, a read-only network mount, a
+// quota limit) -- this makes DirWritable more expensive than os.Stat, so
+// callers should only invoke it where that cost is warranted (upfront
+// per-run checks, periodic recovery polling), not per-candidate.
+func DirWritable(dir string) bool {
+	st, err := os.Stat(dir)
+	if err != nil || !st.IsDir() {
+		return false
+	}
+	f, err := os.CreateTemp(dir, ".mintmedia-writetest-*")
+	if err != nil {
+		return false
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return true
+}
