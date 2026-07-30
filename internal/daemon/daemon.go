@@ -93,11 +93,8 @@ type Daemon struct {
 
 	// internal: tracks which destination categories (Movies/Shows) are
 	// currently refusing writes (disk full, over quota, permission denied).
-	// Presence as a key means degraded; absent means healthy. The triggering
-	// error is logged at the point of detection, not stored here, since
-	// nothing needs to read it back later. Guarded by destMu.
-	destMu       sync.Mutex
-	destDegraded map[processor.Category]struct{}
+	// See processor.DestDegradedTracker for the concurrency-safe state this wraps.
+	destDegraded processor.DestDegradedTracker
 
 	// internal: hands a path back to Run's main loop for deferred retry once
 	// its destination becomes writable again. Written by the runWorker
@@ -196,9 +193,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	d.inFlight = make(map[string]struct{})
 	d.inFlightMu.Unlock()
 
-	d.destMu.Lock()
-	d.destDegraded = make(map[processor.Category]struct{})
-	d.destMu.Unlock()
+	d.destDegraded.Reset()
 	if d.dirWritableFn == nil {
 		d.dirWritableFn = paths.DirWritable
 	}
@@ -748,64 +743,35 @@ func (d *Daemon) clearInFlight(path string) {
 // healthy->degraded transition), so callers can log the loud warning exactly
 // once instead of on every subsequent failure.
 func (d *Daemon) markDestDegraded(cat processor.Category) bool {
-	d.destMu.Lock()
-	defer d.destMu.Unlock()
-	if d.destDegraded == nil {
-		d.destDegraded = make(map[processor.Category]struct{})
-	}
-	if _, already := d.destDegraded[cat]; already {
-		return false
-	}
-	d.destDegraded[cat] = struct{}{}
-	return true
+	return d.destDegraded.Mark(cat)
 }
 
 // clearDestDegraded marks cat healthy again. It returns true only when cat
 // was actually degraded (a degraded->healthy transition).
 func (d *Daemon) clearDestDegraded(cat processor.Category) bool {
-	d.destMu.Lock()
-	defer d.destMu.Unlock()
-	if _, ok := d.destDegraded[cat]; !ok {
-		return false
-	}
-	delete(d.destDegraded, cat)
-	return true
+	return d.destDegraded.Clear(cat)
 }
 
 // isDestDegraded reports whether cat's destination is currently degraded.
 func (d *Daemon) isDestDegraded(cat processor.Category) bool {
-	d.destMu.Lock()
-	defer d.destMu.Unlock()
-	_, ok := d.destDegraded[cat]
-	return ok
+	return d.destDegraded.IsDegraded(cat)
 }
 
 // anyDestDegraded reports whether any destination category is currently
 // degraded, so callers can skip the cost of planning a category just to
 // check in the common (healthy) case.
 func (d *Daemon) anyDestDegraded() bool {
-	d.destMu.Lock()
-	defer d.destMu.Unlock()
-	return len(d.destDegraded) > 0
+	return d.destDegraded.Any()
 }
 
 // degradedCategories returns the categories currently marked degraded.
 func (d *Daemon) degradedCategories() []processor.Category {
-	d.destMu.Lock()
-	defer d.destMu.Unlock()
-	cats := make([]processor.Category, 0, len(d.destDegraded))
-	for cat := range d.destDegraded {
-		cats = append(cats, cat)
-	}
-	return cats
+	return d.destDegraded.Degraded()
 }
 
 // dirFor maps a processor.Category to its configured destination directory.
 func (d *Daemon) dirFor(cat processor.Category) string {
-	if cat == processor.CategoryShow {
-		return d.ShowsDir
-	}
-	return d.MoviesDir
+	return processor.DirFor(cat, d.MoviesDir, d.ShowsDir)
 }
 
 func (d *Daemon) inFlightKey(path string) string {

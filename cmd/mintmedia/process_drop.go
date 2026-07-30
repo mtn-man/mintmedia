@@ -23,41 +23,6 @@ type ProcessDropOutcome struct {
 	TimedOut    bool
 }
 
-// destDegradedSet tracks destination categories (Movies/Shows) that have
-// gone bad during this one-shot run. Unlike daemon.Daemon's degraded-state
-// tracking, this needs no mutex: processDropFolder's candidate loop is
-// single-threaded and sequential, with no concurrent worker goroutine to
-// race against.
-type destDegradedSet map[processor.Category]struct{}
-
-// mark records cat as degraded, returning true only on the first
-// healthy->degraded transition, so callers can print the one-time notice
-// exactly once instead of on every subsequent occurrence.
-func (s destDegradedSet) mark(cat processor.Category) bool {
-	if _, ok := s[cat]; ok {
-		return false
-	}
-	s[cat] = struct{}{}
-	return true
-}
-
-func (s destDegradedSet) isDegraded(cat processor.Category) bool {
-	_, ok := s[cat]
-	return ok
-}
-
-func (s destDegradedSet) any() bool {
-	return len(s) > 0
-}
-
-// destDirFor maps a processor.Category to its configured destination directory.
-func destDirFor(cat processor.Category, moviesDir, showsDir string) string {
-	if cat == processor.CategoryShow {
-		return showsDir
-	}
-	return moviesDir
-}
-
 var playDoneSound = notify.PlaySound
 var newProcessDropCaffeinate = func() notify.CaffeinateController {
 	return notify.NewCaffeinate()
@@ -132,7 +97,7 @@ func processDropFolder(
 	}
 
 	summary := ProcessDropSummary{}
-	degraded := make(destDegradedSet)
+	var degraded processor.DestDegradedTracker
 
 	interrupted := false
 	timedOut := false
@@ -189,8 +154,8 @@ func processDropFolder(
 		// ENOSPC. This only pays for the extra Plan() call once something is
 		// actually degraded; the common (healthy) case is a single
 		// map-length check.
-		if degraded.any() {
-			if cat, known := processor.CategoryForPath(ctx, proc, path); known && degraded.isDegraded(cat) {
+		if degraded.Any() {
+			if cat, known := processor.CategoryForPath(ctx, proc, path); known && degraded.IsDegraded(cat) {
 				errCount++
 				summary.DestDegraded++
 				PrintProcessDropDestinationDegradedSkip(path, cat)
@@ -236,7 +201,7 @@ func processDropFolder(
 
 		var destErr *processor.DestinationUnavailableError
 		switch {
-		case errors.As(runErr, &destErr) && degraded.mark(destErr.Category):
+		case errors.As(runErr, &destErr) && degraded.Mark(destErr.Category):
 			// First occurrence for this category: recordResult above already
 			// reported this item's own Result correctly (including the
 			// Applied:true partial-move cases where the main file moved but
@@ -245,7 +210,7 @@ func processDropFolder(
 			// and marks the category degraded for the rest of this run.
 			errCount++
 			summary.DestDegraded++
-			PrintProcessDropDestinationDegraded(destErr.Category, destDirFor(destErr.Category, moviesDir, showsDir), destErr.Err, time.Since(itemStart).Round(time.Second))
+			PrintProcessDropDestinationDegraded(destErr.Category, processor.DirFor(destErr.Category, moviesDir, showsDir), destErr.Err, time.Since(itemStart).Round(time.Second))
 		case runErr != nil:
 			PrintProcessDropItemError(path, runErr, time.Since(itemStart).Round(time.Second))
 			errCount++
