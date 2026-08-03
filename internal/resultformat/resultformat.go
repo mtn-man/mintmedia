@@ -86,3 +86,19 @@ func ShutdownGraceElapsedMessage(noun string, force time.Duration) string {
 func ErrorLine(path string, err error, dur time.Duration) string {
 	return fmt.Sprintf("ERROR    %s -- %v%s", path, err, DurationSuffix(dur))
 }
+
+// DestinationDegradedLine renders the one-time ERROR line printed when a
+// destination category (Movies/Shows) is found unavailable mid-run, shared
+// by the CLI (--process-drop) and the daemon. actionClause names what
+// happens to cat's remaining items and must contain exactly one %s for cat
+// -- e.g. "skipping remaining %s items for the rest of this run" for the
+// CLI's one-shot run, "pausing new %s items until it recovers" for the
+// daemon's deferred-retry loop. The two are deliberately worded
+// differently since their actual behavior differs; only the shared
+// scaffolding around that clause is unified here. dur is omitted from the
+// line when it's under a second (pass 0 for callers with no meaningful
+// duration to show), matching ErrorLine/CompactLine.
+func DestinationDegradedLine(cat processor.Category, cause error, actionClause, dir string, dur time.Duration) string {
+	return fmt.Sprintf("ERROR    %s destination unavailable (%v); %s: %s%s",
+		cat, cause, fmt.Sprintf(actionClause, cat), dir, DurationSuffix(dur))
+}
