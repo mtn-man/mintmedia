@@ -1,6 +1,7 @@
 package resultformat
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -140,6 +141,57 @@ func TestCompactLine(t *testing.T) {
 				if !strings.Contains(got, s) {
 					t.Fatalf("CompactLine() = %q, want to contain %q", got, s)
 				}
+			}
+		})
+	}
+}
+
+func TestDestinationDegradedLine(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		cat          processor.Category
+		cause        error
+		actionClause string
+		dir          string
+		dur          time.Duration
+		want         string
+	}{
+		{
+			name:         "process-drop one-shot skip, no duration",
+			cat:          processor.CategoryMovie,
+			cause:        errors.New("no space left on device"),
+			actionClause: "skipping remaining %s items for the rest of this run",
+			dir:          "/movies",
+			dur:          0,
+			want:         "ERROR    Movies destination unavailable (no space left on device); skipping remaining Movies items for the rest of this run: /movies",
+		},
+		{
+			name:         "daemon deferred retry, no duration",
+			cat:          processor.CategoryShow,
+			cause:        errors.New("permission denied"),
+			actionClause: "pausing new %s items until it recovers",
+			dir:          "/shows",
+			dur:          0,
+			want:         "ERROR    Shows destination unavailable (permission denied); pausing new Shows items until it recovers: /shows",
+		},
+		{
+			name:         "multi-second duration has suffix",
+			cat:          processor.CategoryMovie,
+			cause:        errors.New("no space left on device"),
+			actionClause: "skipping remaining %s items for the rest of this run",
+			dir:          "/movies",
+			dur:          3 * time.Second,
+			want:         "ERROR    Movies destination unavailable (no space left on device); skipping remaining Movies items for the rest of this run: /movies  (3s)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := DestinationDegradedLine(tt.cat, tt.cause, tt.actionClause, tt.dir, tt.dur); got != tt.want {
+				t.Fatalf("DestinationDegradedLine() = %q, want %q", got, tt.want)
 			}
 		})
 	}

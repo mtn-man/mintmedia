@@ -116,17 +116,16 @@ func PrintProcessDropDestinationError(dir string) {
 // candidates in cat are skipped for the rest of this invocation rather than
 // deferred for later retry.
 func PrintProcessDropDestinationDegraded(cat processor.Category, dir string, cause error, dur time.Duration) {
-	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf(
-		"ERROR    %s destination unavailable (%v); skipping remaining %s items for the rest of this run: %s%s",
-		cat, cause, cat, dir, resultformat.DurationSuffix(dur))))
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(resultformat.DestinationDegradedLine(
+		cat, cause, "skipping remaining %s items for the rest of this run", dir, dur)))
 }
 
 // PrintProcessDropDestinationDegradedSkip writes a per-item line for a
 // candidate skipped without attempting a move because its destination
 // category was already known degraded earlier in this run.
 func PrintProcessDropDestinationDegradedSkip(path string, cat processor.Category) {
-	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf(
-		"ERROR    %s -- %s destination still unavailable, skipping", resultformat.CleanName(path), cat)))
+	fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(resultformat.ErrorLine(
+		resultformat.CleanName(path), fmt.Errorf("%s destination still unavailable, skipping", cat), 0)))
 }
 
 // PrintProcessDropItemError writes a process-drop item error to stderr.

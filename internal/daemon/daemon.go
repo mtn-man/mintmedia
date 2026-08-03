@@ -593,9 +593,8 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 		if d.markDestDegraded(destErr.Category) {
 			d.logConsoleError(
 				logging.EventDaemonDestinationDegraded,
-				fmt.Sprintf(
-					"ERROR    %s destination unavailable (%v); pausing new %s items until it recovers: %s",
-					destErr.Category, destErr.Err, destErr.Category, d.dirFor(destErr.Category),
+				resultformat.DestinationDegradedLine(
+					destErr.Category, destErr.Err, "pausing new %s items until it recovers", d.dirFor(destErr.Category), 0,
 				),
 				destErr.Err,
 				logging.Fields{"category": string(destErr.Category), "dir": d.dirFor(destErr.Category), "path": pth},
