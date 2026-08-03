@@ -57,8 +57,9 @@ enable_processing = true
 enable_torrent_automation = false
 
 # Rewrite each sorted file's embedded container metadata "title" tag to match
-# its final sorted name (fixes stale titles showing in players like IINA).
+# its final sorted name (fixes stale titles showing through in certain cases).
 # Requires ffmpeg on PATH. Default off -- advanced/optional.
+# NOTE: enabling this option will increase per-file processing time.
 enable_metadata_title_tagging = false
 
 [logging]
