@@ -532,28 +532,20 @@ func (d *Daemon) runWorker(runCtx context.Context, policy shutdown.Policy, hooks
 func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks shutdown.Hooks, pth string, inFlightKey string) (timedOut bool) {
 	defer d.clearInFlight(inFlightKey)
 
-	// Fast path: if any destination is currently degraded, find out which
-	// category this item belongs to before attempting a move. Skipping here
-	// avoids more than a doomed move -- a known-full disk still costs a real
-	// write, since RenameOrCopy's cross-device path copies the whole file
-	// into a temp file on the destination before its own io.Copy/Sync would
-	// hit ENOSPC. This only pays for a Plan() call while something is
-	// actually degraded; the common (healthy) case is a single map-length check.
-	if d.anyDestDegraded() {
-		cat, known := processor.CategoryForPath(ctx, d.Proc, pth)
-		if known && d.isDestDegraded(cat) {
-			d.logConsoleInfo(
-				logging.EventDaemonDestinationDeferred,
-				fmt.Sprintf("INFO     %s destination still unavailable, deferring: %s", cat, pth),
-				logging.Fields{"path": pth, "category": string(cat)},
-			)
-			d.logHistoryInfo(logging.EventDaemonDestinationDeferred, logging.Fields{"path": pth, "category": string(cat)})
-			select {
-			case d.deferredRetry <- retryItem{path: pth, category: cat}:
-			case <-ctx.Done():
-			}
-			return false
+	// Fast path: if this item's category is already known degraded, defer it
+	// rather than attempting a move that can only fail the same way.
+	if cat, skip := d.destDegraded.ClassifyDegraded(ctx, d.Proc, pth); skip {
+		d.logConsoleInfo(
+			logging.EventDaemonDestinationDeferred,
+			fmt.Sprintf("INFO     %s destination still unavailable, deferring: %s", cat, pth),
+			logging.Fields{"path": pth, "category": string(cat)},
+		)
+		d.logHistoryInfo(logging.EventDaemonDestinationDeferred, logging.Fields{"path": pth, "category": string(cat)})
+		select {
+		case d.deferredRetry <- retryItem{path: pth, category: cat}:
+		case <-ctx.Done():
 		}
+		return false
 	}
 
 	start := time.Now()

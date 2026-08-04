@@ -145,28 +145,20 @@ func processDropFolder(
 			break
 		}
 
-		// Fast path: if a destination category is already known degraded,
-		// learn this item's category via a speculative Plan() and skip it
-		// outright rather than attempting a move that can only fail the same
-		// way -- a known-full disk still costs a real write if attempted,
-		// since RenameOrCopy's cross-device fallback copies the whole file
-		// into a temp file on the destination before Sync/Rename would hit
-		// ENOSPC. This only pays for the extra Plan() call once something is
-		// actually degraded; the common (healthy) case is a single
-		// map-length check.
-		if degraded.Any() {
-			if cat, known := processor.CategoryForPath(ctx, proc, path); known && degraded.IsDegraded(cat) {
-				errCount++
-				summary.DestDegraded++
-				PrintProcessDropDestinationDegradedSkip(path, cat)
-				if ctx.Err() != nil && !interrupted {
-					interrupted = true
-				}
-				if interrupted {
-					break
-				}
-				continue
+		// Fast path: if this item's category is already known degraded, skip
+		// it outright rather than attempting a move that can only fail the
+		// same way.
+		if cat, skip := degraded.ClassifyDegraded(ctx, proc, path); skip {
+			errCount++
+			summary.DestDegraded++
+			PrintProcessDropDestinationDegradedSkip(path, cat)
+			if ctx.Err() != nil && !interrupted {
+				interrupted = true
 			}
+			if interrupted {
+				break
+			}
+			continue
 		}
 
 		planner := notify.NewDoneSoundPlanner(doneNotificationMode)

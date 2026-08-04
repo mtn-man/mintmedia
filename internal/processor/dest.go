@@ -1,6 +1,9 @@
 package processor
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // DestDegradedTracker tracks which destination categories (Movies/Shows) are
 // currently refusing writes (disk full, over quota, permission denied).
@@ -79,6 +82,25 @@ func (t *DestDegradedTracker) Reset() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.cats = nil
+}
+
+// ClassifyDegraded reports whether path's category is currently degraded,
+// folding Any()+CategoryForPath+IsDegraded into a single call so callers
+// avoid CategoryForPath's Plan() cost entirely in the common (healthy) case
+// -- a known-full disk still costs a real write if attempted, since
+// RenameOrCopy's cross-device fallback copies the whole file into a temp
+// file on the destination before Sync/Rename would hit ENOSPC. known is
+// false when Plan() couldn't determine a category for an unrelated reason,
+// in which case degraded is always false too.
+func (t *DestDegradedTracker) ClassifyDegraded(ctx context.Context, proc Processor, path string) (cat Category, degraded bool) {
+	if !t.Any() {
+		return "", false
+	}
+	cat, known := CategoryForPath(ctx, proc, path)
+	if !known {
+		return "", false
+	}
+	return cat, t.IsDegraded(cat)
 }
 
 // DirFor maps cat to its configured destination directory.
