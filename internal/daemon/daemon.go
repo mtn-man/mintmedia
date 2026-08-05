@@ -357,11 +357,6 @@ runLoop:
 
 			if d.DeferDestinationChecks && !d.destinationsReady() {
 				if d.isInFlight(key) {
-					d.logConsoleInfo(
-						logging.EventDaemonPathDuplicate,
-						fmt.Sprintf("INFO     already in-flight, skipping: %s", path),
-						logging.Fields{"path": path},
-					)
 					d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": path})
 					continue
 				}
@@ -680,11 +675,6 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 // whether ctx was done before the enqueue could complete.
 func (d *Daemon) dispatchToQueue(ctx context.Context, workQueue chan<- workItem, pth, key string) (canceled bool) {
 	if !d.tryMarkInFlight(key) {
-		d.logConsoleInfo(
-			logging.EventDaemonPathDuplicate,
-			fmt.Sprintf("INFO     already in-flight, skipping: %s", pth),
-			logging.Fields{"path": pth},
-		)
 		d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": pth})
 		return false
 	}
