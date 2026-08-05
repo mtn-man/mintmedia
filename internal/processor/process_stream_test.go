@@ -148,6 +148,53 @@ func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T)
 	}
 }
 
+func TestProcess_PartialSkipWarnedOnceAcrossRepeatedProcessCalls(t *testing.T) {
+	p := newTestProcessorWithExecDeps(t)
+
+	inputDir := filepath.Join(p.cfg.DropFolder, "Sherlock.Season.1-4.S01-S04")
+	mkdirAll(t, inputDir)
+	writeFile(t, filepath.Join(inputDir, "S01E01.mkv"), "dummy")
+	unparseable := filepath.Join(inputDir, "Episode01.mkv")
+	writeFile(t, unparseable, "dummy")
+
+	var stderr strings.Builder
+	p.logger = newRuntimeLoggerForProcessorTest(t, io.Discard, &stderr)
+
+	run := func() []Result {
+		var streamed []Result
+		err := p.Process(context.Background(), Request{
+			InputPath: inputDir,
+			OnResult: func(r Result) {
+				streamed = append(streamed, r)
+			},
+		})
+		if err != nil {
+			t.Fatalf("Process() error: %v", err)
+		}
+		return streamed
+	}
+
+	first := run()
+	if len(first) != 2 {
+		t.Fatalf("first call: expected 2 streamed results, got %d", len(first))
+	}
+	warnCount := strings.Count(stderr.String(), unparseable)
+	if warnCount == 0 {
+		t.Fatalf("first call: expected a warning mentioning %q, got none", unparseable)
+	}
+
+	// Re-running Process on the same folder simulates the daemon rescanning
+	// a pack that's still receiving files -- the unparseable file is still
+	// sitting there untouched, so it would otherwise warn again every time.
+	second := run()
+	if len(second) != 0 {
+		t.Fatalf("second call: expected 0 streamed results (already-warned skip suppressed), got %d: %#v", len(second), second)
+	}
+	if got := strings.Count(stderr.String(), unparseable); got != warnCount {
+		t.Fatalf("second call: expected no additional warning, mention count went from %d to %d", warnCount, got)
+	}
+}
+
 func newRuntimeLoggerForProcessorTest(t *testing.T, stdout, stderr io.Writer) logging.Logger {
 	t.Helper()
 	l, err := logging.New(logging.Options{
