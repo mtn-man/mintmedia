@@ -98,8 +98,7 @@ func (t *FFmpegTagger) WriteTitle(ctx context.Context, path, title string) error
 	// use_metadata_tags is a private AVOption of the mov/mp4/m4v muxer
 	// family; it has no meaning for matroska, so it's only added for the
 	// containers it actually applies to.
-	switch strings.ToLower(ext) {
-	case ".mp4", ".m4v", ".mov":
+	if needsMovMetadataFlag(ext) {
 		args = append(args, "-movflags", "use_metadata_tags")
 	}
 	args = append(args, tmp)
