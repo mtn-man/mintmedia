@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/mtn-man/mintmedia/internal/logging"
 )
@@ -85,6 +86,31 @@ type processorImpl struct {
 	mainExtSet  map[string]struct{}
 	assocExtSet map[string]struct{}
 	blacklist   []*regexp.Regexp
+
+	// skipWarningsMu guards skipWarningsSeen, the set of unparseable-file
+	// paths already surfaced via a PartialPlanError issue. Process() may be
+	// invoked repeatedly for the same path over the processor's lifetime
+	// (e.g. the daemon rescanning a pack folder that's still receiving
+	// files), so this dedupes the WARNING/SKIPPED lines to once per path.
+	skipWarningsMu   sync.Mutex
+	skipWarningsSeen map[string]struct{}
+}
+
+// firstSkipWarning reports whether path has not yet been warned about as an
+// unparseable-file skip, marking it seen as a side effect. Safe for
+// concurrent use even though Process is currently only driven by a single
+// worker goroutine.
+func (p *processorImpl) firstSkipWarning(path string) bool {
+	p.skipWarningsMu.Lock()
+	defer p.skipWarningsMu.Unlock()
+	if p.skipWarningsSeen == nil {
+		p.skipWarningsSeen = make(map[string]struct{})
+	}
+	if _, ok := p.skipWarningsSeen[path]; ok {
+		return false
+	}
+	p.skipWarningsSeen[path] = struct{}{}
+	return true
 }
 
 // Plan computes deterministic plan(s) for an input path.
@@ -169,6 +195,15 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 
 	if partial != nil && len(partial.Issues) > 0 {
 		for _, issue := range partial.Issues {
+			// The file is intentionally left in place for manual review, so
+			// it keeps resurfacing in every future Plan of this folder (e.g.
+			// each time a sibling file elsewhere in the same pack triggers a
+			// rescan) until a human moves or removes it. Warn about it once
+			// per processor lifetime instead of repeating the same
+			// WARNING/SKIPPED lines on every rescan.
+			if !p.firstSkipWarning(issue.Path) {
+				continue
+			}
 			var pme *ParseMovieError
 			var pse *ParseShowError
 			switch {
