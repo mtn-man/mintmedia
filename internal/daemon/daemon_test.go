@@ -1288,45 +1288,45 @@ func TestDaemon_InFlightDedupe(t *testing.T) {
 func TestDaemon_DestDegradedTransitions(t *testing.T) {
 	d := &Daemon{MoviesDir: "/movies", ShowsDir: "/shows"}
 
-	if d.isDestDegraded(processor.CategoryShow) {
+	if d.destDegraded.IsDegraded(processor.CategoryShow) {
 		t.Fatalf("expected Shows to start healthy")
 	}
-	if d.anyDestDegraded() {
+	if d.destDegraded.Any() {
 		t.Fatalf("expected nothing degraded initially")
 	}
 	if d.dirFor(processor.CategoryShow) != "/shows" || d.dirFor(processor.CategoryMovie) != "/movies" {
 		t.Fatalf("dirFor mapped the wrong directory")
 	}
 
-	if !d.markDestDegraded(processor.CategoryShow) {
+	if !d.destDegraded.Mark(processor.CategoryShow) {
 		t.Fatalf("expected first mark to report a transition")
 	}
-	if d.markDestDegraded(processor.CategoryShow) {
+	if d.destDegraded.Mark(processor.CategoryShow) {
 		t.Fatalf("expected repeat mark to report no transition")
 	}
-	if !d.isDestDegraded(processor.CategoryShow) {
+	if !d.destDegraded.IsDegraded(processor.CategoryShow) {
 		t.Fatalf("expected Shows to be degraded")
 	}
-	if d.isDestDegraded(processor.CategoryMovie) {
+	if d.destDegraded.IsDegraded(processor.CategoryMovie) {
 		t.Fatalf("expected Movies to remain healthy while only Shows is degraded")
 	}
-	if !d.anyDestDegraded() {
-		t.Fatalf("expected anyDestDegraded to be true")
+	if !d.destDegraded.Any() {
+		t.Fatalf("expected Any() to be true")
 	}
-	if got := d.degradedCategories(); len(got) != 1 || got[0] != processor.CategoryShow {
-		t.Fatalf("degradedCategories() = %v, want [Shows]", got)
+	if got := d.destDegraded.Degraded(); len(got) != 1 || got[0] != processor.CategoryShow {
+		t.Fatalf("Degraded() = %v, want [Shows]", got)
 	}
 
-	if !d.clearDestDegraded(processor.CategoryShow) {
+	if !d.destDegraded.Clear(processor.CategoryShow) {
 		t.Fatalf("expected first clear to report a transition")
 	}
-	if d.clearDestDegraded(processor.CategoryShow) {
+	if d.destDegraded.Clear(processor.CategoryShow) {
 		t.Fatalf("expected repeat clear to report no transition")
 	}
-	if d.isDestDegraded(processor.CategoryShow) {
+	if d.destDegraded.IsDegraded(processor.CategoryShow) {
 		t.Fatalf("expected Shows to be healthy again")
 	}
-	if d.anyDestDegraded() {
+	if d.destDegraded.Any() {
 		t.Fatalf("expected nothing degraded after clearing")
 	}
 }
