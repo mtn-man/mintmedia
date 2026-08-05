@@ -25,11 +25,22 @@ type tailWriter struct {
 }
 
 func (w *tailWriter) Write(p []byte) (int, error) {
-	w.buf = append(w.buf, p...)
-	if len(w.buf) > w.max {
-		w.buf = w.buf[len(w.buf)-w.max:]
+	n := len(p)
+	if len(p) >= w.max {
+		w.buf = append(w.buf[:0], p[len(p)-w.max:]...)
+		return n, nil
 	}
-	return len(p), nil
+	// Shift the retained tail down in place rather than re-slicing from the
+	// front: re-slicing shrinks cap() along with the offset, so a flood of
+	// small writes (e.g. ffmpeg repeating a per-packet warning) would force a
+	// fresh allocation and full copy on nearly every call. Shifting in place
+	// reuses the same backing array for the writer's whole lifetime.
+	if overflow := len(w.buf) + len(p) - w.max; overflow > 0 {
+		copy(w.buf, w.buf[overflow:])
+		w.buf = w.buf[:len(w.buf)-overflow]
+	}
+	w.buf = append(w.buf, p...)
+	return n, nil
 }
 
 func (w *tailWriter) String() string {
