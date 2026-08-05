@@ -97,6 +97,20 @@ func TestTailWriter_CapsRetainedBytesToTail(t *testing.T) {
 	}
 }
 
+// TestTailWriter_SingleWriteLargerThanMaxKeepsTail covers the early-return
+// branch for a single Write call whose payload alone exceeds max -- the
+// in-place-shift path below it assumes len(p) < max, so a large single write
+// must be handled separately.
+func TestTailWriter_SingleWriteLargerThanMaxKeepsTail(t *testing.T) {
+	w := &tailWriter{max: 4}
+	if _, err := w.Write([]byte("0123456789")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if got := w.String(); got != "6789" {
+		t.Fatalf("String() = %q, want the last 4 bytes of the single write", got)
+	}
+}
+
 // TestFFmpegTagger_WriteTitle_BoundsCapturedStderrOnFailure guards against
 // the memory-usage bug this fix addresses directly: a chatty failing ffmpeg
 // must not make WriteTitle's returned error balloon with the subprocess's
