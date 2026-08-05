@@ -35,6 +35,15 @@ below.
    git switch dev && git rebase main
    git push --force-with-lease
    ```
+   The `git pull` on `main` has to happen *before* the rebase, and must
+   actually land (confirm it fast-forwards, not "already up to date" against
+   a stale ref) -- `git rebase main` rebases onto the local `main` branch
+   pointer, not `origin/main`. If local `main` hasn't been updated yet,
+   `git rebase main` on `dev` doesn't error, it just silently no-ops (reports
+   success against the old commit), leaving `dev` still carrying the
+   pre-merge commits under their old SHAs. Re-running the rebase after
+   actually pulling `main` fixes it -- Git recognizes the old and new commits
+   as content-identical (`patch-id` match) and drops the duplicates.
 
 ## Releasing is separate
 
