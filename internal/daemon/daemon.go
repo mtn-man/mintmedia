@@ -301,11 +301,11 @@ runLoop:
 			// Independent of the defer_destination_checks pending drain above:
 			// probe any runtime-degraded destination for recovery, then flush
 			// items deferred while their category was degraded.
-			for _, cat := range d.degradedCategories() {
+			for _, cat := range d.destDegraded.Degraded() {
 				if !d.dirWritableFn(d.dirFor(cat)) {
 					continue
 				}
-				if !d.clearDestDegraded(cat) {
+				if !d.destDegraded.Clear(cat) {
 					continue
 				}
 				d.logConsoleInfo(
@@ -316,7 +316,7 @@ runLoop:
 				d.logHistoryInfo(logging.EventDaemonDestinationRecovered, logging.Fields{"category": string(cat)})
 			}
 			for pth, item := range degradedPending {
-				if d.isDestDegraded(item.category) {
+				if d.destDegraded.IsDegraded(item.category) {
 					continue
 				}
 				delete(degradedPending, pth)
@@ -577,7 +577,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 
 	var destErr *processor.DestinationUnavailableError
 	if errors.As(err, &destErr) {
-		if d.markDestDegraded(destErr.Category) {
+		if d.destDegraded.Mark(destErr.Category) {
 			d.logConsoleError(
 				logging.EventDaemonDestinationDegraded,
 				resultformat.DestinationDegradedLine(
@@ -717,37 +717,6 @@ func (d *Daemon) clearInFlight(path string) {
 		return
 	}
 	delete(d.inFlight, path)
-}
-
-// markDestDegraded records that cat's destination is refusing writes. It
-// returns true only the first time this is called for a healthy cat (a
-// healthy->degraded transition), so callers can log the loud warning exactly
-// once instead of on every subsequent failure.
-func (d *Daemon) markDestDegraded(cat processor.Category) bool {
-	return d.destDegraded.Mark(cat)
-}
-
-// clearDestDegraded marks cat healthy again. It returns true only when cat
-// was actually degraded (a degraded->healthy transition).
-func (d *Daemon) clearDestDegraded(cat processor.Category) bool {
-	return d.destDegraded.Clear(cat)
-}
-
-// isDestDegraded reports whether cat's destination is currently degraded.
-func (d *Daemon) isDestDegraded(cat processor.Category) bool {
-	return d.destDegraded.IsDegraded(cat)
-}
-
-// anyDestDegraded reports whether any destination category is currently
-// degraded, so callers can skip the cost of planning a category just to
-// check in the common (healthy) case.
-func (d *Daemon) anyDestDegraded() bool {
-	return d.destDegraded.Any()
-}
-
-// degradedCategories returns the categories currently marked degraded.
-func (d *Daemon) degradedCategories() []processor.Category {
-	return d.destDegraded.Degraded()
 }
 
 // dirFor maps a processor.Category to its configured destination directory.
