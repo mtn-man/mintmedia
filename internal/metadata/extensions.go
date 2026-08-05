@@ -22,3 +22,19 @@ func SupportsExtension(ext string) bool {
 	_, ok := supportedExtensions[strings.ToLower(ext)]
 	return ok
 }
+
+// mp4FamilyExtensions are the supportedExtensions using the mov/mp4/m4v
+// muxer family, which needs the -movflags use_metadata_tags AVOption for the
+// title tag to actually persist; matroska (.mkv) has no such requirement.
+var mp4FamilyExtensions = map[string]struct{}{
+	".mp4": {},
+	".m4v": {},
+	".mov": {},
+}
+
+// needsMovMetadataFlag reports whether ext (including its leading dot)
+// belongs to the mp4/mov muxer family.
+func needsMovMetadataFlag(ext string) bool {
+	_, ok := mp4FamilyExtensions[strings.ToLower(ext)]
+	return ok
+}
