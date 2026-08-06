@@ -100,6 +100,9 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		// is already claimed, leave the source untouched here and let the
 		// Move call below report the now-familiar duplicate-race downgrade.
 		if _, statErr := os.Stat(pl.DestMainPath); statErr != nil {
+			logConsoleInfo(p, logging.EventProcessorMetadataTitleWriteStarted,
+				fmt.Sprintf("TAGGING  metadata title for %s (might take a moment)...", filepath.Base(pl.MainSourcePath)),
+				logging.Fields{"path": pl.MainSourcePath, "title": pl.DestRadix})
 			if err := p.metaTagger.WriteTitle(ctx, pl.MainSourcePath, pl.DestRadix); err != nil {
 				logConsoleWarn(p, logging.EventProcessorMetadataTitleWriteFailed,
 					fmt.Sprintf("WARNING  metadata title tag not updated for %s", filepath.Base(pl.MainSourcePath)),

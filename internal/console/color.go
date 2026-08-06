@@ -48,6 +48,7 @@ var prefixColors = []struct {
 	{"STATUS   ", Green},
 	{"STOPPED  ", Green},
 	{"SORTING  ", Yellow},
+	{"TAGGING  ", Yellow},
 	{"SKIPPED  ", Yellow},
 	{"WARNING  ", Yellow},
 	{"ERROR    ", Red},
