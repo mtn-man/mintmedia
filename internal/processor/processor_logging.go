@@ -26,6 +26,13 @@ func logConsoleWarn(p *processorImpl, event logging.Event, msg string, err error
 	p.logger.ConsoleWarn("processor", event, console.ColorizePrefixErr(msg), err, fields)
 }
 
+func logConsoleInfo(p *processorImpl, event logging.Event, msg string, fields logging.Fields) {
+	if p == nil || p.logger == nil {
+		return
+	}
+	p.logger.ConsoleInfo("processor", event, console.ColorizePrefixOut(msg), fields)
+}
+
 func logWarn(p *processorImpl, event logging.Event, msg string, err error, fields logging.Fields) {
 	if p == nil || p.logger == nil {
 		return

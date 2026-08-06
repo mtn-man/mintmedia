@@ -45,6 +45,7 @@ const (
 	EventProcessorShowFolderQualifiedGuess       Event = "processor.show.folder.qualified.guess"
 	EventProcessorShowPossibleDuplicateFolder    Event = "processor.show.folder.duplicate.possible"
 	EventProcessorShowFileSkipUnparseable        Event = "processor.show.file.skip.unparseable"
+	EventProcessorMetadataTitleWriteStarted      Event = "processor.metadata.title.write.started"
 	EventProcessorMetadataTitleWriteApplied      Event = "processor.metadata.title.write.applied"
 	EventProcessorMetadataTitleWriteFailed       Event = "processor.metadata.title.write.failed"
 )
@@ -89,6 +90,7 @@ func AllOperationalEvents() []Event {
 		EventProcessorShowFolderQualifiedGuess,
 		EventProcessorShowPossibleDuplicateFolder,
 		EventProcessorShowFileSkipUnparseable,
+		EventProcessorMetadataTitleWriteStarted,
 		EventProcessorMetadataTitleWriteApplied,
 		EventProcessorMetadataTitleWriteFailed,
 	}
