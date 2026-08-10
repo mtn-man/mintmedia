@@ -546,7 +546,18 @@ func planForMain(
 			}
 			if len(tier1) > 0 {
 				pl.Duplicate = true
-				pl.DuplicateMatchPath = filepath.Join(p.cfg.MoviesDir, tier1[0].folder)
+				matchFolder := tier1[0].folder
+				pl.DuplicateMatchPath = filepath.Join(p.cfg.MoviesDir, matchFolder)
+				// A confident fuzzy match means the destination fields computed
+				// above (from the freshly parsed title) describe a folder that
+				// will never actually be created -- Apply always skips a
+				// Duplicate plan. Since they'll never back a real move, prefer
+				// the existing folder's actual on-disk spelling here instead,
+				// mirroring how resolveShowFolder already returns an existing
+				// folder's real name rather than a freshly parsed guess.
+				pl.DestDir = pl.DuplicateMatchPath
+				pl.DestRadix = matchFolder
+				pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 			} else if len(tier2) > 0 {
 				folders := make([]string, len(tier2))
 				for i, m := range tier2 {

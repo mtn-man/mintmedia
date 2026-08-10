@@ -2237,6 +2237,21 @@ func TestPlan_Duplicate_MovieFuzzyDiacritic(t *testing.T) {
 	if pl.DuplicateMatchPath != wantMatch {
 		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, wantMatch)
 	}
+	// A confident fuzzy match will never actually be moved (Apply skips any
+	// Duplicate plan), so the destination fields should describe the real
+	// existing folder's spelling rather than the freshly parsed "Amelie" --
+	// otherwise a --plan/--dry-run preview shows a phantom destination that
+	// will never be created.
+	if pl.DestDir != wantMatch {
+		t.Fatalf("DestDir = %q, want %q", pl.DestDir, wantMatch)
+	}
+	if pl.DestRadix != "Amélie (2001)" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Amélie (2001)")
+	}
+	wantMainPath := filepath.Join(wantMatch, "Amélie (2001).mkv")
+	if pl.DestMainPath != wantMainPath {
+		t.Fatalf("DestMainPath = %q, want %q", pl.DestMainPath, wantMainPath)
+	}
 }
 
 // TestPlan_Duplicate_MovieFuzzyPunctuation covers tier 1 via
