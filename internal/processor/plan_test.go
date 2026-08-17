@@ -1298,6 +1298,36 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			name: "ShowFile_HyphenatedTitleNotStrippedAsWebsitePrefix",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Brooklyn.Nine-Nine.S02E07.Lockdown.1080p.WEB-DL.x265.10bit.AAC.5.1-ImE[UTR].mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Brooklyn Nine-Nine" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Brooklyn Nine-Nine")
+				}
+				if pl.Season != 2 || pl.Episode != 7 {
+					t.Fatalf("Season/Episode = %d/%d, want 2/7", pl.Season, pl.Episode)
+				}
+				if pl.DestRadix != "Brooklyn Nine-Nine - S02E07" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Brooklyn Nine-Nine - S02E07")
+				}
+			},
+		},
+		{
 			name: "MovieFile_MultipleBracketTags",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()

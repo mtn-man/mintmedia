@@ -63,7 +63,10 @@ var (
 	// Matches a website advertisement prefix at the start of a release name,
 	// e.g. "www.UIndex.org - " or "EZTVx.to - ". Requires a dash-style separator
 	// after the domain to avoid false positives on show names with dotted tokens.
-	reWebsitePrefix = regexp.MustCompile(`(?i)^(?:www\.)?[a-z0-9][a-z0-9-]*\.[a-z]{2,10}(?:\.[a-z]{2,3})?\s*[-–—]+\s*`)
+	// The separator must be whitespace-flanked (real ad prefixes always space the
+	// dash out) -- without that, a title like "Brooklyn.Nine-Nine." false-matches
+	// "Brooklyn.Nine-" as if "Brooklyn.Nine" were a domain and "-" its separator.
+	reWebsitePrefix = regexp.MustCompile(`(?i)^(?:www\.)?[a-z0-9][a-z0-9-]*\.[a-z]{2,10}(?:\.[a-z]{2,3})?\s+[-–—]+\s+`)
 
 	// Matches a hyphen flanked by word characters on both sides (e.g. "X-Men",
 	// "Spider-Man"). Used to preserve compound-word hyphens while stripping
