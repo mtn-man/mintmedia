@@ -14,6 +14,7 @@ func TestParseSeasonComponent(t *testing.T) {
 		wantIdxOf  string // substring whose Index(raw, ...) should equal the returned idx
 	}{
 		{name: "SxxExx", raw: "Show.S01E02.mkv", wantSeason: 1, wantOK: true, wantIdxOf: "S01E02"},
+		{name: "SxxSpaceExx", raw: "Show - S01 E02 - Title.mkv", wantSeason: 1, wantOK: true, wantIdxOf: "S01 E02"},
 		{name: "SeasonWord", raw: "Show.Season.5.mkv", wantSeason: 5, wantOK: true, wantIdxOf: "Season.5"},
 		{name: "SeasonRange_UsesStartOnly", raw: "Show.S01-S04.mkv", wantSeason: 1, wantOK: true, wantIdxOf: "S01-S04"},
 		{name: "SeasonWordRange_UsesStartOnly", raw: "Show.Season.1-4.mkv", wantSeason: 1, wantOK: true, wantIdxOf: "Season.1-4"},
@@ -62,6 +63,7 @@ func TestParseEpisodeComponent(t *testing.T) {
 		wantIdxOf   string
 	}{
 		{name: "SxxExx", raw: "Show.S01E02.mkv", wantEpisode: 2, wantOK: true, wantIdxOf: "S01E02"},
+		{name: "SxxSpaceExx", raw: "Show - S01 E02 - Title.mkv", wantEpisode: 2, wantOK: true, wantIdxOf: "S01 E02"},
 		{name: "EpisodeWord", raw: "Show.Episode.7.mkv", wantEpisode: 7, wantOK: true, wantIdxOf: "Episode.7"},
 		{name: "LowercaseSxxExx", raw: "show.s01e02.mkv", wantEpisode: 2, wantOK: true, wantIdxOf: "s01e02"},
 		{name: "NoMatch", raw: "Show.Movie.Cut.mkv", wantOK: false},

@@ -12,7 +12,10 @@ import "regexp"
 
 var (
 	// Matches SxxEyy tokens (case-insensitive), e.g. "S01E02", "s1e2", "S21E100".
-	reSeasonEpisode = regexp.MustCompile(`(?i)\bS(\d{1,2})E(\d{1,3})\b`)
+	// Tolerates a single space between the season and episode halves (e.g.
+	// "S01 E01"), a release-naming variant seen in the wild alongside the
+	// tighter "S01E01" form.
+	reSeasonEpisode = regexp.MustCompile(`(?i)\bS(\d{1,2}) ?E(\d{1,3})\b`)
 
 	// Matches season range tokens, e.g. "S01-S04", "S1-S4", "S01-04".
 	reSeasonRange = regexp.MustCompile(`(?i)\bS(\d{1,2})\s*-\s*S?(\d{1,2})\b`)
