@@ -87,6 +87,23 @@ func PrintProcessDropCandidates(count int) {
 	fmt.Printf("INFO     Detected %d %s.\n\n", count, noun)
 }
 
+// PrintPlanIssues writes one SKIPPED line per PartialPlanError issue,
+// reusing resultformat.CompactLine (the same SKIPPED format Process()
+// results render through) via a synthetic unapplied Result, so a --plan
+// preview reads identically to what --process-drop/the daemon would show
+// for the same unparseable file instead of drifting into its own wording.
+func PrintPlanIssues(issues []processor.PlanIssue) {
+	for _, iss := range issues {
+		res := processor.Result{
+			Plan:    processor.Plan{InputPath: iss.Path},
+			Handled: true,
+			Applied: false,
+			Reason:  iss.Err.Error(),
+		}
+		fmt.Println(console.ColorizePrefixOut(processDropCompactLine(res, 0)))
+	}
+}
+
 // PrintFatalError writes a labeled, colorized error line to stderr, matching
 // the ERROR/WARNING console voice used elsewhere, instead of a bare
 // err.Error() dump. Used for one-shot CLI failures that abort the process.
