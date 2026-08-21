@@ -257,7 +257,7 @@ func main() {
 				PrintPlans(plans)
 			}
 			PrintPlanIssues(partial.Issues)
-			os.Exit(exitError)
+			os.Exit(exitError) //nolint:gocritic // the earlier defer cancel() (--stop path) always returns before reaching here
 		}
 		if err != nil {
 			die(err, exitError)
