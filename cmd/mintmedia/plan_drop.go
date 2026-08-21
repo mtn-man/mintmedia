@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 
 	"github.com/mtn-man/mintmedia/internal/processor"
 )
@@ -26,6 +27,15 @@ func planDropFolder(ctx context.Context, proc processor.Processor, dropRoot stri
 			return errCount + 1
 		}
 		plans, err := proc.Plan(ctx, processor.Request{InputPath: p})
+		var partial *processor.PartialPlanError
+		if errors.As(err, &partial) {
+			if len(plans) > 0 {
+				PrintPlans(plans)
+			}
+			PrintPlanIssues(partial.Issues)
+			errCount++
+			continue
+		}
 		if err != nil {
 			PrintProcessDropItemError(p, err, 0)
 			errCount++

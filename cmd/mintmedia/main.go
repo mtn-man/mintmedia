@@ -251,6 +251,14 @@ func main() {
 	ctx := context.Background()
 	if mode.PlanPath != "" {
 		plans, err := proc.Plan(ctx, processor.Request{InputPath: mode.PlanPath})
+		var partial *processor.PartialPlanError
+		if errors.As(err, &partial) {
+			if len(plans) > 0 {
+				PrintPlans(plans)
+			}
+			PrintPlanIssues(partial.Issues)
+			os.Exit(exitError)
+		}
 		if err != nil {
 			die(err, exitError)
 		}
