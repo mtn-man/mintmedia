@@ -154,9 +154,21 @@ type Transferer interface {
 	Move(ctx context.Context, src, dst string) error
 }
 
-// MetadataTagger rewrites a media file's embedded title tag in place.
+// MetadataTagger produces a retitled remux of a media file.
+//
+// WriteTitleToFile remuxes src into a fresh sibling temp file (same
+// directory, same filesystem) with its embedded container "title" tag set to
+// title, and returns that temp file's path. src itself is never modified; on
+// any failure the temp file is removed and "" is returned, and on success
+// the caller owns the returned path and must move or remove it.
+//
+// Keeping the retitled bytes in a separate file -- rather than rewriting src
+// in place -- is what lets Apply move that file into the library as a single
+// step: a destination claimed by another process mid-remux downgrades to a
+// duplicate skip with the drop-folder original still byte-for-byte
+// untouched.
 type MetadataTagger interface {
-	WriteTitle(ctx context.Context, path, title string) error
+	WriteTitleToFile(ctx context.Context, src, title string) (tmpPath string, err error)
 }
 
 // Config contains the processor-relevant configuration.

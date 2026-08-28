@@ -49,10 +49,12 @@ func (w *tailWriter) String() string {
 
 // FFmpegTagger rewrites a media file's embedded container "title" metadata
 // tag by shelling out to ffmpeg. It remuxes (stream copy, no re-encode) into
-// a temp file in the same directory as the target, then atomically renames
-// over it -- the same same-filesystem-then-atomic-rename pattern
-// transfer.RenameOrCopy uses, so a failure at any point leaves the original
-// file completely untouched.
+// a fresh temp file in the same directory as the source, so a failure at any
+// point leaves the source completely untouched. WriteTitleToFile hands that
+// temp file back to the caller (Apply moves it straight into the library);
+// WriteTitle is the in-place variant that atomically renames the temp over
+// the source -- the same same-filesystem-then-atomic-rename pattern
+// transfer.RenameOrCopy uses.
 type FFmpegTagger struct {
 	ffmpegPath string
 }
@@ -68,14 +70,19 @@ func NewFFmpegTagger() (*FFmpegTagger, error) {
 	return &FFmpegTagger{ffmpegPath: path}, nil
 }
 
-// WriteTitle rewrites path's container title metadata tag to title in place.
-func (t *FFmpegTagger) WriteTitle(ctx context.Context, path, title string) error {
+// WriteTitleToFile remuxes src into a fresh sibling temp file (same
+// directory, same filesystem) with its container "title" metadata tag
+// rewritten to title, and returns that temp file's path. src is never
+// modified. On any failure the temp file is removed and "" is returned; on
+// success the caller owns the returned path and is responsible for moving or
+// removing it.
+func (t *FFmpegTagger) WriteTitleToFile(ctx context.Context, src, title string) (string, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return "", err
 	}
 
-	dir := filepath.Dir(path)
-	ext := filepath.Ext(path)
+	dir := filepath.Dir(src)
+	ext := filepath.Ext(src)
 
 	// The temp name doesn't need to resemble the original filename -- only
 	// the extension matters for ffmpeg's muxer autodetection -- so it isn't
@@ -84,24 +91,24 @@ func (t *FFmpegTagger) WriteTitle(ctx context.Context, path, title string) error
 	// filesystem filename-length limits.
 	tmpFile, err := os.CreateTemp(dir, ".mmtag-tmp-*"+ext)
 	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
+		return "", fmt.Errorf("create temp file: %w", err)
 	}
 	tmp := tmpFile.Name()
 	if err := tmpFile.Close(); err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("close temp file: %w", err)
+		return "", fmt.Errorf("close temp file: %w", err)
 	}
 
-	cleanupTmp := true
+	ok := false
 	defer func() {
-		if cleanupTmp {
+		if !ok {
 			_ = os.Remove(tmp)
 		}
 	}()
 
 	args := []string{
 		"-y",
-		"-i", path,
+		"-i", src,
 		"-map", "0",
 		"-c", "copy",
 		"-metadata", "title=" + title,
@@ -114,24 +121,37 @@ func (t *FFmpegTagger) WriteTitle(ctx context.Context, path, title string) error
 	}
 	args = append(args, tmp)
 
-	// path and title are always derived internally from a resolved Plan
-	// (DestMainPath's pre-move source, DestRadix), never external input.
-	cmd := exec.CommandContext(ctx, t.ffmpegPath, args...) //nolint:gosec // path/title come from an internally-computed Plan, not external input
+	// src and title are always derived internally from a resolved Plan
+	// (MainSourcePath, DestRadix), never external input.
+	cmd := exec.CommandContext(ctx, t.ffmpegPath, args...) //nolint:gosec // src/title come from an internally-computed Plan, not external input
 	stderr := &tailWriter{max: maxCapturedStderr}
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg: %w: %s", err, strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf("ffmpeg: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 
 	// Restore the permissive mode CreateTemp doesn't grant (it always
-	// creates at 0600) so the media server can still read the tagged file --
-	// matches transfer.copyThenReplace's identical chmod before its own
-	// atomic rename.
+	// creates at 0600) so the media server can still read the tagged file
+	// once it lands in the library -- matches transfer.copyThenReplace's
+	// identical chmod before its own atomic rename.
 	_ = os.Chmod(tmp, 0o644) //nolint:gosec // library files need group+other read for the media server
 
-	if err := os.Rename(tmp, path); err != nil {
+	ok = true
+	return tmp, nil
+}
+
+// WriteTitle rewrites src's container title metadata tag to title in place,
+// via a remux into a sibling temp file (WriteTitleToFile) followed by an
+// atomic rename over src. A failure at any point leaves src completely
+// untouched.
+func (t *FFmpegTagger) WriteTitle(ctx context.Context, src, title string) error {
+	tmp, err := t.WriteTitleToFile(ctx, src, title)
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, src); err != nil {
+		_ = os.Remove(tmp)
 		return fmt.Errorf("rename temp file to destination: %w", err)
 	}
-	cleanupTmp = false
 	return nil
 }

@@ -694,14 +694,14 @@ func TestApply_RefusesToDeleteDropFolderRoot_WhenInputIsRoot(t *testing.T) {
 	}
 }
 
-// TestApply_MetadataTagger_WriteTitleCalledBeforeMove_Movie covers the
-// reordering decision: WriteTitle must run against pl.MainSourcePath (the
+// TestApply_MetadataTagger_WriteTitleCalledBeforeMove covers the reordering
+// decision: WriteTitleToFile must run against pl.MainSourcePath (the
 // pre-move, drop-folder location) before the main-media move, not
 // pl.DestMainPath afterward -- doing it before the move keeps ffmpeg's remux
-// on local disk instead of a possibly network-mounted destination. The fake
-// tagger records whether pl.MainSourcePath still existed at call time, which
-// would be false if this ever regressed to running after the move (the
-// osRenameTransferer test double removes the source via os.Rename).
+// on local disk instead of a possibly network-mounted destination. It also
+// covers the post-move bookkeeping: the retitled temp file is what lands at
+// pl.DestMainPath, and the untouched drop-folder original is removed once
+// that move succeeds.
 func TestApply_MetadataTagger_WriteTitleCalledBeforeMove(t *testing.T) {
 	t.Parallel()
 
@@ -738,17 +738,26 @@ func TestApply_MetadataTagger_WriteTitleCalledBeforeMove(t *testing.T) {
 			}
 
 			if len(tagger.calls) != 1 {
-				t.Fatalf("expected 1 WriteTitle call, got %d", len(tagger.calls))
+				t.Fatalf("expected 1 WriteTitleToFile call, got %d", len(tagger.calls))
 			}
 			call := tagger.calls[0]
 			if call.Path != pl.MainSourcePath {
-				t.Fatalf("WriteTitle path = %q, want pl.MainSourcePath %q", call.Path, pl.MainSourcePath)
+				t.Fatalf("WriteTitleToFile src = %q, want pl.MainSourcePath %q", call.Path, pl.MainSourcePath)
 			}
 			if call.Title != pl.DestRadix {
-				t.Fatalf("WriteTitle title = %q, want pl.DestRadix %q", call.Title, pl.DestRadix)
+				t.Fatalf("WriteTitleToFile title = %q, want pl.DestRadix %q", call.Title, pl.DestRadix)
 			}
 			if !call.SourceExistedYet {
-				t.Fatalf("WriteTitle ran after the main-media move -- source no longer existed at call time")
+				t.Fatalf("WriteTitleToFile ran after the main-media move -- source no longer existed at call time")
+			}
+			if _, err := os.Stat(pl.DestMainPath); err != nil {
+				t.Fatalf("retitled file should have landed at pl.DestMainPath: %v", err)
+			}
+			if _, err := os.Stat(pl.MainSourcePath); !os.IsNotExist(err) {
+				t.Fatalf("drop-folder original should be gone after a successful tagged move, stat err = %v", err)
+			}
+			if leftover := leftoverTagTempFiles(t, p.cfg.DropFolder); len(leftover) != 0 {
+				t.Fatalf("retitled temp file(s) left behind in drop folder: %v", leftover)
 			}
 		})
 	}
@@ -920,12 +929,11 @@ func TestApply_MetadataTagger_UnsupportedExtensionSkipsCall(t *testing.T) {
 }
 
 // TestApply_MetadataTagger_SkipsWriteTitleWhenDestinationClaimedConcurrently
-// covers the duplicate-race narrowing fix: if another job has already
-// claimed pl.DestMainPath by the time this plan reaches the tagging step
-// (the same race TestApply_DuplicateRace_DowngradesToGracefulSkip covers for
-// the Move call itself), WriteTitle must never run -- the source file is
-// about to be left in place as an untouched duplicate skip, and mutating it
-// first would contradict that.
+// covers the fast-path stat recheck: if another job has already claimed
+// pl.DestMainPath by the time this plan reaches the tagging step (the same
+// race TestApply_DuplicateRace_DowngradesToGracefulSkip covers for the Move
+// call itself), WriteTitleToFile is skipped entirely -- no point spawning
+// ffmpeg for a plan about to become a duplicate skip.
 func TestApply_MetadataTagger_SkipsWriteTitleWhenDestinationClaimedConcurrently(t *testing.T) {
 	t.Parallel()
 	p := newTestProcessor(t)
@@ -980,6 +988,86 @@ func TestApply_MetadataTagger_SkipsWriteTitleWhenDestinationClaimedConcurrently(
 	if string(got) != original {
 		t.Fatalf("source file was modified despite being left as a duplicate skip: got %q, want %q", got, original)
 	}
+}
+
+// TestApply_MetadataTagger_DestinationClaimedDuringRemux_LeavesSourceUntouched
+// is the regression guard for the atomic-tag-then-move fix. The stat recheck
+// passes (nothing claims the destination until the "remux" is already in
+// flight), so WriteTitleToFile runs -- but because it writes a separate temp
+// file and never pl.MainSourcePath, a destination claimed mid-remux makes
+// the move downgrade to a duplicate skip with the drop-folder original still
+// byte-for-byte intact. Before the fix (remux-in-place then move) the
+// original was silently left as a retitled remux instead.
+func TestApply_MetadataTagger_DestinationClaimedDuringRemux_LeavesSourceUntouched(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessor(t)
+	p.xfer = transfer.NewRenameOrCopy(transfer.Options{})
+
+	mainName := "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv"
+	mainSrc := filepath.Join(p.cfg.DropFolder, mainName)
+	const original = "original untouched bytes"
+	writeFile(t, mainSrc, original)
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false (nothing exists yet at plan time)")
+	}
+
+	tagger := &fakeMetaTagger{onCall: func() {
+		// Another job claims the destination while ffmpeg would still be
+		// running -- after the stat recheck, before the move.
+		writeFile(t, pl.DestMainPath, "claimed mid-remux by another job")
+	}}
+	p.metaTagger = tagger
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Applied {
+		t.Fatalf("Applied = true, want false -- destination was claimed mid-remux")
+	}
+	if !strings.Contains(res.Reason, "already in library") {
+		t.Fatalf("Reason = %q, want it to mention the library conflict", res.Reason)
+	}
+	if len(tagger.calls) != 1 {
+		t.Fatalf("expected 1 WriteTitleToFile call (the recheck passed), got %d", len(tagger.calls))
+	}
+	got, err := os.ReadFile(mainSrc)
+	if err != nil {
+		t.Fatalf("read source after Apply: %v", err)
+	}
+	if string(got) != original {
+		t.Fatalf("drop-folder original was mutated despite the duplicate skip: got %q, want %q", got, original)
+	}
+	if leftover := leftoverTagTempFiles(t, p.cfg.DropFolder); len(leftover) != 0 {
+		t.Fatalf("retitled temp file(s) left behind after the skip: %v", leftover)
+	}
+}
+
+// leftoverTagTempFiles returns any metadata-tagging temp-file names still
+// present in dir, so tests can assert the retitled remux is cleaned up on
+// both the move-succeeded and duplicate-skip paths.
+func leftoverTagTempFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir(%q): %v", dir, err)
+	}
+	var tmp []string
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".mmtag-tmp-") {
+			tmp = append(tmp, e.Name())
+		}
+	}
+	return tmp
 }
 
 func TestApply_AssociatedMoveFailure_EmitsConsoleWarn(t *testing.T) {
@@ -1071,27 +1159,53 @@ func (f failIfCalledTransferer) Move(_ context.Context, src, dst string) error {
 
 // fakeMetaTagger is the fake MetadataTagger idiom used by the metadata
 // tagging tests, mirroring the fake-Transferer types below. SourceExistedYet
-// records whether path still existed on disk at call time, which lets tests
-// verify WriteTitle ran before the main-media move without needing to
-// instrument apply.go's control flow directly.
+// records whether src still existed on disk at call time (it always should --
+// WriteTitleToFile never touches src). onCall, if set, runs after the call
+// is recorded but before the temp file is returned, letting a test simulate
+// another process claiming the destination while the "remux" is in flight.
 type fakeMetaTaggerCall struct {
 	Path, Title      string
 	SourceExistedYet bool
 }
 
 type fakeMetaTagger struct {
-	calls []fakeMetaTaggerCall
-	err   error
+	calls  []fakeMetaTaggerCall
+	err    error
+	onCall func()
 }
 
-func (f *fakeMetaTagger) WriteTitle(_ context.Context, path, title string) error {
-	_, statErr := os.Stat(path)
+func (f *fakeMetaTagger) WriteTitleToFile(_ context.Context, src, title string) (string, error) {
+	_, statErr := os.Stat(src)
 	f.calls = append(f.calls, fakeMetaTaggerCall{
-		Path:             path,
+		Path:             src,
 		Title:            title,
 		SourceExistedYet: statErr == nil,
 	})
-	return f.err
+	if f.onCall != nil {
+		f.onCall()
+	}
+	if f.err != nil {
+		return "", f.err
+	}
+	// Mirror FFmpegTagger: a fresh sibling temp file, never a write to src.
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(src), ".mmtag-tmp-*"+filepath.Ext(src))
+	if err != nil {
+		return "", err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmp.Name())
+		return "", err
+	}
+	return tmp.Name(), nil
 }
 
 type osRenameTransferer struct{}
