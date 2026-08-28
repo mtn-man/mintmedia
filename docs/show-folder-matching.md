@@ -31,6 +31,32 @@ resolves to either a confident match or an explicit skip.
 | 4 (ambiguous) | The filename has no year, no year-qualified folder matched, and *multiple* other-qualifier folders exist | Skips the file and reports it -- won't guess which one is right |
 | 5 | Nothing matches at all | Creates a new plain `Show Name` folder |
 
+Rules 2 (create) and 5 are the only rules that create a folder. Both run one
+extra check first -- see below.
+
+## Possible-duplicate warning when creating a new folder
+
+Just before rule 2 (create) or rule 5 makes a folder that didn't exist
+before, mintmedia compares the show name against every existing Shows folder
+using a *fuzzy* key that ignores diacritics, punctuation, and case -- so
+`Pokemon` is seen as a possible match for `Pokémon`, and `Marvels Daredevil`
+for `Marvel's Daredevil`. Whole words are never ignored: `The Bear` and
+`Bear` stay distinct.
+
+If that turns up a match, mintmedia still creates the new folder exactly as
+the rule computed it, but also reports a warning naming the existing
+folder(s) it might be a spelling or encoding variant of, so you can merge
+them by hand if the match is real. A candidate is ignored when its folder
+name and the filename both carry an explicit year and those years differ --
+that's treated as a reboot or a genuinely different show, not a variant.
+
+This check only ever warns; it never changes which folder is used. That is
+weaker on purpose than the equivalent for movies, where a confident fuzzy
+match reroutes the file into the existing folder. Rerouting a show episode
+on a bad guess would file it under a different show entirely -- worse than
+leaving one movie unsorted -- so rules 1-4's exact-match routing is left
+completely untouched by this check.
+
 ## Examples
 
 - Shows has `Survivor (2000)/`. A file parses as `Survivor` with no year. →
@@ -51,3 +77,8 @@ resolves to either a confident match or an explicit skip.
   `Fringe (2008)/` (rule 2, create case: the filename has a year and nothing
   matched, so the new folder keeps that year rather than falling back to a
   plain `Fringe/`).
+- Shows has `Pokémon (1997)/`. A file parses as `Pokemon` with no year, and
+  nothing matches rules 1-4. → Creates a new plain `Pokemon/` folder (rule
+  5) *and* reports a warning that it may be a duplicate of `Pokémon (1997)/`,
+  so you can reconcile the two. The episode is still filed -- the folder is
+  created as computed, not rerouted.
