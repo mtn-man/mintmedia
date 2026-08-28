@@ -40,8 +40,15 @@ func platformDefaultConfig() []byte {
 }
 
 const (
-	// DefaultConfigPathRel is relative to the user's home directory.
-	DefaultConfigPathRel = ".config/mintmedia/config.toml"
+	// DefaultConfigSubpath is appended to the XDG config base directory
+	// ($XDG_CONFIG_HOME when set to an absolute path, otherwise ~/.config)
+	// to form the default config path.
+	DefaultConfigSubpath = "mintmedia/config.toml"
+
+	// DefaultConfigPathRel is the default config path relative to the user's
+	// home directory, used when $XDG_CONFIG_HOME is unset, empty, or not
+	// absolute.
+	DefaultConfigPathRel = ".config/" + DefaultConfigSubpath
 
 	// Defaults (opinionated for reliability).
 	defaultClipboardPollInterval = 250 * time.Millisecond
@@ -75,6 +82,8 @@ func (e *tomlSyntaxError) Unwrap() error {
 
 // Load reads TOML from disk, applies defaults, expands paths/env vars,
 // validates, and returns both the raw Config and a Resolved view.
+// An empty configPath selects the default location (see defaultConfigPath:
+// $XDG_CONFIG_HOME/mintmedia/config.toml, or ~/.config/mintmedia/config.toml).
 // The bool return value is true when no config file was found at the default
 // path and a fresh one was written from the embedded defaults.
 // An explicitly-provided configPath that does not exist is always an error.
@@ -128,7 +137,15 @@ func Load(configPath string) (*Config, *Resolved, bool, error) {
 	return &cfg, res, bootstrapped, nil
 }
 
+// defaultConfigPath returns the config path to use when no --config value was
+// given. Per the XDG Base Directory spec, $XDG_CONFIG_HOME is the base
+// directory for user config when it holds an absolute path; an unset, empty,
+// or relative value falls back to ~/.config. An explicit --config path is
+// handled by Load before this is ever called, so it always wins.
 func defaultConfigPath() (string, error) {
+	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" && filepath.IsAbs(xdg) {
+		return filepath.Join(xdg, DefaultConfigSubpath), nil
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve home dir: %w", err)

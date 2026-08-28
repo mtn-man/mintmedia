@@ -121,7 +121,7 @@ mintmedia [flags]
 
 ## Configuration
 
-The config file lives at `~/.config/mintmedia/config.toml` and is created automatically on first run.
+The config file lives at `~/.config/mintmedia/config.toml` (or under `$XDG_CONFIG_HOME` if you set it) and is created automatically on first run.
 
 **The settings you'll actually touch on day one:**
 

@@ -833,6 +833,7 @@ main_media_extensions = [".mkv"]
 func TestLoad_Bootstrap_CreatesFileWhenMissing(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", "") // exercise the ~/.config fallback regardless of the ambient env
 
 	cfg, res, bootstrapped, err := Load("")
 	if err != nil {
@@ -853,6 +854,7 @@ func TestLoad_Bootstrap_CreatesFileWhenMissing(t *testing.T) {
 func TestLoad_Bootstrap_ReportsCreatedDirs(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", "") // exercise the ~/.config fallback regardless of the ambient env
 
 	_, res, _, err := Load("")
 	if err != nil {
@@ -882,6 +884,7 @@ func TestLoad_Bootstrap_ReportsCreatedDirs(t *testing.T) {
 func TestLoad_Bootstrap_ConfigDirCreated(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", "") // exercise the ~/.config fallback regardless of the ambient env
 
 	if _, _, _, err := Load(""); err != nil {
 		t.Fatalf("Load() error: %v", err)
@@ -899,6 +902,7 @@ func TestLoad_Bootstrap_ConfigDirCreated(t *testing.T) {
 func TestLoad_Bootstrap_SecondLoadNotBootstrapped(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", root)
+	t.Setenv("XDG_CONFIG_HOME", "") // exercise the ~/.config fallback regardless of the ambient env
 
 	cfg1, _, bootstrapped1, err := Load("")
 	if err != nil {
@@ -917,6 +921,97 @@ func TestLoad_Bootstrap_SecondLoadNotBootstrapped(t *testing.T) {
 	}
 	if cfg1.Paths.DropFolder != cfg2.Paths.DropFolder {
 		t.Fatalf("drop folders differ: %q vs %q", cfg1.Paths.DropFolder, cfg2.Paths.DropFolder)
+	}
+}
+
+func TestLoad_Bootstrap_HonorsXDGConfigHome(t *testing.T) {
+	home := t.TempDir()
+	xdg := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+
+	_, res, bootstrapped, err := Load("")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !bootstrapped {
+		t.Fatal("expected bootstrapped=true")
+	}
+
+	wantPath := filepath.Join(xdg, DefaultConfigSubpath)
+	if res.ConfigPathAbs != wantPath {
+		t.Fatalf("ConfigPathAbs = %q, want %q (under $XDG_CONFIG_HOME)", res.ConfigPathAbs, wantPath)
+	}
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Fatalf("expected config file under $XDG_CONFIG_HOME at %s: %v", wantPath, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, DefaultConfigPathRel)); !os.IsNotExist(err) {
+		t.Fatalf("nothing should have been written under $HOME/.config, stat err = %v", err)
+	}
+}
+
+func TestLoad_Bootstrap_IgnoresRelativeXDGConfigHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// Per the XDG spec a non-absolute $XDG_CONFIG_HOME is invalid and ignored.
+	t.Setenv("XDG_CONFIG_HOME", "relative/config/dir")
+
+	_, res, _, err := Load("")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	wantPath := filepath.Join(home, DefaultConfigPathRel)
+	if res.ConfigPathAbs != wantPath {
+		t.Fatalf("ConfigPathAbs = %q, want the $HOME/.config fallback %q", res.ConfigPathAbs, wantPath)
+	}
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Fatalf("expected config file at the $HOME fallback %s: %v", wantPath, err)
+	}
+}
+
+func TestLoad_ExplicitConfigOverridesXDGConfigHome(t *testing.T) {
+	root := t.TempDir()
+	xdg := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+`, drop, state, movies, shows)
+	cfgPath := writeConfigFile(t, root, toml)
+
+	_, res, bootstrapped, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if bootstrapped {
+		t.Fatal("an explicit --config path must never bootstrap")
+	}
+	if res.ConfigPathAbs != cfgPath {
+		t.Fatalf("ConfigPathAbs = %q, want the explicit path %q", res.ConfigPathAbs, cfgPath)
+	}
+	if _, err := os.Stat(filepath.Join(xdg, "mintmedia")); !os.IsNotExist(err) {
+		t.Fatalf("explicit --config must not touch $XDG_CONFIG_HOME, stat err = %v", err)
 	}
 }
 

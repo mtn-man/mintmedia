@@ -56,7 +56,7 @@ func main() {
 	configPath := pflag.String(
 		"config",
 		"",
-		"Path to config.toml (default: ~/.config/mintmedia/config.toml)",
+		"Path to config.toml (default: $XDG_CONFIG_HOME/mintmedia/config.toml, else ~/.config/mintmedia/config.toml)",
 	)
 
 	// One-shot processor harness flags
@@ -93,7 +93,7 @@ func main() {
 		writeln("  -s, --status         Check whether the daemon is running (exit 0 = running, exit 3 = stopped)")
 		writeln("  -S, --stop           Gracefully stop the running daemon (exit 0 = stopped or not running, exit 1 = error)")
 		writeln("\nOther flags:")
-		writeln("  --config <path>      Path to config.toml (default: ~/.config/mintmedia/config.toml)")
+		writeln("  --config <path>      Path to config.toml (default: $XDG_CONFIG_HOME/mintmedia/config.toml, else ~/.config/mintmedia/config.toml)")
 		writeln("  -v, --verbose        Verbose startup output (prints config summary)")
 		writeln("  -V, --version        Show version and exit")
 		writeln("  -h, --help           Show help")
