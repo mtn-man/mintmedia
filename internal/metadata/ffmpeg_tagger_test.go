@@ -195,6 +195,77 @@ func TestFFmpegTagger_WriteTitle_FailureLeavesOriginalUntouchedAndCleansUp(t *te
 	}
 }
 
+// TestFFmpegTagger_WriteTitleToFile_ReturnsTempAndLeavesSourceUntouched
+// covers the contract Apply relies on for its atomic tag-then-move: the
+// remux lands in a returned sibling temp file, src is never written, and the
+// temp is left in place (the caller owns it) with media-server-readable
+// permissions already applied.
+func TestFFmpegTagger_WriteTitleToFile_ReturnsTempAndLeavesSourceUntouched(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "Get Smart (2008).mkv")
+	if err := os.WriteFile(src, []byte("original"), 0o644); err != nil {
+		t.Fatalf("seed original file: %v", err)
+	}
+
+	tagger := &FFmpegTagger{ffmpegPath: writeFakeFFmpeg(t, dir, true)}
+	tmp, err := tagger.WriteTitleToFile(context.Background(), src, "Get Smart (2008)")
+	if err != nil {
+		t.Fatalf("WriteTitleToFile: %v", err)
+	}
+	if tmp == "" || tmp == src {
+		t.Fatalf("returned temp path = %q, want a distinct sibling path", tmp)
+	}
+
+	if got, err := os.ReadFile(src); err != nil || string(got) != "original" {
+		t.Fatalf("src after WriteTitleToFile = %q (err %v), want it left untouched as %q", got, err, "original")
+	}
+	got, err := os.ReadFile(tmp)
+	if err != nil {
+		t.Fatalf("read returned temp: %v", err)
+	}
+	if string(got) != "tagged" {
+		t.Fatalf("temp contents = %q, want %q (fake ffmpeg output)", got, "tagged")
+	}
+	st, err := os.Stat(tmp)
+	if err != nil {
+		t.Fatalf("stat returned temp: %v", err)
+	}
+	if perm := st.Mode().Perm(); perm != 0o644 {
+		t.Fatalf("temp mode = %o, want 0644 (CreateTemp makes 0600; must restore group/other read before it lands in the library)", perm)
+	}
+	// The temp is the caller's to move or remove -- it must NOT be cleaned
+	// up here, unlike the failure path.
+	if leftover := leftoverTempFiles(t, dir); len(leftover) != 1 {
+		t.Fatalf("want exactly the one caller-owned temp file, got %v", leftover)
+	}
+}
+
+// TestFFmpegTagger_WriteTitleToFile_FailureReturnsEmptyAndCleansUp is the
+// failure-path mirror: an ffmpeg error yields "" and no leftover temp, and
+// src is untouched.
+func TestFFmpegTagger_WriteTitleToFile_FailureReturnsEmptyAndCleansUp(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "Get Smart (2008).mkv")
+	if err := os.WriteFile(src, []byte("original"), 0o644); err != nil {
+		t.Fatalf("seed original file: %v", err)
+	}
+
+	tagger := &FFmpegTagger{ffmpegPath: writeFakeFFmpeg(t, dir, false)}
+	tmp, err := tagger.WriteTitleToFile(context.Background(), src, "Get Smart (2008)")
+	if err == nil {
+		t.Fatalf("expected WriteTitleToFile to return an error")
+	}
+	if tmp != "" {
+		t.Fatalf("returned temp path = %q on failure, want \"\"", tmp)
+	}
+	if got, err := os.ReadFile(src); err != nil || string(got) != "original" {
+		t.Fatalf("src after failed WriteTitleToFile = %q (err %v), want %q", got, err, "original")
+	}
+	if leftover := leftoverTempFiles(t, dir); len(leftover) != 0 {
+		t.Fatalf("leftover temp file(s) after failure: %v", leftover)
+	}
+}
+
 // TestFFmpegTagger_WriteTitle_SetsPermissiveModeOnSuccess guards against the
 // permission regression os.CreateTemp introduces: it always creates the temp
 // file at mode 0600 regardless of umask, and WriteTitle must restore
