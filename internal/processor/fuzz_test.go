@@ -78,10 +78,17 @@ func FuzzDetectResolution(f *testing.F) {
 		default:
 			t.Errorf("detectResolution(%q) = %q, not a canonical bucket", raw, got)
 		}
-		// The stripper must be a no-op on any stem that doesn't end in a
-		// canonical " - <res>" suffix, and idempotent otherwise.
-		if s := stripTrailingResolution(raw); stripTrailingResolution(s) != s {
-			t.Errorf("stripTrailingResolution not idempotent for %q", raw)
+		// stripTrailingResolution only ever chops a suffix: the result is a
+		// prefix of the input, and it is a no-op unless the input ends in a
+		// canonical " - <res>" token (the one shape append_resolution
+		// produces -- it is deliberately not idempotent on a hand-stacked
+		// " - 1080p - 720p" tail, which the feature never creates).
+		stripped := stripTrailingResolution(raw)
+		if len(stripped) > len(raw) || raw[:len(stripped)] != stripped {
+			t.Errorf("stripTrailingResolution(%q) = %q, not a prefix of the input", raw, stripped)
+		}
+		if !reTrailingResolution.MatchString(raw) && stripped != raw {
+			t.Errorf("stripTrailingResolution(%q) = %q, want a no-op (no trailing canonical suffix)", raw, stripped)
 		}
 	})
 }
