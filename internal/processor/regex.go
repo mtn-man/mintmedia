@@ -75,4 +75,29 @@ var (
 	// "Spider-Man"). Used to preserve compound-word hyphens while stripping
 	// separator hyphens during release-name cleaning.
 	reWordHyphen = regexp.MustCompile(`\b-\b`)
+
+	// reResolutionSep collapses every run of non-alphanumeric characters to a
+	// single space. detectResolution normalizes with this first so tokens that
+	// share one separator ("720p.1080p") are both visible and \b works
+	// regardless of the original delimiter (dot, underscore, bracket).
+	reResolutionSep = regexp.MustCompile(`[^0-9A-Za-z]+`)
+
+	// Matches an explicit "NNNNp" resolution token (run against a
+	// separator-normalized string), e.g. "1080p", "2160P". Used by
+	// detectResolution -- see name.go.
+	reResolution = regexp.MustCompile(`(?i)\b(480|576|720|1080|1440|2160)p\b`)
+
+	// Matches the "4k"/"uhd" resolution aliases. Only consulted when no
+	// explicit reResolution token is present, so a redundant "2160p 4K UHD"
+	// still yields a single "2160p".
+	reResolution4K = regexp.MustCompile(`(?i)\b(4k|uhd)\b`)
+
+	// Matches a "WxH" pixel-dimension pair, e.g. "1920x1080", "3840x2160". The
+	// 3-4 digit groups keep it clear of "NxNN" season/episode tokens.
+	reResolutionDims = regexp.MustCompile(`(?i)\b(\d{3,4})x(\d{3,4})\b`)
+
+	// Matches a trailing " - <res>" qualifier appended by the append_resolution
+	// feature (canonical buckets only), used to recover the resolution-free
+	// radix during duplicate detection -- see stripTrailingResolution.
+	reTrailingResolution = regexp.MustCompile(`(?i)\s+-\s+(480|576|720|1080|1440|2160)p$`)
 )

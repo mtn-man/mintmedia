@@ -21,6 +21,8 @@ var defaultMediaTagBlacklist = []string{
 	"1080p",
 	"720p",
 	"480p",
+	"4k",
+	"uhd",
 	"x265",
 	"x264",
 	"hevc",
@@ -255,6 +257,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		AssociatedFileExtensions: append([]string(nil), cfg.Media.AssociatedFileExtensions...),
 
 		MediaTagBlacklist: resolveMediaTagBlacklist(cfg.Naming.MediaTagBlacklist),
+		AppendResolution:  cfg.Naming.AppendResolution,
 
 		AutoCleanupCompletedTorrents: cfg.Torrent.AutoCleanupCompletedTorrents,
 

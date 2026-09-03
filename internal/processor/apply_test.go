@@ -1052,6 +1052,49 @@ func TestApply_MetadataTagger_DestinationClaimedDuringRemux_LeavesSourceUntouche
 	}
 }
 
+// TestApply_MetadataTagger_TitleTagStaysResolutionFree covers the
+// append_resolution interaction: the moved filename carries the " - <res>"
+// suffix, but the embedded container title tag is written from
+// pl.MetadataTitle (resolution-free).
+func TestApply_MetadataTagger_TitleTagStaysResolutionFree(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorAppendResolution(t)
+	p.xfer = &osRenameTransferer{}
+
+	tagger := &fakeMetaTagger{}
+	p.metaTagger = tagger
+
+	mainSrc := filepath.Join(p.cfg.DropFolder, "Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, mainSrc, strings.Repeat("m", 64))
+
+	pl, err := planOne(t, p, mainSrc)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.DestRadix != "Get Smart (2008) - 1080p" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Get Smart (2008) - 1080p")
+	}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 || !results[0].Applied {
+		t.Fatalf("expected 1 applied result, got %+v", results)
+	}
+
+	if len(tagger.calls) != 1 {
+		t.Fatalf("expected 1 WriteTitleToFile call, got %d", len(tagger.calls))
+	}
+	if got := tagger.calls[0].Title; got != "Get Smart (2008)" {
+		t.Fatalf("WriteTitleToFile title = %q, want resolution-free %q", got, "Get Smart (2008)")
+	}
+	wantDest := filepath.Join(p.cfg.MoviesDir, "Get Smart (2008)", "Get Smart (2008) - 1080p.mkv")
+	if _, err := os.Stat(wantDest); err != nil {
+		t.Fatalf("expected moved file at %q: %v", wantDest, err)
+	}
+}
+
 // leftoverTagTempFiles returns any metadata-tagging temp-file names still
 // present in dir, so tests can assert the retitled remux is cleaned up on
 // both the move-succeeded and duplicate-skip paths.

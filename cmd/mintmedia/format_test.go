@@ -85,6 +85,37 @@ func TestPrintPlan_NoDuplicateLineWhenNotDuplicate(t *testing.T) {
 	}
 }
 
+func TestPrintPlan_ResolutionLine(t *testing.T) {
+	pl := processor.Plan{
+		Category:       processor.CategoryMovie,
+		MainSourcePath: "/tmp/drop/Interstellar.2014.1080p.BluRay.mkv",
+		DestMainPath:   "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv",
+		DestRadix:      "Interstellar (2014) - 1080p",
+		MovieTitle:     "Interstellar (2014)",
+		Resolution:     "1080p",
+	}
+
+	out := captureStdout(t, func() { printPlan(pl) })
+	if !strings.Contains(out, "Resolution:   1080p") {
+		t.Fatalf("expected a Resolution line in plan output, got:\n%s", out)
+	}
+}
+
+func TestPrintPlan_NoResolutionLineWhenEmpty(t *testing.T) {
+	pl := processor.Plan{
+		Category:       processor.CategoryMovie,
+		MainSourcePath: "/tmp/drop/Interstellar.2014.BluRay.mkv",
+		DestMainPath:   "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014).mkv",
+		DestRadix:      "Interstellar (2014)",
+		MovieTitle:     "Interstellar (2014)",
+	}
+
+	out := captureStdout(t, func() { printPlan(pl) })
+	if strings.Contains(out, "Resolution:") {
+		t.Fatalf("expected no Resolution line in plan output, got:\n%s", out)
+	}
+}
+
 func TestProcessDropSummaryLine(t *testing.T) {
 	tests := []struct {
 		name string

@@ -46,9 +46,14 @@ Before producing a clean title, mintmedia strips:
 - Bracketed release-group tags: `[EZTVx.to]`, `[YTS]`
 - Leading website-ad prefixes: `www.UIndex.org - `, `EZTVx.to - `
 - Resolution/codec/source tags from `media_tag_blacklist` in your config --
-  `2160p`, `1080p`, `x264`, `x265`, `hevc`, `web-dl`, `bluray`, `hdtv`, `aac`,
-  `dts`, `atmos`, and similar. This list is documented in full, and is
-  additive to your own config -- see `config.example.toml`.
+  `2160p`, `1080p`, `4k`, `uhd`, `x264`, `x265`, `hevc`, `web-dl`, `bluray`,
+  `hdtv`, `aac`, `dts`, `atmos`, and similar. This list is documented in full,
+  and is additive to your own config -- see `config.example.toml`.
+
+With `append_resolution = true`, the resolution is still stripped from the
+title here, then re-appended to the final sorted name as a ` - <res>` suffix
+(e.g. `Movie (2020) - 1080p.mkv`). See
+[Configuration](configuration.md#keeping-the-resolution-in-the-filename).
 
 Hyphens that look like compound words (`X-Men`, `Spider-Man`) are preserved;
 separator hyphens elsewhere become spaces. The resulting title is title-cased,

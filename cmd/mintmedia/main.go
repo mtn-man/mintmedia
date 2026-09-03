@@ -340,6 +340,7 @@ func newGoProcessor(res *config.Resolved, logger logging.Logger) (processor.Proc
 		MainMediaExtensions:      res.MainMediaExtensions,
 		AssociatedFileExtensions: res.AssociatedFileExtensions,
 		MediaTagBlacklist:        res.MediaTagBlacklist,
+		AppendResolution:         res.AppendResolution,
 	}
 
 	xfer := transfer.NewRenameOrCopy(transfer.Options{

@@ -94,6 +94,12 @@ associated_file_extensions = [".srt", ".sub", ".ass", ".idx", ".vtt"]
 # replacement for them.
 media_tag_blacklist = []
 
+# When true, re-append the resolution detected from the source filename to the
+# sorted name as a " - <res>" suffix, e.g. "Movie (2020) - 1080p.mkv" /
+# "Show (2020) - S01E02 - 1080p.mkv". The movie folder name stays unchanged.
+# Off by default.
+append_resolution = false
+
 [torrent]
 # Keep the section present for discoverability, but default it OFF.
 enabled = false

@@ -2479,3 +2479,192 @@ func TestPlan_Duplicate_ShowFuzzy_DifferentYearsNoAction(t *testing.T) {
 		t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2020")
 	}
 }
+
+// --- append_resolution -----------------------------------------------------
+
+// TestPlan_AppendResolution_MovieSuffix covers the movie branch: the detected
+// resolution is appended to DestRadix / DestMainPath, the containing folder
+// stays resolution-free, and MetadataTitle keeps the tag-facing name clean.
+func TestPlan_AppendResolution_MovieSuffix(t *testing.T) {
+	p := newTestProcessorAppendResolution(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.1080p.BluRay.x265-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Resolution != "1080p" {
+		t.Fatalf("Resolution = %q, want %q", pl.Resolution, "1080p")
+	}
+	if pl.DestRadix != "Interstellar (2014) - 1080p" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Interstellar (2014) - 1080p")
+	}
+	if pl.MetadataTitle != "Interstellar (2014)" {
+		t.Fatalf("MetadataTitle = %q, want %q", pl.MetadataTitle, "Interstellar (2014)")
+	}
+	wantDir := filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)")
+	if pl.DestDir != wantDir {
+		t.Fatalf("DestDir = %q, want %q (folder must stay resolution-free)", pl.DestDir, wantDir)
+	}
+	if got := filepath.Base(pl.DestMainPath); got != "Interstellar (2014) - 1080p.mkv" {
+		t.Fatalf("DestMainPath base = %q, want %q", got, "Interstellar (2014) - 1080p.mkv")
+	}
+}
+
+// TestPlan_AppendResolution_ShowSuffix covers the show branch, including the
+// redundant "2160p 4K UHD" case collapsing to a single token.
+func TestPlan_AppendResolution_ShowSuffix(t *testing.T) {
+	p := newTestProcessorAppendResolution(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Breaking.Bad.S03E07.2160p.4K.UHD.WEB-DL.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Resolution != "2160p" {
+		t.Fatalf("Resolution = %q, want %q", pl.Resolution, "2160p")
+	}
+	if pl.DestRadix != "Breaking Bad - S03E07 - 2160p" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Breaking Bad - S03E07 - 2160p")
+	}
+	if pl.MetadataTitle != "Breaking Bad - S03E07" {
+		t.Fatalf("MetadataTitle = %q, want %q", pl.MetadataTitle, "Breaking Bad - S03E07")
+	}
+	if got := filepath.Base(pl.DestMainPath); got != "Breaking Bad - S03E07 - 2160p.mkv" {
+		t.Fatalf("DestMainPath base = %q, want %q", got, "Breaking Bad - S03E07 - 2160p.mkv")
+	}
+}
+
+// TestPlan_AppendResolution_OffLeavesNameUnchanged confirms the toggle-off
+// path is byte-for-byte identical to today even when a resolution is present
+// in the source name (it is still detected, just not appended).
+func TestPlan_AppendResolution_OffLeavesNameUnchanged(t *testing.T) {
+	p := newTestProcessor(t) // AppendResolution not set
+
+	src := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.1080p.BluRay.x265-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Resolution != "1080p" {
+		t.Fatalf("Resolution = %q, want %q (still detected)", pl.Resolution, "1080p")
+	}
+	if pl.DestRadix != "Interstellar (2014)" {
+		t.Fatalf("DestRadix = %q, want unchanged %q", pl.DestRadix, "Interstellar (2014)")
+	}
+	if got := filepath.Base(pl.DestMainPath); got != "Interstellar (2014).mkv" {
+		t.Fatalf("DestMainPath base = %q, want %q", got, "Interstellar (2014).mkv")
+	}
+}
+
+// TestPlan_AppendResolution_Duplicate_SameResolution: a re-download at the
+// same resolution as the library copy is still a duplicate.
+func TestPlan_AppendResolution_Duplicate_SameResolution(t *testing.T) {
+	p := newTestProcessorAppendResolution(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.1080p.BluRay.mkv")
+	writeFile(t, src, "dummy")
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014) - 1080p.mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true")
+	}
+}
+
+// TestPlan_AppendResolution_Duplicate_DifferentResolution: the locked
+// decision -- a re-download at a *different* resolution is still skipped, and
+// DuplicateMatchPath names the actual on-disk file.
+func TestPlan_AppendResolution_Duplicate_DifferentResolution(t *testing.T) {
+	p := newTestProcessorAppendResolution(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.1080p.BluRay.mkv")
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014) - 2160p.mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true (different-resolution re-download still a duplicate)")
+	}
+	if pl.DuplicateMatchPath != existing {
+		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, existing)
+	}
+}
+
+// TestPlan_AppendResolution_Duplicate_UntaggedExisting: a library file with
+// no resolution suffix (e.g. sorted before the toggle was enabled) still
+// matches an incoming tagged copy.
+func TestPlan_AppendResolution_Duplicate_UntaggedExisting(t *testing.T) {
+	p := newTestProcessorAppendResolution(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.1080p.BluRay.mkv")
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014).mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true (untagged existing file)")
+	}
+	if pl.DuplicateMatchPath != existing {
+		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, existing)
+	}
+}
+
+// TestPlan_AppendResolution_Duplicate_ShowDifferentResolution mirrors the
+// movie different-resolution case for the show branch.
+func TestPlan_AppendResolution_Duplicate_ShowDifferentResolution(t *testing.T) {
+	p := newTestProcessorAppendResolution(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.1080p.HEVC.x265.mkv")
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01 - 720p.mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.Duplicate {
+		t.Fatalf("Duplicate = false, want true")
+	}
+	if pl.DuplicateMatchPath != existing {
+		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, existing)
+	}
+}
+
+// TestPlan_AppendResolution_Duplicate_DifferentEpisodeNotFlagged ensures the
+// directory scan doesn't false-positive against an unrelated sibling. Uses
+// the show branch, which (unlike movies) has no fuzzy folder-name fallback to
+// muddy the assertion.
+func TestPlan_AppendResolution_Duplicate_DifferentEpisodeNotFlagged(t *testing.T) {
+	p := newTestProcessorAppendResolution(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E02.1080p.HEVC.x265.mkv")
+	writeFile(t, src, "dummy")
+	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01 - 1080p.mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Duplicate {
+		t.Fatalf("Duplicate = true, want false (different episode)")
+	}
+}

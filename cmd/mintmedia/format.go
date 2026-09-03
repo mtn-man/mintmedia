@@ -42,6 +42,9 @@ func printPlanBody(pl processor.Plan) {
 	fmt.Printf("DestMain:     %s\n", pl.DestMainPath)
 	fmt.Printf("DestDir:      %s\n", pl.DestDir)
 	fmt.Printf("DestRadix:    %s\n", pl.DestRadix)
+	if pl.Resolution != "" {
+		fmt.Printf("Resolution:   %s\n", pl.Resolution)
+	}
 
 	if pl.Category == processor.CategoryMovie {
 		fmt.Printf("MovieTitle:   %s\n", pl.MovieTitle)
