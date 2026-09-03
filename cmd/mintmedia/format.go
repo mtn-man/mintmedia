@@ -42,7 +42,12 @@ func printPlanBody(pl processor.Plan) {
 	fmt.Printf("DestMain:     %s\n", pl.DestMainPath)
 	fmt.Printf("DestDir:      %s\n", pl.DestDir)
 	fmt.Printf("DestRadix:    %s\n", pl.DestRadix)
-	if pl.Resolution != "" {
+	// Only surface the detected resolution when append_resolution actually
+	// folded it into the sorted name -- i.e. DestRadix carries the " - <res>"
+	// suffix. It is detected on every plan regardless of the setting, so
+	// printing it unconditionally would imply an effect the toggle-off path
+	// doesn't have.
+	if pl.Resolution != "" && strings.HasSuffix(pl.DestRadix, " - "+pl.Resolution) {
 		fmt.Printf("Resolution:   %s\n", pl.Resolution)
 	}
 
