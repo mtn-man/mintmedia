@@ -64,6 +64,18 @@ type Plan struct {
 	DestRadix    string // base filename without extension used for main and associated files
 	DestMainPath string // full destination path for the main file (DestDir + DestRadix + MainExt)
 
+	// Resolution is the release resolution detected from the source filename
+	// (e.g. "1080p"), or "" when none was found or detection is disabled. When
+	// Config.AppendResolution is set it is appended to DestRadix as a
+	// " - <res>" suffix.
+	Resolution string
+
+	// MetadataTitle is the resolution-free destination radix used for the
+	// embedded container "title" tag, so an enabled AppendResolution doesn't
+	// push a "- 1080p" suffix into file metadata. Empty on plans built before
+	// this field existed; Apply falls back to DestRadix then.
+	MetadataTitle string
+
 	// Associated files to move (if any)
 	Associated []Move
 
@@ -185,6 +197,11 @@ type Config struct {
 	// Naming: patterns used to strip junk tags from release names.
 	// These are regex patterns expressed as strings (ideally compiled once during processor init).
 	MediaTagBlacklist []string
+
+	// AppendResolution, when true, appends a detected release resolution to the
+	// sorted filename radix as a " - <res>" suffix (e.g. "Movie (2020) - 1080p").
+	// Off by default; see naming.append_resolution.
+	AppendResolution bool
 }
 
 // NoMainMediaFoundError wraps ErrNoMainMediaFound and carries depth context.

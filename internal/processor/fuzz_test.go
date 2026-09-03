@@ -54,3 +54,34 @@ func FuzzParseMovieFromName(f *testing.F) {
 		}
 	})
 }
+
+func FuzzDetectResolution(f *testing.F) {
+	seeds := []string{
+		"Interstellar.2014.1080p.BluRay.x265-GROUP.mkv",
+		"Movie.2014.2160p.4K.UHD.BluRay.x265.mkv",
+		"Show.S01E01.720p.1080p.WEB.mkv",
+		"Movie.2020.3840x2160.mkv",
+		"[1080p] some_release_1920x1080",
+		"4k",
+		"1080p1080p1080p",
+		"",
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, raw string) {
+		got := detectResolution(raw)
+		switch got {
+		case "", "480p", "576p", "720p", "1080p", "1440p", "2160p":
+			// canonical output only
+		default:
+			t.Errorf("detectResolution(%q) = %q, not a canonical bucket", raw, got)
+		}
+		// The stripper must be a no-op on any stem that doesn't end in a
+		// canonical " - <res>" suffix, and idempotent otherwise.
+		if s := stripTrailingResolution(raw); stripTrailingResolution(s) != s {
+			t.Errorf("stripTrailingResolution not idempotent for %q", raw)
+		}
+	})
+}

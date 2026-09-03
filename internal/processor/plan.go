@@ -431,6 +431,15 @@ func planForMain(
 	pl.MainExt = strings.ToLower(filepath.Ext(mainPath))
 	pl.MainBaseName = filepath.Base(mainPath)
 
+	// Detect the release resolution from the raw filename (falling back to the
+	// input folder name) before any release-tag cleanup strips the token. This
+	// is recorded unconditionally; it is only appended to DestRadix below when
+	// p.cfg.AppendResolution is set.
+	pl.Resolution = detectResolution(pl.MainBaseName)
+	if pl.Resolution == "" {
+		pl.Resolution = detectResolution(filepath.Base(pl.InputPath))
+	}
+
 	// --- Phase: Classify -- determine category (Movies vs Shows) ---------
 	cat := normalizeCategory(req.CategoryHint)
 	if cat == "" {
@@ -494,11 +503,15 @@ func planForMain(
 			displayShowName = fmt.Sprintf("%s (%s)", canonicalShowName, resolvedYear)
 		}
 		pl.DestRadix = fmt.Sprintf("%s - S%02dE%s", displayShowName, season, padEpisode(episode))
+		pl.MetadataTitle = pl.DestRadix
+		if p.cfg.AppendResolution && pl.Resolution != "" {
+			pl.DestRadix = pl.DestRadix + " - " + pl.Resolution
+		}
 
 		pl.DestDir = filepath.Join(p.cfg.ShowsDir, showFolder, seasonFolder)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
-		if err := checkExactDuplicate(&pl); err != nil {
+		if err := checkDuplicate(p, &pl, pl.MetadataTitle); err != nil {
 			return Plan{}, err
 		}
 
@@ -533,10 +546,16 @@ func planForMain(
 		// fuzzy title/year fallback that catches diacritic/punctuation
 		// variants and near-miss year mismatches an exact stat can't see.
 		pl.DestRadix = pl.MovieTitle
+		pl.MetadataTitle = pl.MovieTitle
+		if p.cfg.AppendResolution && pl.Resolution != "" {
+			pl.DestRadix = pl.DestRadix + " - " + pl.Resolution
+		}
+		// The movie folder name stays resolution-free (pl.MovieTitle); only the
+		// file inside it carries the suffix.
 		pl.DestDir = filepath.Join(p.cfg.MoviesDir, pl.MovieTitle)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
-		if err := checkExactDuplicate(&pl); err != nil {
+		if err := checkDuplicate(p, &pl, pl.MovieTitle); err != nil {
 			return Plan{}, err
 		}
 		if !pl.Duplicate {
@@ -581,6 +600,58 @@ func planForMain(
 	pl.Associated = assoc
 
 	return pl, nil
+}
+
+// checkDuplicate runs the appropriate duplicate check for pl's destination.
+// With append_resolution off it is the plain exact-path stat; with it on it is
+// the resolution-aware directory scan. preSuffixRadix is the DestRadix value
+// before any " - <res>" suffix was appended (pl.MovieTitle for movies,
+// "Show (Year) - S01E02" for shows).
+func checkDuplicate(p *processorImpl, pl *Plan, preSuffixRadix string) error {
+	if p.cfg.AppendResolution {
+		return checkDuplicateWithResolution(pl, preSuffixRadix)
+	}
+	return checkExactDuplicate(pl)
+}
+
+// checkDuplicateWithResolution is the append_resolution-aware counterpart to
+// checkExactDuplicate. It scans pl.DestDir for an existing file belonging to
+// the same movie/episode as pl, ignoring any " - <res>" qualifier on either
+// side, and sets pl.Duplicate (plus pl.DuplicateMatchPath, the real on-disk
+// path) on a hit. Comparing against preSuffixRadix rather than the
+// resolution-qualified DestMainPath is what makes a re-download at a
+// *different* resolution -- or an untagged copy of an already-tagged file --
+// still register as a duplicate. One directory read covers all three cases
+// (same-res re-drop, different-res re-drop, pre-toggle untagged file).
+func checkDuplicateWithResolution(pl *Plan, preSuffixRadix string) error {
+	ents, err := os.ReadDir(pl.DestDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if transfer.IsDestinationUnavailable(err) {
+			return &DestinationUnavailableError{Category: pl.Category, Err: err}
+		}
+		return fmt.Errorf("readdir destination: %w", err)
+	}
+
+	for _, ent := range ents {
+		if ent.IsDir() {
+			continue
+		}
+		name := ent.Name()
+		ext := filepath.Ext(name)
+		if !strings.EqualFold(ext, pl.MainExt) {
+			continue
+		}
+		stem := stripTrailingResolution(strings.TrimSuffix(name, ext))
+		if strings.EqualFold(stem, preSuffixRadix) {
+			pl.Duplicate = true
+			pl.DuplicateMatchPath = filepath.Join(pl.DestDir, name)
+			return nil
+		}
+	}
+	return nil
 }
 
 // checkExactDuplicate stats pl.DestMainPath and sets pl.Duplicate on a

@@ -471,6 +471,71 @@ func findYear(raw string) string {
 	return ""
 }
 
+// canonicalResolutions lists the resolution buckets detectResolution emits, in
+// ascending order. Used to rank multiple "NNNNp" tokens and to bucket a "WxH"
+// dimension pair by its height.
+var canonicalResolutions = []int{480, 576, 720, 1080, 1440, 2160}
+
+// detectResolution extracts a release resolution from raw and returns it in
+// canonical "<height>p" form (e.g. "1080p"), or "" when none is found.
+//
+// raw must be a *pre-cleanup* name: cleanReleaseName and the media-tag
+// blacklist both delete these tokens on the way to a clean title, so callers
+// pass the untouched basename.
+//
+// An explicit "NNNNp" token is authoritative. "4k"/"uhd" and a "WxH" pair are
+// lossy aliases, consulted only when no "NNNNp" token is present -- so a
+// redundant "2160p 4K UHD" collapses to a single "2160p" and a contradictory
+// "1080p 4K" keeps the explicit "1080p". When more than one distinct "NNNNp"
+// token appears (a malformed name), the highest wins.
+func detectResolution(raw string) string {
+	norm := reResolutionSep.ReplaceAllString(raw, " ")
+
+	if ms := reResolution.FindAllStringSubmatch(norm, -1); len(ms) > 0 {
+		best := 0
+		for _, m := range ms {
+			if n := atoiSafe(m[1]); n > best {
+				best = n
+			}
+		}
+		if best > 0 {
+			return fmt.Sprintf("%dp", best)
+		}
+	}
+
+	if reResolution4K.MatchString(norm) {
+		return "2160p"
+	}
+
+	if m := reResolutionDims.FindStringSubmatch(norm); m != nil {
+		if b := heightToBucket(atoiSafe(m[2])); b > 0 {
+			return fmt.Sprintf("%dp", b)
+		}
+	}
+
+	return ""
+}
+
+// heightToBucket maps a pixel height to the largest canonical resolution
+// bucket that does not exceed it (e.g. 2160 -> 2160, 1200 -> 1080), or 0 when
+// the height is below the smallest bucket.
+func heightToBucket(h int) int {
+	bucket := 0
+	for _, c := range canonicalResolutions {
+		if h >= c {
+			bucket = c
+		}
+	}
+	return bucket
+}
+
+// stripTrailingResolution removes a trailing " - <res>" qualifier (as appended
+// by the append_resolution feature) from a filename stem, leaving the
+// resolution-free radix. A stem without such a suffix is returned unchanged.
+func stripTrailingResolution(stem string) string {
+	return reTrailingResolution.ReplaceAllString(stem, "")
+}
+
 func titleCaseSimple(s string) string {
 	// Title casing with explicit acronym preservation.
 	// Only roman numerals, "US" (context-sensitive), and the acronyms allowlist are kept uppercase.

@@ -93,24 +93,32 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	// logging a spurious "applied" history event for formats the tagger
 	// never touches, without needing a second sentinel-error return path.
 	mainSource := pl.MainSourcePath
+	// The embedded container "title" tag uses the resolution-free radix, so an
+	// enabled append_resolution never pushes a "- 1080p" suffix into metadata.
+	// MetadataTitle is empty on plans built before that field existed -- fall
+	// back to DestRadix then.
+	titleTag := pl.MetadataTitle
+	if titleTag == "" {
+		titleTag = pl.DestRadix
+	}
 	taggedTmp := ""
 	if p.metaTagger != nil && metadata.SupportsExtension(pl.MainExt) {
 		if _, statErr := os.Stat(pl.DestMainPath); statErr != nil {
 			logConsoleInfo(p, logging.EventProcessorMetadataTitleWriteStarted,
 				fmt.Sprintf("TAGGING  metadata title for %s (might take a moment)...", filepath.Base(pl.MainSourcePath)),
-				logging.Fields{"path": pl.MainSourcePath, "title": pl.DestRadix})
-			tmp, err := p.metaTagger.WriteTitleToFile(ctx, pl.MainSourcePath, pl.DestRadix)
+				logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
+			tmp, err := p.metaTagger.WriteTitleToFile(ctx, pl.MainSourcePath, titleTag)
 			if err != nil {
 				logConsoleWarn(p, logging.EventProcessorMetadataTitleWriteFailed,
 					fmt.Sprintf("WARNING  metadata title tag not updated for %s", filepath.Base(pl.MainSourcePath)),
-					err, logging.Fields{"path": pl.MainSourcePath, "title": pl.DestRadix})
+					err, logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
 				logWarnHistoryOnly(p, logging.EventProcessorMetadataTitleWriteFailed, err,
-					logging.Fields{"path": pl.MainSourcePath, "title": pl.DestRadix})
+					logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
 			} else {
 				taggedTmp = tmp
 				mainSource = tmp
 				logInfoHistoryOnly(p, logging.EventProcessorMetadataTitleWriteApplied, logging.Fields{
-					"path": pl.MainSourcePath, "title": pl.DestRadix,
+					"path": pl.MainSourcePath, "title": titleTag,
 				})
 			}
 		}
