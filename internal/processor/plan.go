@@ -511,7 +511,7 @@ func planForMain(
 		pl.DestDir = filepath.Join(p.cfg.ShowsDir, showFolder, seasonFolder)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
-		if err := checkDuplicate(p, &pl, pl.MetadataTitle); err != nil {
+		if err := checkDuplicate(p, &pl); err != nil {
 			return Plan{}, err
 		}
 
@@ -555,7 +555,7 @@ func planForMain(
 		pl.DestDir = filepath.Join(p.cfg.MoviesDir, pl.MovieTitle)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
-		if err := checkDuplicate(p, &pl, pl.MovieTitle); err != nil {
+		if err := checkDuplicate(p, &pl); err != nil {
 			return Plan{}, err
 		}
 		if !pl.Duplicate {
@@ -604,12 +604,12 @@ func planForMain(
 
 // checkDuplicate runs the appropriate duplicate check for pl's destination.
 // With append_resolution off it is the plain exact-path stat; with it on it is
-// the resolution-aware directory scan. preSuffixRadix is the DestRadix value
-// before any " - <res>" suffix was appended (pl.MovieTitle for movies,
-// "Show (Year) - S01E02" for shows).
-func checkDuplicate(p *processorImpl, pl *Plan, preSuffixRadix string) error {
+// the resolution-aware directory scan, which compares on pl.MetadataTitle --
+// the resolution-free radix ("Show (Year) - S01E02" for shows, pl.MovieTitle
+// for movies), always set by the caller before this runs.
+func checkDuplicate(p *processorImpl, pl *Plan) error {
 	if p.cfg.AppendResolution {
-		return checkDuplicateWithResolution(pl, preSuffixRadix)
+		return checkDuplicateWithResolution(pl)
 	}
 	return checkExactDuplicate(pl)
 }
@@ -618,12 +618,13 @@ func checkDuplicate(p *processorImpl, pl *Plan, preSuffixRadix string) error {
 // checkExactDuplicate. It scans pl.DestDir for an existing file belonging to
 // the same movie/episode as pl, ignoring any " - <res>" qualifier on either
 // side, and sets pl.Duplicate (plus pl.DuplicateMatchPath, the real on-disk
-// path) on a hit. Comparing against preSuffixRadix rather than the
-// resolution-qualified DestMainPath is what makes a re-download at a
-// *different* resolution -- or an untagged copy of an already-tagged file --
-// still register as a duplicate. One directory read covers all three cases
-// (same-res re-drop, different-res re-drop, pre-toggle untagged file).
-func checkDuplicateWithResolution(pl *Plan, preSuffixRadix string) error {
+// path) on a hit. Comparing against pl.MetadataTitle (the resolution-free
+// radix) rather than the resolution-qualified DestMainPath is what makes a
+// re-download at a *different* resolution -- or an untagged copy of an
+// already-tagged file -- still register as a duplicate. One directory read
+// covers all three cases (same-res re-drop, different-res re-drop, pre-toggle
+// untagged file).
+func checkDuplicateWithResolution(pl *Plan) error {
 	ents, err := os.ReadDir(pl.DestDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -645,7 +646,7 @@ func checkDuplicateWithResolution(pl *Plan, preSuffixRadix string) error {
 			continue
 		}
 		stem := stripTrailingResolution(strings.TrimSuffix(name, ext))
-		if strings.EqualFold(stem, preSuffixRadix) {
+		if strings.EqualFold(stem, pl.MetadataTitle) {
 			pl.Duplicate = true
 			pl.DuplicateMatchPath = filepath.Join(pl.DestDir, name)
 			return nil
