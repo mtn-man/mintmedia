@@ -543,3 +543,40 @@ func waitForSignal(t *testing.T, ch <-chan struct{}, reason string) {
 		t.Fatalf("timed out waiting for %s", reason)
 	}
 }
+
+// TestMove_NormalizesFileModeOnRenamePath guards the regression that made a
+// library file's permissions depend on filesystem topology: os.Rename preserves
+// the source's mode, so a drop file written 0600 (a torrent client running under
+// a strict umask, as another user, or in a container with its own umask) used to
+// land in the library still 0600 -- unreadable by the media server -- while the
+// cross-device copy path produced 0644 from its fresh temp.
+func TestMove_NormalizesFileModeOnRenamePath(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.mkv")
+	dst := filepath.Join(dir, "lib", "Get Smart (2008).mkv")
+
+	if err := os.WriteFile(src, []byte("payload"), 0o600); err != nil {
+		t.Fatalf("seed source: %v", err)
+	}
+	// Confirm the fixture really is restrictive, so a passing assertion below
+	// can't be an artifact of a permissive umask.
+	if st, err := os.Stat(src); err != nil {
+		t.Fatalf("stat source: %v", err)
+	} else if perm := st.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("source fixture mode = %o, want 0600", perm)
+	}
+
+	// Same directory tree, so Move takes the same-device rename path.
+	if err := (&RenameOrCopy{}).Move(context.Background(), src, dst); err != nil {
+		t.Fatalf("Move: %v", err)
+	}
+
+	st, err := os.Stat(dst)
+	if err != nil {
+		t.Fatalf("stat destination: %v", err)
+	}
+	if perm := st.Mode().Perm(); perm != LibraryFileMode {
+		t.Fatalf("destination mode = %o, want %o -- a renamed file must not keep the source's restrictive mode",
+			perm, LibraryFileMode)
+	}
+}

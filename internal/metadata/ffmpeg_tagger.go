@@ -129,10 +129,11 @@ func (t *FFmpegTagger) WriteTitleToFile(ctx context.Context, src, title string) 
 		return "", fmt.Errorf("ffmpeg: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 
-	// Restore the permissive mode CreateTemp doesn't grant (it always
-	// creates at 0600) so the media server can still read the tagged file
-	// once it lands in the library -- matches transfer.copyThenReplace's
-	// identical chmod before its own atomic rename.
+	// Restore the permissive mode CreateTemp doesn't grant (it always creates
+	// at 0600), so the returned temp is readable in its own right rather than
+	// only after transfer.Move normalizes it -- WriteTitleToFile's contract is
+	// that the caller receives a file ready to use, and not every caller has to
+	// be Apply.
 	_ = os.Chmod(tmp, 0o644) //nolint:gosec // library files need group+other read for the media server
 
 	ok = true

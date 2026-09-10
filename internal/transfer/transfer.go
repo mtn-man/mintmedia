@@ -27,6 +27,16 @@ func IsDestinationUnavailable(err error) bool {
 		errors.Is(err, fs.ErrPermission)
 }
 
+// LibraryFileMode is the mode every file mintmedia moves into the library ends
+// up with: group and other need read so a media server running as a different
+// user can read it.
+//
+// Move applies it once, after the move, rather than each path applying its own.
+// os.Rename preserves the source file's mode while the copy path builds a fresh
+// temp, so without a single shared step the resulting permission would depend on
+// whether src and dst happen to share a filesystem.
+const LibraryFileMode = 0o644
+
 // ErrDestinationExists is wrapped into the error Move returns when it
 // refuses to overwrite an existing destination file.
 var ErrDestinationExists = errors.New("destination already exists")
@@ -132,13 +142,19 @@ func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 		return err
 	}
 	if !same {
-		return t.copyThenReplace(ctx, src, dst)
+		if err := t.copyThenReplace(ctx, src, dst); err != nil {
+			return err
+		}
+	} else {
+		// Same device: try rename, return any error without fallback.
+		if err := os.Rename(src, dst); err != nil {
+			return err
+		}
 	}
 
-	// Same device: try rename, return any error without fallback.
-	if err := os.Rename(src, dst); err != nil {
-		return err
-	}
+	// Best-effort: the file is already in the library, so a failed chmod is not
+	// worth failing an otherwise-successful move over.
+	_ = os.Chmod(dst, LibraryFileMode) //nolint:gosec // deliberate: see LibraryFileMode
 	return nil
 }
 
@@ -290,9 +306,6 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 		_ = os.Remove(tmp)
 		return fmt.Errorf("close temp file: %w", closeErr)
 	}
-
-	// Set final file permissions before atomic rename.
-	_ = os.Chmod(tmp, 0o644) //nolint:gosec // library files need group+other read for the media server
 
 	// Atomic finalize on destination filesystem
 	if err := os.Rename(tmp, dst); err != nil {
