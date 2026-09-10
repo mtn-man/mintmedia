@@ -181,12 +181,12 @@ func normalizeFolderKey(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// splitShowFolderTitleYear strips a trailing "(YYYY)" qualifier from a
-// folder name if present, treating any other qualifier (e.g. "(UK)") as
-// part of the base title rather than a year signal -- unlike
-// parseShowFolderYear, which discards the base entirely for a non-year
-// qualifier, this is only used for fuzzy-title comparison, where the title
-// portion should still be compared regardless of qualifier type.
+// splitShowFolderTitleYear splits a folder name into its title and a trailing
+// "(YYYY)" year, dropping any other qualifier rather than returning it as a
+// year -- "The Office (UK)" compares as "The Office". Safe only because this
+// feeds findFuzzyShowFolderMatches, which just warns; routing keeps qualified
+// folders distinct via normalizeFolderKey and tryQualifiedFallback.
+// findFuzzyMovieMatches deliberately does not use it -- see the note there.
 func splitShowFolderTitleYear(name string) (base, year string) {
 	base, qualifier, ok := parseShowFolderQualifier(name)
 	if !ok {
