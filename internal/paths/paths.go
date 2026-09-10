@@ -105,3 +105,19 @@ func DirWritable(dir string) bool {
 	_ = os.Remove(name)
 	return true
 }
+
+// SharedDirMode is the permission mode for every directory mintmedia creates
+// for its own operation: group and other need read+execute so a media server
+// running as a different user can traverse the library, and the state and
+// history directories stay consistent with it.
+//
+// Directories holding user configuration or trashed files are deliberately
+// private at 0o700 and must not use this.
+const SharedDirMode = 0o755
+
+// MkdirShared creates dir and any missing parents at SharedDirMode. It is the
+// single place that permission decision is made, so the reasoning lives with
+// the constant above rather than being restated at each call site.
+func MkdirShared(dir string) error {
+	return os.MkdirAll(dir, SharedDirMode) //nolint:gosec // deliberate: see SharedDirMode
+}

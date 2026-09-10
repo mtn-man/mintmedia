@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/mtn-man/mintmedia/internal/paths"
 )
 
 // ConsoleSink writes human-facing operational messages without prefixes.
@@ -61,7 +63,7 @@ func (s *HistorySink) Write(entry Entry) (retErr error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil { //nolint:gosec // state dir stays 0o755 for consistency with the shared mkdirTracked call
+	if err := paths.MkdirShared(filepath.Dir(s.path)); err != nil {
 		return fmt.Errorf("create history dir: %w", err)
 	}
 	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644) //nolint:gosec // history.jsonl isn't credential-sensitive

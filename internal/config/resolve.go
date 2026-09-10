@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mtn-man/mintmedia/internal/logging"
+	"github.com/mtn-man/mintmedia/internal/paths"
 )
 
 // defaultMediaTagBlacklist is the built-in set of release-tag patterns
@@ -205,7 +206,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 			if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
 				createdDirs = append(createdDirs, dir)
 			}
-			if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // library/state dirs need group+other read for the media server
+			if err := paths.MkdirShared(dir); err != nil {
 				errs = append(errs, fmt.Errorf("failed to create directory %q: %w", dir, err))
 			}
 		}
