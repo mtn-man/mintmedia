@@ -1,5 +1,7 @@
 .DS_Store
 CLAUDE.md
+# In-progress design/complexity audit worklist -- untracked for now
+design-audit-worklist.md
 .gocache/
 .gomodcache/
 # Go build artifacts
