@@ -51,10 +51,9 @@ func (w *tailWriter) String() string {
 // tag by shelling out to ffmpeg. It remuxes (stream copy, no re-encode) into
 // a fresh temp file in the same directory as the source, so a failure at any
 // point leaves the source completely untouched. WriteTitleToFile hands that
-// temp file back to the caller (Apply moves it straight into the library);
-// WriteTitle is the in-place variant that atomically renames the temp over
-// the source -- the same same-filesystem-then-atomic-rename pattern
-// transfer.RenameOrCopy uses.
+// temp file back to the caller, which owns it: Apply moves that file into the
+// library and removes the original, which is what makes the tag and the move
+// a single step rather than two independently-failable ones.
 type FFmpegTagger struct {
 	ffmpegPath string
 }
@@ -138,20 +137,4 @@ func (t *FFmpegTagger) WriteTitleToFile(ctx context.Context, src, title string) 
 
 	ok = true
 	return tmp, nil
-}
-
-// WriteTitle rewrites src's container title metadata tag to title in place,
-// via a remux into a sibling temp file (WriteTitleToFile) followed by an
-// atomic rename over src. A failure at any point leaves src completely
-// untouched.
-func (t *FFmpegTagger) WriteTitle(ctx context.Context, src, title string) error {
-	tmp, err := t.WriteTitleToFile(ctx, src, title)
-	if err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, src); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("rename temp file to destination: %w", err)
-	}
-	return nil
 }
