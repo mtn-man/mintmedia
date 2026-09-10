@@ -47,6 +47,11 @@ func findFuzzyMovieMatches(moviesDir, incomingTitle, incomingYear string) (tier1
 			continue
 		}
 		name := entry.Name()
+		// Not splitShowFolderTitleYear, deliberately: a non-year qualifier stays
+		// part of the base, so "Blade Runner (Final Cut)" does not match an
+		// incoming "Blade Runner". Stripping it would leave both sides year-less,
+		// classify as yearMatchAgree, and skip a film the library does not have.
+		// Shows can strip because a fuzzy hit there only warns.
 		base, folderYear, ok := parseShowFolderYear(name)
 		if !ok {
 			base, folderYear = name, ""
