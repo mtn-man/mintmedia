@@ -139,7 +139,7 @@ func tryQualifiedFallback(p *processorImpl, showsDir, showName string, otherQual
 		folder = otherQualifiedFolders[0]
 		logWarn(p, logging.EventProcessorShowFolderQualifiedGuess,
 			fmt.Sprintf("using best-effort match for %q: existing folder %q has an unrecognized qualifier", showName, folder),
-			nil, logging.Fields{"path": showsDir, "folder": folder})
+			nil, logging.Fields{"path": showsDir, "show": showName, "folder": folder})
 		return folder, true, nil
 	default:
 		msg := fmt.Sprintf("WARNING  multiple show folders match %q with unrecognized qualifiers: %s; skipping", showName, strings.Join(otherQualifiedFolders, ", "))
