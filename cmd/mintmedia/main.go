@@ -53,6 +53,10 @@ func die(err error, code int) {
 }
 
 func main() {
+	// Before anything can create a file or directory: a library the media
+	// server cannot read is a silent failure of the tool's whole purpose.
+	relaxUmaskForLibraryAccess()
+
 	configPath := pflag.String(
 		"config",
 		"",
