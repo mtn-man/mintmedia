@@ -184,7 +184,8 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 				"movies_dir":   p.cfg.MoviesDir,
 				"incoming":     pl.DestRadix,
 				"folder":       pl.DestDir,
-				"existing_res": existing,
+				"existing":     existing,
+				"existing_res": detectResolution(existing),
 			})
 	}
 

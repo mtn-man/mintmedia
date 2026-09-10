@@ -707,10 +707,22 @@ func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 	if v == movieDupReview && !p.firstSkipWarning(pl.InputPath) {
 		return
 	}
+	// warn names an existing library file: the resolution-tagged copy for a
+	// review hold (matchPath), the untagged sibling for a sort-along (where
+	// matchPath is empty because nothing is being skipped). Carry it as a field
+	// so the history record stands on its own without the message text.
+	existing := matchPath
+	if existing == "" {
+		existing = sc.untaggedSiblingPath
+	}
+	// Stem, not basename: "existing" pairs with "incoming" (pl.DestRadix), and
+	// both sides of that pair are in sorted-name form.
+	existingStem := strings.TrimSuffix(filepath.Base(existing), filepath.Ext(existing))
 	logWarn(p, logging.EventProcessorMovieDuplicateNotice, warn, nil, logging.Fields{
 		"movies_dir":      p.cfg.MoviesDir,
 		"incoming":        pl.DestRadix,
 		"folder":          pl.DestDir,
+		"existing":        existingStem,
 		"held_for_review": v == movieDupReview,
 	})
 }
