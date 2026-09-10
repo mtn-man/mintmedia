@@ -15,7 +15,7 @@ var supportedExtensions = map[string]struct{}{
 }
 
 // SupportsExtension reports whether ext (including its leading dot) is a
-// container format WriteTitle knows how to remux. An unsupported extension
+// container format WriteTitleToFile knows how to remux. An unsupported extension
 // (e.g. ".avi", ".ts") is an expected, normal case, not a failure -- callers
 // should skip silently rather than attempt the rewrite.
 func SupportsExtension(ext string) bool {

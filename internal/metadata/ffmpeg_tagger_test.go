@@ -13,11 +13,11 @@ import (
 )
 
 // writeFakeFFmpeg writes a tiny POSIX shell script standing in for ffmpeg,
-// so the temp-file-then-rename bookkeeping in WriteTitle can be tested
-// without invoking a real ffmpeg binary. When succeed is true, it writes
-// "tagged" to its last argument (the temp output path WriteTitle builds) and
-// exits 0; otherwise it exits 1 without touching that path, mimicking an
-// ffmpeg failure.
+// so the temp-file bookkeeping in WriteTitleToFile can be tested without
+// invoking a real ffmpeg binary. When succeed is true, it writes "tagged" to
+// its last argument (the temp output path WriteTitleToFile builds) and exits
+// 0; otherwise it exits 1 without touching that path, mimicking an ffmpeg
+// failure.
 func writeFakeFFmpeg(t *testing.T, dir string, succeed bool) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -57,9 +57,9 @@ func writeArgRecordingFakeFFmpeg(t *testing.T, dir, recordPath string) string {
 	return path
 }
 
-// leftoverTempFiles returns any WriteTitle temp-file names still present in
-// dir, so tests can assert cleanup happened on both the success and failure
-// paths.
+// leftoverTempFiles returns any WriteTitleToFile temp-file names still
+// present in dir, so tests can assert cleanup happened on the failure path
+// and that the caller-owned temp survives on the success path.
 func leftoverTempFiles(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -111,11 +111,11 @@ func TestTailWriter_SingleWriteLargerThanMaxKeepsTail(t *testing.T) {
 	}
 }
 
-// TestFFmpegTagger_WriteTitle_BoundsCapturedStderrOnFailure guards against
-// the memory-usage bug this fix addresses directly: a chatty failing ffmpeg
-// must not make WriteTitle's returned error balloon with the subprocess's
-// entire stderr output.
-func TestFFmpegTagger_WriteTitle_BoundsCapturedStderrOnFailure(t *testing.T) {
+// TestFFmpegTagger_WriteTitleToFile_BoundsCapturedStderrOnFailure guards
+// against the memory-usage bug this fix addresses directly: a chatty failing
+// ffmpeg must not make WriteTitleToFile's returned error balloon with the
+// subprocess's entire stderr output.
+func TestFFmpegTagger_WriteTitleToFile_BoundsCapturedStderrOnFailure(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "Get Smart (2008).mkv")
 	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
@@ -138,60 +138,12 @@ func TestFFmpegTagger_WriteTitle_BoundsCapturedStderrOnFailure(t *testing.T) {
 	}
 
 	tagger := &FFmpegTagger{ffmpegPath: scriptPath}
-	err := tagger.WriteTitle(context.Background(), path, "Get Smart (2008)")
+	_, err := tagger.WriteTitleToFile(context.Background(), path, "Get Smart (2008)")
 	if err == nil {
-		t.Fatalf("expected WriteTitle to return an error")
+		t.Fatalf("expected WriteTitleToFile to return an error")
 	}
 	if got := len(err.Error()); got > maxCapturedStderr+1024 {
 		t.Fatalf("error message is %d bytes, want bounded near maxCapturedStderr=%d", got, maxCapturedStderr)
-	}
-}
-
-func TestFFmpegTagger_WriteTitle_SuccessRenamesOverOriginal(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "Get Smart (2008).mkv")
-	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
-		t.Fatalf("seed original file: %v", err)
-	}
-
-	tagger := &FFmpegTagger{ffmpegPath: writeFakeFFmpeg(t, dir, true)}
-	if err := tagger.WriteTitle(context.Background(), path, "Get Smart (2008)"); err != nil {
-		t.Fatalf("WriteTitle: %v", err)
-	}
-
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read path after WriteTitle: %v", err)
-	}
-	if string(got) != "tagged" {
-		t.Fatalf("path contents = %q, want %q (fake ffmpeg output renamed into place)", got, "tagged")
-	}
-	if tmp := leftoverTempFiles(t, dir); len(tmp) != 0 {
-		t.Fatalf("leftover temp file(s) after success: %v", tmp)
-	}
-}
-
-func TestFFmpegTagger_WriteTitle_FailureLeavesOriginalUntouchedAndCleansUp(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "Get Smart (2008).mkv")
-	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
-		t.Fatalf("seed original file: %v", err)
-	}
-
-	tagger := &FFmpegTagger{ffmpegPath: writeFakeFFmpeg(t, dir, false)}
-	if err := tagger.WriteTitle(context.Background(), path, "Get Smart (2008)"); err == nil {
-		t.Fatalf("expected WriteTitle to return an error")
-	}
-
-	got, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read path after failed WriteTitle: %v", err)
-	}
-	if string(got) != "original" {
-		t.Fatalf("original file was modified on ffmpeg failure: got %q", got)
-	}
-	if tmp := leftoverTempFiles(t, dir); len(tmp) != 0 {
-		t.Fatalf("leftover temp file(s) after failure: %v", tmp)
 	}
 }
 
@@ -230,6 +182,11 @@ func TestFFmpegTagger_WriteTitleToFile_ReturnsTempAndLeavesSourceUntouched(t *te
 	if err != nil {
 		t.Fatalf("stat returned temp: %v", err)
 	}
+	// os.CreateTemp always creates at 0600 regardless of umask. Restoring
+	// group/other read here is what keeps the tagged file readable once Apply
+	// moves it into the library -- without it every tagged file silently
+	// becomes unreadable by a media server running as another user (the same
+	// class of fix already applied to library destination dirs).
 	if perm := st.Mode().Perm(); perm != 0o644 {
 		t.Fatalf("temp mode = %o, want 0644 (CreateTemp makes 0600; must restore group/other read before it lands in the library)", perm)
 	}
@@ -266,39 +223,12 @@ func TestFFmpegTagger_WriteTitleToFile_FailureReturnsEmptyAndCleansUp(t *testing
 	}
 }
 
-// TestFFmpegTagger_WriteTitle_SetsPermissiveModeOnSuccess guards against the
-// permission regression os.CreateTemp introduces: it always creates the temp
-// file at mode 0600 regardless of umask, and WriteTitle must restore
-// group/other read before renaming it over the original, or every tagged
-// file silently becomes unreadable by a media server running as another
-// user (the same class of fix already applied to library destination dirs).
-func TestFFmpegTagger_WriteTitle_SetsPermissiveModeOnSuccess(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "Get Smart (2008).mkv")
-	if err := os.WriteFile(path, []byte("original"), 0o644); err != nil {
-		t.Fatalf("seed original file: %v", err)
-	}
-
-	tagger := &FFmpegTagger{ffmpegPath: writeFakeFFmpeg(t, dir, true)}
-	if err := tagger.WriteTitle(context.Background(), path, "Get Smart (2008)"); err != nil {
-		t.Fatalf("WriteTitle: %v", err)
-	}
-
-	st, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("stat path after WriteTitle: %v", err)
-	}
-	if perm := st.Mode().Perm(); perm != 0o644 {
-		t.Fatalf("mode after WriteTitle = %o, want 0644 (os.CreateTemp creates at 0600; WriteTitle must restore group/other read)", perm)
-	}
-}
-
-// TestFFmpegTagger_WriteTitle_LongFilenameDoesNotExceedNameLimit guards
+// TestFFmpegTagger_WriteTitleToFile_LongFilenameDoesNotExceedNameLimit guards
 // against ENAMETOOLONG: the temp filename must not be built from the
 // (possibly very long, scene-release-style) original basename, since
 // appending a temp suffix on top of an already-long name can exceed common
 // filesystem filename-length limits.
-func TestFFmpegTagger_WriteTitle_LongFilenameDoesNotExceedNameLimit(t *testing.T) {
+func TestFFmpegTagger_WriteTitleToFile_LongFilenameDoesNotExceedNameLimit(t *testing.T) {
 	dir := t.TempDir()
 	longBase := strings.Repeat("A.Very.Long.Scene.Release.Name.With.Many.Tags-", 4) + "GROUP"
 	path := filepath.Join(dir, longBase+".mkv")
@@ -310,15 +240,18 @@ func TestFFmpegTagger_WriteTitle_LongFilenameDoesNotExceedNameLimit(t *testing.T
 	}
 
 	tagger := &FFmpegTagger{ffmpegPath: writeFakeFFmpeg(t, dir, true)}
-	if err := tagger.WriteTitle(context.Background(), path, "New Title (2008)"); err != nil {
-		t.Fatalf("WriteTitle failed for long filename %q (%d bytes): %v", filepath.Base(path), len(filepath.Base(path)), err)
+	tmp, err := tagger.WriteTitleToFile(context.Background(), path, "New Title (2008)")
+	if err != nil {
+		t.Fatalf("WriteTitleToFile failed for long filename %q (%d bytes): %v", filepath.Base(path), len(filepath.Base(path)), err)
 	}
+	// The temp is caller-owned on success.
+	defer func() { _ = os.Remove(tmp) }()
 }
 
-// TestFFmpegTagger_WriteTitle_MovflagsGatedByContainer guards against
+// TestFFmpegTagger_WriteTitleToFile_MovflagsGatedByContainer guards against
 // passing the mov/mp4/m4v-only -movflags use_metadata_tags option to a
 // muxer it doesn't apply to (matroska has no use for it).
-func TestFFmpegTagger_WriteTitle_MovflagsGatedByContainer(t *testing.T) {
+func TestFFmpegTagger_WriteTitleToFile_MovflagsGatedByContainer(t *testing.T) {
 	tests := []struct {
 		ext      string
 		wantFlag bool
@@ -338,9 +271,11 @@ func TestFFmpegTagger_WriteTitle_MovflagsGatedByContainer(t *testing.T) {
 			recordPath := filepath.Join(dir, "args.txt")
 
 			tagger := &FFmpegTagger{ffmpegPath: writeArgRecordingFakeFFmpeg(t, dir, recordPath)}
-			if err := tagger.WriteTitle(context.Background(), path, "Get Smart (2008)"); err != nil {
-				t.Fatalf("WriteTitle: %v", err)
+			tmp, err := tagger.WriteTitleToFile(context.Background(), path, "Get Smart (2008)")
+			if err != nil {
+				t.Fatalf("WriteTitleToFile: %v", err)
 			}
+			defer func() { _ = os.Remove(tmp) }()
 
 			recorded, err := os.ReadFile(recordPath)
 			if err != nil {
@@ -354,11 +289,14 @@ func TestFFmpegTagger_WriteTitle_MovflagsGatedByContainer(t *testing.T) {
 	}
 }
 
-// TestFFmpegTagger_WriteTitle_Integration exercises the real ffmpeg command
-// end to end against a tiny synthetic fixture generated on the fly (rather
-// than a committed binary sample), skipping when ffmpeg/ffprobe aren't
-// available in the test environment.
-func TestFFmpegTagger_WriteTitle_Integration(t *testing.T) {
+// TestFFmpegTagger_WriteTitleToFile_Integration exercises the real ffmpeg
+// command end to end against a tiny synthetic fixture generated on the fly
+// (rather than a committed binary sample), skipping when ffmpeg/ffprobe
+// aren't available in the test environment. It is the only place the
+// never-modify-src contract is proved against real ffmpeg rather than the
+// shell-script stand-in, so it checks both sides: the returned temp carries
+// the new title, and src still carries its original one.
+func TestFFmpegTagger_WriteTitleToFile_Integration(t *testing.T) {
 	ffmpegPath, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		t.Skip("ffmpeg not found on PATH")
@@ -371,9 +309,10 @@ func TestFFmpegTagger_WriteTitle_Integration(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "sample.mp4")
 
+	const staleTitle = "Stale Embedded Title"
 	gen := exec.Command(ffmpegPath, //nolint:gosec // ffmpegPath resolved via exec.LookPath, args are fixed test fixture args
 		"-f", "lavfi", "-i", "testsrc=duration=1:size=64x64:rate=1",
-		"-metadata", "title=Stale Embedded Title",
+		"-metadata", "title="+staleTitle,
 		"-y", src,
 	)
 	var genStderr bytes.Buffer
@@ -388,21 +327,32 @@ func TestFFmpegTagger_WriteTitle_Integration(t *testing.T) {
 	}
 
 	const wantTitle = "Get Smart (2008)"
-	if err := tagger.WriteTitle(context.Background(), src, wantTitle); err != nil {
-		t.Fatalf("WriteTitle: %v", err)
+	tmp, err := tagger.WriteTitleToFile(context.Background(), src, wantTitle)
+	if err != nil {
+		t.Fatalf("WriteTitleToFile: %v", err)
+	}
+	// The temp is caller-owned on success -- Apply would move it into the
+	// library; here the test is responsible for removing it.
+	defer func() { _ = os.Remove(tmp) }()
+
+	probeTitle := func(path string) string {
+		t.Helper()
+		out, err := exec.Command(ffprobePath, //nolint:gosec // ffprobePath resolved via exec.LookPath, args are fixed test fixture args
+			"-v", "error",
+			"-show_entries", "format_tags=title",
+			"-of", "default=nw=1:nk=1",
+			path,
+		).Output()
+		if err != nil {
+			t.Fatalf("ffprobe %q: %v", path, err)
+		}
+		return strings.TrimSpace(string(out))
 	}
 
-	out, err := exec.Command(ffprobePath, //nolint:gosec // ffprobePath resolved via exec.LookPath, args are fixed test fixture args
-		"-v", "error",
-		"-show_entries", "format_tags=title",
-		"-of", "default=nw=1:nk=1",
-		src,
-	).Output()
-	if err != nil {
-		t.Fatalf("ffprobe: %v", err)
+	if got := probeTitle(tmp); got != wantTitle {
+		t.Fatalf("temp title tag = %q, want %q", got, wantTitle)
 	}
-	got := strings.TrimSpace(string(out))
-	if got != wantTitle {
-		t.Fatalf("title tag = %q, want %q", got, wantTitle)
+	if got := probeTitle(src); got != staleTitle {
+		t.Fatalf("src title tag = %q, want it left untouched as %q -- WriteTitleToFile must never modify src", got, staleTitle)
 	}
 }

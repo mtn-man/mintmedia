@@ -764,7 +764,7 @@ func TestApply_MetadataTagger_WriteTitleCalledBeforeMove(t *testing.T) {
 }
 
 // TestApply_MetadataTagger_WriteTitleErrorIsNonFatal covers the non-blocking
-// contract: a WriteTitle failure must log and continue, never prevent the
+// contract: a WriteTitleToFile failure must log and continue, never prevent the
 // main-media move or flip Result.Applied to false.
 func TestApply_MetadataTagger_WriteTitleErrorIsNonFatal(t *testing.T) {
 	t.Parallel()
@@ -790,10 +790,10 @@ func TestApply_MetadataTagger_WriteTitleErrorIsNonFatal(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
 	if !results[0].Applied {
-		t.Fatalf("Applied = false, want true -- a WriteTitle failure must not block the move")
+		t.Fatalf("Applied = false, want true -- a WriteTitleToFile failure must not block the move")
 	}
 	if len(tagger.calls) != 1 {
-		t.Fatalf("expected 1 WriteTitle call, got %d", len(tagger.calls))
+		t.Fatalf("expected 1 WriteTitleToFile call, got %d", len(tagger.calls))
 	}
 	if _, err := os.Stat(pl.DestMainPath); err != nil {
 		t.Fatalf("main media should still have been moved despite the tag failure: %v", err)
@@ -801,7 +801,7 @@ func TestApply_MetadataTagger_WriteTitleErrorIsNonFatal(t *testing.T) {
 }
 
 // TestApply_MetadataTagger_WriteTitleFailure_EmitsConsoleWarn mirrors
-// TestApply_AssociatedMoveFailure_EmitsConsoleWarn: a WriteTitle failure must
+// TestApply_AssociatedMoveFailure_EmitsConsoleWarn: a WriteTitleToFile failure must
 // actually reach the console, not just get swallowed as a silent no-op.
 func TestApply_MetadataTagger_WriteTitleFailure_EmitsConsoleWarn(t *testing.T) {
 	t.Parallel()
@@ -895,7 +895,7 @@ func TestApply_MetadataTagger_NilTaggerNeverCalled(t *testing.T) {
 
 // TestApply_MetadataTagger_UnsupportedExtensionSkipsCall covers the
 // extension-allowlist gate: an unsupported container (.avi here) is an
-// expected, normal case that must skip WriteTitle silently, not attempt and
+// expected, normal case that must skip WriteTitleToFile silently, not attempt and
 // fail it.
 func TestApply_MetadataTagger_UnsupportedExtensionSkipsCall(t *testing.T) {
 	t.Parallel()
@@ -924,7 +924,7 @@ func TestApply_MetadataTagger_UnsupportedExtensionSkipsCall(t *testing.T) {
 		t.Fatalf("expected 1 applied result, got %+v", results)
 	}
 	if len(tagger.calls) != 0 {
-		t.Fatalf("expected no WriteTitle calls for an unsupported extension, got %d", len(tagger.calls))
+		t.Fatalf("expected no WriteTitleToFile calls for an unsupported extension, got %d", len(tagger.calls))
 	}
 }
 
@@ -979,7 +979,7 @@ func TestApply_MetadataTagger_SkipsWriteTitleWhenDestinationClaimedConcurrently(
 	}
 
 	if len(tagger.calls) != 0 {
-		t.Fatalf("expected no WriteTitle calls when the destination is already claimed, got %d", len(tagger.calls))
+		t.Fatalf("expected no WriteTitleToFile calls when the destination is already claimed, got %d", len(tagger.calls))
 	}
 	got, err := os.ReadFile(mainSrc)
 	if err != nil {
