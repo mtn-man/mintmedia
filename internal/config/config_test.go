@@ -1216,7 +1216,7 @@ main_media_extensions = [".mkv"]
 	}
 }
 
-func TestLoad_AppendResolution_DefaultsFalse(t *testing.T) {
+func TestLoad_ResolutionAware_DefaultsFalse(t *testing.T) {
 	root := t.TempDir()
 	drop := filepath.Join(root, "drop")
 	state := filepath.Join(root, "state")
@@ -1247,12 +1247,12 @@ main_media_extensions = [".mkv"]
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if res.AppendResolution {
-		t.Fatalf("AppendResolution = true, want false when naming.append_resolution is omitted")
+	if res.ResolutionAware {
+		t.Fatalf("ResolutionAware = true, want false when naming.resolution_aware is omitted")
 	}
 }
 
-func TestLoad_AppendResolution_CanBeEnabled(t *testing.T) {
+func TestLoad_ResolutionAware_CanBeEnabled(t *testing.T) {
 	root := t.TempDir()
 	drop := filepath.Join(root, "drop")
 	state := filepath.Join(root, "state")
@@ -1278,7 +1278,7 @@ auto_create_missing_dirs = true
 main_media_extensions = [".mkv"]
 
 [naming]
-append_resolution = true
+resolution_aware = true
 `, drop, state, movies, shows)
 
 	cfgPath := writeConfigFile(t, root, toml)
@@ -1286,8 +1286,8 @@ append_resolution = true
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if !res.AppendResolution {
-		t.Fatalf("AppendResolution = false, want true")
+	if !res.ResolutionAware {
+		t.Fatalf("ResolutionAware = false, want true")
 	}
 }
 

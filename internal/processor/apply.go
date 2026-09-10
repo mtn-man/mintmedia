@@ -94,7 +94,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	// never touches, without needing a second sentinel-error return path.
 	mainSource := pl.MainSourcePath
 	// The embedded container "title" tag uses the resolution-free radix, so an
-	// enabled append_resolution never pushes a "- 1080p" suffix into metadata.
+	// enabled resolution_aware never pushes a "- 1080p" suffix into metadata.
 	// MetadataTitle is empty on plans built before that field existed -- fall
 	// back to DestRadix then.
 	titleTag := pl.MetadataTitle
@@ -169,6 +169,23 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		"dst":      pl.DestMainPath,
 		"category": string(pl.Category),
 	})
+
+	if !pl.Duplicate && pl.AlongsidePath != "" {
+		// resolution_aware different-resolution add: the move landed next to an
+		// existing copy of this film at another resolution. mintmedia keeps
+		// both -- surface it (now, past tense, because the move happened) so the
+		// user can prune if they'd rather not. Plan sets AlongsidePath; --plan
+		// shows it there without reaching this Apply-only line.
+		existing := strings.TrimSuffix(filepath.Base(pl.AlongsidePath), filepath.Ext(pl.AlongsidePath))
+		logInfo(p, logging.EventProcessorMovieDuplicateNotice,
+			fmt.Sprintf("sorted %s alongside existing %s", pl.DestRadix, existing),
+			logging.Fields{
+				"movies_dir":   p.cfg.MoviesDir,
+				"incoming":     pl.DestRadix,
+				"folder":       pl.DestDir,
+				"existing_res": existing,
+			})
+	}
 
 	// Move associated files best-effort
 	assocFailedCount := 0
@@ -283,13 +300,21 @@ func skipDuplicateResult(p *processorImpl, pl Plan, duplicateSkippedByInput map[
 	if matchPath == "" {
 		matchPath = pl.DestMainPath
 	}
+	// pl.DuplicateReview is only ever set by planMovieResolutionAware, which
+	// also sets pl.Duplicate -- so a review plan short-circuits at the
+	// pl.Duplicate guard in applyOne and never reaches the TOCTOU downgrade
+	// caller. Here it just selects the wording.
 	reason := fmt.Sprintf("already in library: %s", matchPath)
+	if pl.DuplicateReview {
+		reason = fmt.Sprintf("untagged release, possible duplicate of %s -- left for review", matchPath)
+	}
 	logInfoHistoryOnly(p, logging.EventProcessorInputSkippedDuplicate, logging.Fields{
-		"input_path": pl.InputPath,
-		"dest_path":  pl.DestMainPath,
-		"match_path": matchPath,
+		"input_path":      pl.InputPath,
+		"dest_path":       pl.DestMainPath,
+		"match_path":      matchPath,
+		"held_for_review": pl.DuplicateReview,
 	})
-	return Result{Plan: pl, Applied: false, Handled: true, Reason: reason}
+	return Result{Plan: pl, Applied: false, Handled: true, Reason: reason, NeedsReview: pl.DuplicateReview}
 }
 
 func handleCleanupError(p *processorImpl, err error, kind, src, dst string) bool {

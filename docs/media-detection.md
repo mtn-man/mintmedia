@@ -50,7 +50,7 @@ Before producing a clean title, mintmedia strips:
   `hdtv`, `aac`, `dts`, `atmos`, and similar. This list is documented in full,
   and is additive to your own config -- see `config.example.toml`.
 
-With `append_resolution = true`, the resolution is still stripped from the
+With `resolution_aware = true`, the resolution is still stripped from the
 title here, then re-appended to the final sorted name as a ` - <res>` suffix
 (e.g. `Movie (2020) - 1080p.mkv`). See
 [Configuration](configuration.md#keeping-the-resolution-in-the-filename).

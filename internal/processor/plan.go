@@ -434,7 +434,7 @@ func planForMain(
 	// Detect the release resolution from the raw filename (falling back to the
 	// input folder name) before any release-tag cleanup strips the token. This
 	// is recorded unconditionally; it is only appended to DestRadix below when
-	// p.cfg.AppendResolution is set.
+	// p.cfg.ResolutionAware is set.
 	pl.Resolution = detectResolution(pl.MainBaseName)
 	if pl.Resolution == "" {
 		pl.Resolution = detectResolution(filepath.Base(pl.InputPath))
@@ -504,7 +504,7 @@ func planForMain(
 		}
 		pl.DestRadix = fmt.Sprintf("%s - S%02dE%s", displayShowName, season, padEpisode(episode))
 		pl.MetadataTitle = pl.DestRadix
-		if p.cfg.AppendResolution && pl.Resolution != "" {
+		if p.cfg.ResolutionAware && pl.Resolution != "" {
 			pl.DestRadix = pl.DestRadix + " - " + pl.Resolution
 		}
 
@@ -542,12 +542,12 @@ func planForMain(
 		}
 
 		// --- Phase: BuildPlan (movie) -- compute destination paths, then
-		// duplicate detection: exact path first (cheap fast path), then a
-		// fuzzy title/year fallback that catches diacritic/punctuation
-		// variants and near-miss year mismatches an exact stat can't see.
+		// duplicate detection. With resolution_aware off this is the exact-path
+		// check plus a fuzzy title/year folder fallback; with it on, movies run
+		// planMovieResolutionAware instead (resolution is part of identity).
 		pl.DestRadix = pl.MovieTitle
 		pl.MetadataTitle = pl.MovieTitle
-		if p.cfg.AppendResolution && pl.Resolution != "" {
+		if p.cfg.ResolutionAware && pl.Resolution != "" {
 			pl.DestRadix = pl.DestRadix + " - " + pl.Resolution
 		}
 		// The movie folder name stays resolution-free (pl.MovieTitle); only the
@@ -555,36 +555,42 @@ func planForMain(
 		pl.DestDir = filepath.Join(p.cfg.MoviesDir, pl.MovieTitle)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
-		if err := checkDuplicate(p, &pl); err != nil {
-			return Plan{}, err
-		}
-		if !pl.Duplicate {
-			tier1, tier2, err := findFuzzyMovieMatches(p.cfg.MoviesDir, title, year)
-			if err != nil {
+		if p.cfg.ResolutionAware {
+			if err := planMovieResolutionAware(p, &pl, title, year); err != nil {
 				return Plan{}, err
 			}
-			if len(tier1) > 0 {
-				pl.Duplicate = true
-				matchFolder := tier1[0].folder
-				pl.DuplicateMatchPath = filepath.Join(p.cfg.MoviesDir, matchFolder)
-				// A confident fuzzy match means the destination fields computed
-				// above (from the freshly parsed title) describe a folder that
-				// will never actually be created -- Apply always skips a
-				// Duplicate plan. Since they'll never back a real move, prefer
-				// the existing folder's actual on-disk spelling here instead,
-				// mirroring how resolveShowFolder already returns an existing
-				// folder's real name rather than a freshly parsed guess.
-				pl.DestDir = pl.DuplicateMatchPath
-				pl.DestRadix = matchFolder
-				pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
-			} else if len(tier2) > 0 {
-				folders := make([]string, len(tier2))
-				for i, m := range tier2 {
-					folders[i] = m.folder
+		} else {
+			if err := checkDuplicate(p, &pl); err != nil {
+				return Plan{}, err
+			}
+			if !pl.Duplicate {
+				tier1, tier2, err := findFuzzyMovieMatches(p.cfg.MoviesDir, title, year)
+				if err != nil {
+					return Plan{}, err
 				}
-				logWarn(p, logging.EventProcessorMoviePossibleDuplicate,
-					fmt.Sprintf("possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
-					nil, logging.Fields{"movies_dir": p.cfg.MoviesDir, "incoming": pl.MovieTitle, "candidates": strings.Join(folders, ", ")})
+				if len(tier1) > 0 {
+					pl.Duplicate = true
+					matchFolder := tier1[0].folder
+					pl.DuplicateMatchPath = filepath.Join(p.cfg.MoviesDir, matchFolder)
+					// A confident fuzzy match means the destination fields computed
+					// above (from the freshly parsed title) describe a folder that
+					// will never actually be created -- Apply always skips a
+					// Duplicate plan. Since they'll never back a real move, prefer
+					// the existing folder's actual on-disk spelling here instead,
+					// mirroring how resolveShowFolder already returns an existing
+					// folder's real name rather than a freshly parsed guess.
+					pl.DestDir = pl.DuplicateMatchPath
+					pl.DestRadix = matchFolder
+					pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
+				} else if len(tier2) > 0 {
+					folders := make([]string, len(tier2))
+					for i, m := range tier2 {
+						folders[i] = m.folder
+					}
+					logWarn(p, logging.EventProcessorMovieDuplicateNotice,
+						fmt.Sprintf("possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
+						nil, logging.Fields{"movies_dir": p.cfg.MoviesDir, "incoming": pl.MovieTitle, "candidates": strings.Join(folders, ", ")})
+				}
 			}
 		}
 
@@ -602,29 +608,143 @@ func planForMain(
 	return pl, nil
 }
 
+// planMovieResolutionAware runs resolution_aware duplicate detection for a
+// movie plan (pl.DestDir / pl.DestRadix / pl.MetadataTitle already computed).
+// It scans the exact-spelling destination folder and applies the decision
+// table (decideMovieResolutionDuplicate); only when that folder does not exist
+// does it fall back to the fuzzy title/year folder match.
+//
+// The fuzzy fallback is deliberately gated on the exact folder being absent:
+// findFuzzyMovieMatches scans all of MoviesDir and would otherwise always
+// self-match the destination folder derived from the same parsed title, which
+// under these rules would wrongly flag every different-resolution add as a
+// duplicate.
+func planMovieResolutionAware(p *processorImpl, pl *Plan, title, year string) error {
+	sc, err := scanMovieFolderForResolution(pl.DestDir, pl)
+	if err != nil {
+		return err
+	}
+	if sc.dirExists {
+		applyMovieDupVerdict(p, pl, sc)
+		return nil
+	}
+
+	tier1, tier2, err := findFuzzyMovieMatches(p.cfg.MoviesDir, title, year)
+	if err != nil {
+		return err
+	}
+	if len(tier1) > 0 {
+		// Adopt the existing folder's real on-disk spelling, but keep the
+		// resolution-qualified radix so Apply moves e.g.
+		// "Amélie (2001) - 2160p.mkv" into it, not a bare folder-named file.
+		mf := tier1[0].folder
+		pl.DestDir = filepath.Join(p.cfg.MoviesDir, mf)
+		pl.MetadataTitle = mf
+		pl.DestRadix = mf
+		if pl.Resolution != "" {
+			pl.DestRadix = pl.DestRadix + " - " + pl.Resolution
+		}
+		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
+
+		sc2, err := scanMovieFolderForResolution(pl.DestDir, pl)
+		if err != nil {
+			return err
+		}
+		applyMovieDupVerdict(p, pl, sc2)
+		return nil
+	}
+	if len(tier2) > 0 {
+		folders := make([]string, len(tier2))
+		for i, m := range tier2 {
+			folders[i] = m.folder
+		}
+		logWarn(p, logging.EventProcessorMovieDuplicateNotice,
+			fmt.Sprintf("possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
+			nil, logging.Fields{"movies_dir": p.cfg.MoviesDir, "incoming": pl.MovieTitle, "candidates": strings.Join(folders, ", ")})
+	}
+	return nil
+}
+
+// applyMovieDupVerdict maps a folder scan onto plan fields. It may set
+// pl.Duplicate (Apply skips the move), pl.DuplicateReview (the skip is
+// surfaced as a review WARNING rather than a silent "already in library"), and
+// pl.DuplicateMatchPath, and emits a non-blocking WARNING when the verdict
+// carries one. movieDupNone / movieDupSortAlong leave the plan untouched -- the
+// incoming file sorts in at pl.DestMainPath.
+func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
+	v, matchPath, warn := decideMovieResolutionDuplicate(sc, pl.Resolution != "")
+	switch v {
+	case movieDupExact:
+		pl.Duplicate = true
+		pl.DuplicateMatchPath = matchPath
+	case movieDupReview:
+		pl.Duplicate = true
+		pl.DuplicateReview = true
+		pl.DuplicateMatchPath = matchPath
+	case movieDupSortAlong, movieDupNone:
+		// Nothing to skip -- the file sorts in at pl.DestMainPath, into the
+		// exact folder or (fuzzy phase) the adopted differently spelled
+		// folder, even when that folder holds no recognizable copy yet: a
+		// confident name+year folder match is enough to place it there.
+		if v == movieDupSortAlong && sc.variantPath != "" && sc.untaggedSiblingPath == "" {
+			// Pure different-resolution add: not a duplicate, but the folder
+			// already holds another resolution of this movie. Record it so
+			// --plan can show the folder isn't empty; Apply logs the INFO line
+			// once the move lands. (The untagged-sibling case is covered by its
+			// WARNING below instead.)
+			pl.AlongsidePath = sc.variantPath
+		}
+	}
+	if warn == "" {
+		return
+	}
+	// A review hold stays in the drop folder and gets re-planned on every
+	// rescan; warn about it once per processor lifetime, like the pack /
+	// unparseable-file skips do (see firstSkipWarning). The sort-along warning
+	// is deliberately not gated: the incoming file moves and won't resurface,
+	// but an untagged sibling left in the folder should keep prompting on every
+	// new resolution added until the user tags it or turns resolution_aware off.
+	if v == movieDupReview && !p.firstSkipWarning(pl.InputPath) {
+		return
+	}
+	logWarn(p, logging.EventProcessorMovieDuplicateNotice, warn, nil, logging.Fields{
+		"movies_dir":      p.cfg.MoviesDir,
+		"incoming":        pl.DestRadix,
+		"folder":          pl.DestDir,
+		"held_for_review": v == movieDupReview,
+	})
+}
+
 // checkDuplicate runs the appropriate duplicate check for pl's destination.
-// With append_resolution off it is the plain exact-path stat; with it on it is
+// With resolution_aware off it is the plain exact-path stat; with it on it is
 // the resolution-aware directory scan, which compares on pl.MetadataTitle --
-// the resolution-free radix ("Show (Year) - S01E02" for shows, pl.MovieTitle
-// for movies), always set by the caller before this runs.
+// the resolution-free radix. Movies with resolution_aware on do NOT come
+// through here -- they take planMovieResolutionAware; this path is the show
+// branch (either setting) and the resolution_aware-off movie branch.
 func checkDuplicate(p *processorImpl, pl *Plan) error {
-	if p.cfg.AppendResolution {
-		return checkDuplicateWithResolution(pl)
+	if p.cfg.ResolutionAware {
+		return checkDuplicateWithResolution(p, pl)
 	}
 	return checkExactDuplicate(pl)
 }
 
-// checkDuplicateWithResolution is the append_resolution-aware counterpart to
-// checkExactDuplicate. It scans pl.DestDir for an existing file belonging to
-// the same movie/episode as pl, ignoring any " - <res>" qualifier on either
-// side, and sets pl.Duplicate (plus pl.DuplicateMatchPath, the real on-disk
-// path) on a hit. Comparing against pl.MetadataTitle (the resolution-free
-// radix) rather than the resolution-qualified DestMainPath is what makes a
-// re-download at a *different* resolution -- or an untagged copy of an
-// already-tagged file -- still register as a duplicate. One directory read
-// covers all three cases (same-res re-drop, different-res re-drop, pre-toggle
-// untagged file).
-func checkDuplicateWithResolution(pl *Plan) error {
+// checkDuplicateWithResolution is the resolution_aware counterpart to
+// checkExactDuplicate for the show branch. It scans pl.DestDir for an existing
+// file belonging to the same episode as pl, ignoring any " - <res>" qualifier
+// on either side, and sets pl.Duplicate (plus pl.DuplicateMatchPath, the real
+// on-disk path) on a hit. Comparing against pl.MetadataTitle (the
+// resolution-free radix) rather than the resolution-qualified DestMainPath is
+// what makes a re-download at a *different* resolution -- or an untagged copy
+// of an already-tagged file -- still register as a duplicate. One directory
+// read covers all three cases (same-res re-drop, different-res re-drop,
+// pre-toggle untagged file). (Movies deliberately diverge -- see
+// planMovieResolutionAware -- keeping multiple resolutions instead.)
+//
+// When the match is at a *different* resolution than the incoming file, the
+// skip is still silent to the SORTED/SKIPPED line but a non-blocking WARNING
+// names both resolutions, so a higher-quality re-download bouncing off the
+// library copy isn't invisible.
+func checkDuplicateWithResolution(p *processorImpl, pl *Plan) error {
 	ents, err := os.ReadDir(pl.DestDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -645,10 +765,26 @@ func checkDuplicateWithResolution(pl *Plan) error {
 		if !strings.EqualFold(ext, pl.MainExt) {
 			continue
 		}
-		stem := stripTrailingResolution(strings.TrimSuffix(name, ext))
-		if strings.EqualFold(stem, pl.MetadataTitle) {
+		rawStem := strings.TrimSuffix(name, ext)
+		if strings.EqualFold(stripTrailingResolution(rawStem), pl.MetadataTitle) {
 			pl.Duplicate = true
 			pl.DuplicateMatchPath = filepath.Join(pl.DestDir, name)
+
+			matchRes := detectResolution(name)
+			if !strings.EqualFold(pl.Resolution, matchRes) {
+				// Both sides in sorted-name form (no extension): the incoming
+				// file's would-be radix vs the library file's actual stem.
+				logWarn(p, logging.EventProcessorShowDuplicateResolutionMismatch,
+					fmt.Sprintf("skipping %s: library already has %s", pl.DestRadix, rawStem),
+					nil, logging.Fields{
+						"dest_dir":     pl.DestDir,
+						"episode":      pl.MetadataTitle,
+						"incoming":     pl.DestRadix,
+						"incoming_res": pl.Resolution,
+						"library_file": name,
+						"library_res":  matchRes,
+					})
+			}
 			return nil
 		}
 	}

@@ -164,7 +164,7 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 				"input_path": req.InputPath,
 				"reason":     err.Error(),
 			})
-			emit(Result{Handled: true, Applied: false, Reason: err.Error()})
+			emit(Result{Handled: true, Applied: false, Reason: err.Error(), NeedsReview: true})
 			return nil
 		}
 		if errors.Is(err, ErrNotMedia) || errors.Is(err, ErrNoMainMediaFound) || errors.Is(err, ErrAmbiguousShow) {
@@ -183,7 +183,10 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 					"reason":     err.Error(),
 				})
 			}
-			emit(Result{Handled: true, Applied: false, Reason: err.Error()})
+			// ErrAmbiguousShow is a genuine "come look" -- mintmedia refused to
+			// guess a folder. ErrNotMedia / ErrNoMainMediaFound are non-events
+			// (IsSuppressedResult drops them before any count anyway).
+			emit(Result{Handled: true, Applied: false, Reason: err.Error(), NeedsReview: errors.Is(err, ErrAmbiguousShow)})
 			return nil
 		}
 		return err
@@ -229,10 +232,11 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 				"reason":     issue.Err.Error(),
 			})
 			emit(Result{
-				Plan:    Plan{InputPath: issue.Path},
-				Handled: true,
-				Applied: false,
-				Reason:  issue.Err.Error(),
+				Plan:        Plan{InputPath: issue.Path},
+				Handled:     true,
+				Applied:     false,
+				Reason:      issue.Err.Error(),
+				NeedsReview: true,
 			})
 		}
 	}

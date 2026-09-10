@@ -530,7 +530,7 @@ func heightToBucket(h int) int {
 }
 
 // stripTrailingResolution removes a trailing " - <res>" qualifier (as appended
-// by the append_resolution feature) from a filename stem, leaving the
+// by the resolution_aware feature) from a filename stem, leaving the
 // resolution-free radix. A stem without such a suffix is returned unchanged.
 func stripTrailingResolution(stem string) string {
 	return reTrailingResolution.ReplaceAllString(stem, "")

@@ -80,7 +80,7 @@ func FuzzDetectResolution(f *testing.F) {
 		}
 		// stripTrailingResolution only ever chops a suffix: the result is a
 		// prefix of the input, and it is a no-op unless the input ends in a
-		// canonical " - <res>" token (the one shape append_resolution
+		// canonical " - <res>" token (the one shape resolution_aware
 		// produces -- it is deliberately not idempotent on a hand-stacked
 		// " - 1080p - 720p" tail, which the feature never creates).
 		stripped := stripTrailingResolution(raw)

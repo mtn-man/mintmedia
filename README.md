@@ -96,7 +96,7 @@ Subtitles and other associated files are renamed to match and moved alongside th
 Stranger.Things.S04E07.en.srt  →  Stranger Things - S04E07.en.srt
 ```
 
-Set `append_resolution = true` under `[naming]` to keep the release resolution in the sorted name as a ` - <res>` suffix (`Interstellar (2014) - 1080p.mkv`, `Breaking Bad - S03E07 - 1080p.mkv`). Off by default; see [Configuration](docs/configuration.md#keeping-the-resolution-in-the-filename).
+Set `resolution_aware = true` under `[naming]` to keep the release resolution in the sorted name as a ` - <res>` suffix (`Interstellar (2014) - 1080p.mkv`, `Breaking Bad - S03E07 - 1080p.mkv`). Off by default; see [Configuration](docs/configuration.md#keeping-the-resolution-in-the-filename).
 
 ### Library awareness
 

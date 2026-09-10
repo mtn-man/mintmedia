@@ -3,6 +3,8 @@ package processor
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/mtn-man/mintmedia/internal/transfer"
 )
@@ -63,4 +65,118 @@ func findFuzzyMovieMatches(moviesDir, incomingTitle, incomingYear string) (tier1
 	}
 
 	return tier1, tier2, nil
+}
+
+// movieResScan is the single-ReadDir view of a target movie folder used by
+// resolution_aware duplicate detection. At most one field per existing file is
+// populated; when several files fall in the same class the first by name wins
+// (os.ReadDir returns entries sorted), so the result is deterministic.
+type movieResScan struct {
+	dirExists bool
+
+	// exactMatchPath: an existing file whose full stem (including any
+	// " - <res>" qualifier) case-insensitively equals pl.DestRadix -- the same
+	// movie at the same resolution, or (for an untagged incoming file) the same
+	// untagged name.
+	exactMatchPath string
+
+	// untaggedSiblingPath: an existing file named exactly pl.MetadataTitle with
+	// no " - <res>" qualifier -- a copy sorted before resolution_aware was
+	// enabled, or hand-named.
+	untaggedSiblingPath string
+
+	// variantPath: an existing file that is the same movie at a *different*
+	// resolution -- its stem with the trailing " - <res>" stripped equals
+	// pl.MetadataTitle, but the stem itself carried a qualifier.
+	variantPath string
+}
+
+// scanMovieFolderForResolution reads dir once and classifies the
+// same-extension files it holds relative to pl (pl.DestRadix, pl.MetadataTitle,
+// pl.MainExt). A missing dir is not an error -- movieResScan{dirExists:false}
+// is returned. Error handling mirrors checkDuplicateWithResolution.
+func scanMovieFolderForResolution(dir string, pl *Plan) (movieResScan, error) {
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return movieResScan{}, nil
+		}
+		if transfer.IsDestinationUnavailable(err) {
+			return movieResScan{}, &DestinationUnavailableError{Category: pl.Category, Err: err}
+		}
+		return movieResScan{}, fmt.Errorf("readdir destination: %w", err)
+	}
+
+	sc := movieResScan{dirExists: true}
+	for _, ent := range ents {
+		if ent.IsDir() {
+			continue
+		}
+		name := ent.Name()
+		ext := filepath.Ext(name)
+		if !strings.EqualFold(ext, pl.MainExt) {
+			continue
+		}
+		rawStem := strings.TrimSuffix(name, ext)
+		stripped := stripTrailingResolution(rawStem)
+		full := filepath.Join(dir, name)
+
+		switch {
+		case strings.EqualFold(rawStem, pl.DestRadix):
+			if sc.exactMatchPath == "" {
+				sc.exactMatchPath = full
+			}
+		case stripped == rawStem && strings.EqualFold(rawStem, pl.MetadataTitle):
+			if sc.untaggedSiblingPath == "" {
+				sc.untaggedSiblingPath = full
+			}
+		case stripped != rawStem && strings.EqualFold(stripped, pl.MetadataTitle):
+			if sc.variantPath == "" {
+				sc.variantPath = full
+			}
+		}
+	}
+	return sc, nil
+}
+
+// movieDupVerdict is the outcome of decideMovieResolutionDuplicate.
+type movieDupVerdict int
+
+const (
+	// movieDupNone: no same-movie file in the folder -- the caller sorts the
+	// incoming file in (into the exact folder, or an adopted fuzzy-matched one).
+	movieDupNone movieDupVerdict = iota
+	// movieDupSortAlong: a same-movie file exists but at a different resolution
+	// (or only as an untagged sibling) -- not a duplicate, sort in alongside.
+	movieDupSortAlong
+	// movieDupExact: same movie, same resolution (byte-name match) -- skip.
+	movieDupExact
+	// movieDupReview: the incoming file has no detectable resolution and the
+	// folder already holds a resolution-tagged copy -- can't be named safely
+	// alongside it, so hold for human review.
+	movieDupReview
+)
+
+// decideMovieResolutionDuplicate applies the resolution_aware movie decision
+// table to a folder scan. incomingTagged is (pl.Resolution != ""). warn is a
+// fully formatted, ready-to-log message, or "" when there is nothing to warn
+// about. matchPath is the existing-library file the verdict points at, or ""
+// for movieDupNone / movieDupSortAlong.
+func decideMovieResolutionDuplicate(sc movieResScan, incomingTagged bool) (v movieDupVerdict, matchPath, warn string) {
+	switch {
+	case sc.exactMatchPath != "":
+		return movieDupExact, sc.exactMatchPath, ""
+	case incomingTagged && sc.untaggedSiblingPath != "":
+		return movieDupSortAlong, "", fmt.Sprintf(
+			"possible duplicate: untagged copy %q already in this folder -- sorting the tagged release in alongside it",
+			filepath.Base(sc.untaggedSiblingPath))
+	case incomingTagged && sc.variantPath != "":
+		return movieDupSortAlong, "", ""
+	case !incomingTagged && sc.variantPath != "":
+		return movieDupReview, sc.variantPath, fmt.Sprintf(
+			"untagged release: folder already holds a resolution-tagged copy (%s) -- left for human review",
+			filepath.Base(sc.variantPath))
+	default:
+		return movieDupNone, "", ""
+	}
 }

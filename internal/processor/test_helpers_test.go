@@ -1,10 +1,13 @@
 package processor
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/mtn-man/mintmedia/internal/logging"
 )
 
 func mkdirAll(t *testing.T, p string) {
@@ -83,10 +86,10 @@ func newTestProcessor(t *testing.T) *processorImpl {
 	return impl
 }
 
-// newTestProcessorAppendResolution mirrors newTestProcessor but enables
-// AppendResolution and includes the 4k/uhd blacklist entries that the real
-// resolved config carries, so tests exercise the resolution-suffix path.
-func newTestProcessorAppendResolution(t *testing.T) *processorImpl {
+// resolutionAwareTestConfig builds the Config shared by the resolution_aware
+// test processors: same layout as newTestProcessor plus the 4k/uhd blacklist
+// entries the real resolved config carries, and ResolutionAware enabled.
+func resolutionAwareTestConfig(t *testing.T) Config {
 	t.Helper()
 
 	root := t.TempDir()
@@ -97,7 +100,7 @@ func newTestProcessorAppendResolution(t *testing.T) *processorImpl {
 	mkdirAll(t, movies)
 	mkdirAll(t, shows)
 
-	cfg := Config{
+	return Config{
 		DropFolder: drop,
 		MoviesDir:  movies,
 		ShowsDir:   shows,
@@ -110,10 +113,13 @@ func newTestProcessorAppendResolution(t *testing.T) *processorImpl {
 			"web[- ]?dl", "webrip", "bluray", "brrip", "hdrip",
 			"x265", "x264", "hevc", "h\\.264", "h\\.265",
 		},
-		AppendResolution: true,
+		ResolutionAware: true,
 	}
+}
 
-	pr, err := New(cfg, nil, nil, nil)
+func mustProcessorImpl(t *testing.T, cfg Config, logger logging.Logger) *processorImpl {
+	t.Helper()
+	pr, err := New(cfg, nil, nil, logger)
 	if err != nil {
 		t.Fatalf("New() error: %v", err)
 	}
@@ -122,4 +128,31 @@ func newTestProcessorAppendResolution(t *testing.T) *processorImpl {
 		t.Fatalf("expected *processorImpl, got %T", pr)
 	}
 	return impl
+}
+
+// newTestProcessorResolutionAware mirrors newTestProcessor but with
+// ResolutionAware enabled, so tests exercise the resolution-suffix path.
+func newTestProcessorResolutionAware(t *testing.T) *processorImpl {
+	t.Helper()
+	return mustProcessorImpl(t, resolutionAwareTestConfig(t), nil)
+}
+
+// newTestProcessorResolutionAwareWithLog is newTestProcessorResolutionAware
+// wired to a capturing logger. The returned buffer receives all console output
+// (stdout INFO + stderr WARN, merged), so a test can assert on lines emitted
+// during Plan regardless of level.
+func newTestProcessorResolutionAwareWithLog(t *testing.T) (*processorImpl, *bytes.Buffer) {
+	t.Helper()
+	var console bytes.Buffer
+	lg, err := logging.New(logging.Options{
+		Stdout:       &console,
+		Stderr:       &console,
+		ConsoleLevel: "info",
+		HistoryLevel: "warn",
+		HistoryFile:  filepath.Join(t.TempDir(), "history.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("logging.New: %v", err)
+	}
+	return mustProcessorImpl(t, resolutionAwareTestConfig(t), lg), &console
 }

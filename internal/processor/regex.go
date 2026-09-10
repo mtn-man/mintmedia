@@ -96,7 +96,7 @@ var (
 	// 3-4 digit groups keep it clear of "NxNN" season/episode tokens.
 	reResolutionDims = regexp.MustCompile(`(?i)\b(\d{3,4})x(\d{3,4})\b`)
 
-	// Matches a trailing " - <res>" qualifier appended by the append_resolution
+	// Matches a trailing " - <res>" qualifier appended by the resolution_aware
 	// feature (canonical buckets only), used to recover the resolution-free
 	// radix during duplicate detection -- see stripTrailingResolution.
 	reTrailingResolution = regexp.MustCompile(`(?i)\s+-\s+(480|576|720|1080|1440|2160)p$`)

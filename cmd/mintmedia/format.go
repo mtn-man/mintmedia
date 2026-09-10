@@ -42,7 +42,7 @@ func printPlanBody(pl processor.Plan) {
 	fmt.Printf("DestMain:     %s\n", pl.DestMainPath)
 	fmt.Printf("DestDir:      %s\n", pl.DestDir)
 	fmt.Printf("DestRadix:    %s\n", pl.DestRadix)
-	// Only surface the detected resolution when append_resolution actually
+	// Only surface the detected resolution when resolution_aware actually
 	// folded it into the sorted name -- i.e. DestRadix carries the " - <res>"
 	// suffix. It is detected on every plan regardless of the setting, so
 	// printing it unconditionally would imply an effect the toggle-off path
@@ -64,12 +64,19 @@ func printPlanBody(pl processor.Plan) {
 		fmt.Printf("  - %s -> %s\n", mv.Source, mv.Dest)
 	}
 
-	if pl.Duplicate {
-		if pl.DuplicateMatchPath != "" {
-			fmt.Printf("Duplicate:    yes (matches existing library entry: %s)\n", pl.DuplicateMatchPath)
-		} else {
-			fmt.Println("Duplicate:    yes (already exists at DestMain)")
-		}
+	switch {
+	case pl.Duplicate && pl.DuplicateReview:
+		fmt.Printf("Duplicate:    held for review (untagged release; existing tagged copy: %s)\n", pl.DuplicateMatchPath)
+	case pl.Duplicate && pl.DuplicateMatchPath != "":
+		fmt.Printf("Duplicate:    yes (matches existing library entry: %s)\n", pl.DuplicateMatchPath)
+	case pl.Duplicate:
+		fmt.Println("Duplicate:    yes (already exists at DestMain)")
+	}
+
+	// Not a duplicate, but the target folder already holds another resolution
+	// of this movie -- the file sorts in beside it (resolution_aware).
+	if pl.AlongsidePath != "" {
+		fmt.Printf("Alongside:    %s (existing, kept)\n", pl.AlongsidePath)
 	}
 }
 
@@ -177,7 +184,11 @@ type ProcessDropSummary struct {
 	Results int
 	Applied int
 	Skipped int
-	Errors  int
+	// NeedsReview counts skips that left a file in place for a human to deal
+	// with (untagged-release review holds, ambiguous show folders, unparseable
+	// filenames), as distinct from benign duplicate skips.
+	NeedsReview int
+	Errors      int
 	// DestDegraded is a subset of Errors: how many of them were caused by a
 	// destination category going degraded mid-run (the triggering item plus
 	// every subsequent item skipped for the same category), rather than an
@@ -203,12 +214,16 @@ func processDropCompactLine(res processor.Result, dur time.Duration) string {
 }
 
 func processDropSummaryLine(s ProcessDropSummary) string {
-	total := s.Applied + s.Skipped + s.Errors
+	total := s.Applied + s.Skipped + s.NeedsReview + s.Errors
 	noun := resultformat.Pluralize(total, "file", "files")
 
 	parts := []string{fmt.Sprintf("%d sorted", s.Applied)}
 	if s.Skipped > 0 {
 		parts = append(parts, fmt.Sprintf("%d skipped", s.Skipped))
+	}
+	if s.NeedsReview > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s", s.NeedsReview,
+			resultformat.Pluralize(s.NeedsReview, "needs review", "need review")))
 	}
 	if s.Errors > 0 {
 		part := fmt.Sprintf("%d %s", s.Errors, resultformat.Pluralize(s.Errors, "error", "errors"))
