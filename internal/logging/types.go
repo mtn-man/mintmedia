@@ -13,6 +13,12 @@ type Fields map[string]any
 type Level string
 
 // Severity levels, ordered low to high.
+//
+// LevelDebug is a filter floor only -- mintmedia emits no DEBUG-level
+// entries, so configuring a sink at DEBUG means "log everything, filter
+// nothing" rather than "also show debug messages". It is kept as a
+// selectable console_level/history_level so that intent can be expressed
+// directly instead of by picking the lowest level that happens to exist.
 const (
 	LevelDebug Level = "DEBUG"
 	LevelInfo  Level = "INFO"
@@ -73,7 +79,6 @@ type Entry struct {
 // Logger is the flat logging API used by callers.
 type Logger interface {
 	Log(entry Entry)
-	Debug(component string, event Event, msg string, fields Fields)
 	Info(component string, event Event, msg string, fields Fields)
 	Warn(component string, event Event, msg string, err error, fields Fields)
 	Error(component string, event Event, msg string, err error, fields Fields)

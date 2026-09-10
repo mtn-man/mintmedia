@@ -56,6 +56,7 @@ enable_metadata_title_tagging = false
 
 [logging]
 # Console operational log filter (DEBUG | INFO | WARN | ERROR)
+# DEBUG means "log everything"
 console_level = "INFO"
 
 # History file filter (DEBUG | INFO | WARN | ERROR)

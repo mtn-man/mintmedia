@@ -96,11 +96,6 @@ func newEntry(level Level, component string, event Event, msg string, err error,
 	}
 }
 
-// Debug logs a DEBUG-level entry to both sinks (subject to each sink's level floor).
-func (l *RuntimeLogger) Debug(component string, event Event, msg string, fields Fields) {
-	l.Log(newEntry(LevelDebug, component, event, msg, nil, fields))
-}
-
 // Info logs an INFO-level entry to both sinks (subject to each sink's level floor).
 func (l *RuntimeLogger) Info(component string, event Event, msg string, fields Fields) {
 	l.Log(newEntry(LevelInfo, component, event, msg, nil, fields))
