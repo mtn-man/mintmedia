@@ -97,10 +97,10 @@ type Naming struct {
 	// list is additive, not a replacement -- see resolveMediaTagBlacklist.
 	MediaTagBlacklist []string `toml:"media_tag_blacklist"`
 
-	// AppendResolution, when true, re-appends the release resolution detected
+	// ResolutionAware, when true, re-appends the release resolution detected
 	// from the source filename to the final sorted name as a " - <res>" suffix
 	// (e.g. "Movie (2020) - 1080p.mkv"). Off by default.
-	AppendResolution bool `toml:"append_resolution"`
+	ResolutionAware bool `toml:"resolution_aware"`
 }
 
 // Resolved contains normalized, validated, and parsed forms other packages should use.
@@ -130,8 +130,8 @@ type Resolved struct {
 	// Naming patterns passed to Go processor.
 	MediaTagBlacklist []string
 
-	// AppendResolution mirrors naming.append_resolution.
-	AppendResolution bool
+	// ResolutionAware mirrors naming.resolution_aware.
+	ResolutionAware bool
 
 	// Directories that didn't exist before this Load call and were created
 	// because auto_create_missing_dirs is true. Empty when nothing was created.

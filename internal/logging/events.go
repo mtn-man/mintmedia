@@ -27,27 +27,28 @@ const (
 	EventDaemonDestinationRecovered Event = "daemon.destination.recovered"
 	EventDaemonDestinationDeferred  Event = "daemon.destination.deferred"
 
-	EventProcessorMoveMainApplied                Event = "processor.move.main.applied"
-	EventProcessorMoveAssociatedApplied          Event = "processor.move.associated.applied"
-	EventProcessorMoveAssociatedFailed           Event = "processor.move.associated.failed"
-	EventProcessorCleanupSkippedAssociatedFailed Event = "processor.cleanup.skipped.associated.failed"
-	EventProcessorCleanupSkippedDuplicate        Event = "processor.cleanup.skipped.duplicate"
-	EventProcessorCleanupSkippedFailed           Event = "processor.cleanup.skipped.failed"
-	EventProcessorCleanupSourceFailed            Event = "processor.cleanup.source.failed"
-	EventProcessorInputMaxDepthNoMedia           Event = "processor.input.max.depth.no.media"
-	EventProcessorInputSkippedInputMissing       Event = "processor.input.skipped.input.missing"
-	EventProcessorInputSkippedParseError         Event = "processor.input.skipped.parse.error"
-	EventProcessorInputSkippedNotMedia           Event = "processor.input.skipped.not.media"
-	EventProcessorInputSkippedNoMainMedia        Event = "processor.input.skipped.no.main.media"
-	EventProcessorInputSkippedDuplicate          Event = "processor.input.skipped.duplicate"
-	EventProcessorMoviePackSkipUnparseable       Event = "processor.movie.pack.skip.unparseable"
-	EventProcessorMoviePossibleDuplicate         Event = "processor.movie.duplicate.possible"
-	EventProcessorShowFolderQualifiedGuess       Event = "processor.show.folder.qualified.guess"
-	EventProcessorShowPossibleDuplicateFolder    Event = "processor.show.folder.duplicate.possible"
-	EventProcessorShowFileSkipUnparseable        Event = "processor.show.file.skip.unparseable"
-	EventProcessorMetadataTitleWriteStarted      Event = "processor.metadata.title.write.started"
-	EventProcessorMetadataTitleWriteApplied      Event = "processor.metadata.title.write.applied"
-	EventProcessorMetadataTitleWriteFailed       Event = "processor.metadata.title.write.failed"
+	EventProcessorMoveMainApplied                 Event = "processor.move.main.applied"
+	EventProcessorMoveAssociatedApplied           Event = "processor.move.associated.applied"
+	EventProcessorMoveAssociatedFailed            Event = "processor.move.associated.failed"
+	EventProcessorCleanupSkippedAssociatedFailed  Event = "processor.cleanup.skipped.associated.failed"
+	EventProcessorCleanupSkippedDuplicate         Event = "processor.cleanup.skipped.duplicate"
+	EventProcessorCleanupSkippedFailed            Event = "processor.cleanup.skipped.failed"
+	EventProcessorCleanupSourceFailed             Event = "processor.cleanup.source.failed"
+	EventProcessorInputMaxDepthNoMedia            Event = "processor.input.max.depth.no.media"
+	EventProcessorInputSkippedInputMissing        Event = "processor.input.skipped.input.missing"
+	EventProcessorInputSkippedParseError          Event = "processor.input.skipped.parse.error"
+	EventProcessorInputSkippedNotMedia            Event = "processor.input.skipped.not.media"
+	EventProcessorInputSkippedNoMainMedia         Event = "processor.input.skipped.no.main.media"
+	EventProcessorInputSkippedDuplicate           Event = "processor.input.skipped.duplicate"
+	EventProcessorMoviePackSkipUnparseable        Event = "processor.movie.pack.skip.unparseable"
+	EventProcessorMovieDuplicateNotice            Event = "processor.movie.duplicate.notice"
+	EventProcessorShowFolderQualifiedGuess        Event = "processor.show.folder.qualified.guess"
+	EventProcessorShowPossibleDuplicateFolder     Event = "processor.show.folder.duplicate.possible"
+	EventProcessorShowDuplicateResolutionMismatch Event = "processor.show.duplicate.resolution.mismatch"
+	EventProcessorShowFileSkipUnparseable         Event = "processor.show.file.skip.unparseable"
+	EventProcessorMetadataTitleWriteStarted       Event = "processor.metadata.title.write.started"
+	EventProcessorMetadataTitleWriteApplied       Event = "processor.metadata.title.write.applied"
+	EventProcessorMetadataTitleWriteFailed        Event = "processor.metadata.title.write.failed"
 )
 
 // AllOperationalEvents returns the complete set of production event constants.
@@ -86,9 +87,10 @@ func AllOperationalEvents() []Event {
 		EventProcessorInputSkippedNoMainMedia,
 		EventProcessorInputSkippedDuplicate,
 		EventProcessorMoviePackSkipUnparseable,
-		EventProcessorMoviePossibleDuplicate,
+		EventProcessorMovieDuplicateNotice,
 		EventProcessorShowFolderQualifiedGuess,
 		EventProcessorShowPossibleDuplicateFolder,
+		EventProcessorShowDuplicateResolutionMismatch,
 		EventProcessorShowFileSkipUnparseable,
 		EventProcessorMetadataTitleWriteStarted,
 		EventProcessorMetadataTitleWriteApplied,

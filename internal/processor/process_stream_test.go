@@ -95,6 +95,12 @@ func TestProcess_OnResult_StreamedForPartialPackSkip(t *testing.T) {
 	if streamed[1].Reason == "" {
 		t.Fatalf("streamed[1].Reason is empty, want parse error message")
 	}
+	if streamed[0].NeedsReview {
+		t.Fatalf("streamed[0].NeedsReview = true, want false (it sorted)")
+	}
+	if !streamed[1].NeedsReview {
+		t.Fatalf("streamed[1].NeedsReview = false, want true (unparseable file left in place)")
+	}
 }
 
 func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T) {

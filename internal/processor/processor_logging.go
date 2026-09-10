@@ -39,3 +39,10 @@ func logWarn(p *processorImpl, event logging.Event, msg string, err error, field
 	}
 	p.logger.Warn("processor", event, msg, err, fields)
 }
+
+func logInfo(p *processorImpl, event logging.Event, msg string, fields logging.Fields) {
+	if p == nil || p.logger == nil {
+		return
+	}
+	p.logger.Info("processor", event, msg, fields)
+}

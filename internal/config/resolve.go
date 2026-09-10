@@ -257,7 +257,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		AssociatedFileExtensions: append([]string(nil), cfg.Media.AssociatedFileExtensions...),
 
 		MediaTagBlacklist: resolveMediaTagBlacklist(cfg.Naming.MediaTagBlacklist),
-		AppendResolution:  cfg.Naming.AppendResolution,
+		ResolutionAware:   cfg.Naming.ResolutionAware,
 
 		AutoCleanupCompletedTorrents: cfg.Torrent.AutoCleanupCompletedTorrents,
 

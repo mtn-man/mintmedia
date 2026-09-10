@@ -66,12 +66,12 @@ type Plan struct {
 
 	// Resolution is the release resolution detected from the source filename
 	// (e.g. "1080p"), or "" when none was found or detection is disabled. When
-	// Config.AppendResolution is set it is appended to DestRadix as a
+	// Config.ResolutionAware is set it is appended to DestRadix as a
 	// " - <res>" suffix.
 	Resolution string
 
 	// MetadataTitle is the resolution-free destination radix used for the
-	// embedded container "title" tag, so an enabled AppendResolution doesn't
+	// embedded container "title" tag, so an enabled ResolutionAware doesn't
 	// push a "- 1080p" suffix into file metadata. Empty on plans built before
 	// this field existed; Apply falls back to DestRadix then.
 	MetadataTitle string
@@ -91,6 +91,27 @@ type Plan struct {
 	// when Duplicate was set by the literal DestMainPath collision.
 	DuplicateMatchPath string
 
+	// DuplicateReview marks the "untagged release, hold for human review"
+	// outcome of resolution_aware movie duplicate detection: an incoming file
+	// with no detectable resolution whose target folder already holds a
+	// resolution-tagged copy of the same movie (and no exact untagged match).
+	// Duplicate is also set -- Apply must not move it -- but the skip is
+	// surfaced as a WARNING telling the user to decide, not the silent
+	// "already in library" line. Only set for CategoryMovie when
+	// Config.ResolutionAware is true.
+	DuplicateReview bool
+
+	// AlongsidePath is set when a resolution_aware movie sorts in next to an
+	// existing copy of the same film at a different resolution rather than into
+	// a fresh folder. It holds that existing file's path. Not a skip --
+	// Duplicate stays false and the move proceeds -- but --plan surfaces it so
+	// the preview shows the folder isn't empty, and Apply logs an INFO line
+	// naming both once the move lands. The untagged-sibling variant of this
+	// (incoming tagged, existing copy has no resolution) is left for its own
+	// WARNING instead. Only set for CategoryMovie when Config.ResolutionAware
+	// is true.
+	AlongsidePath string
+
 	// Cleanup intent (optional; not all Apply implementations will honor this initially)
 	DeleteEmptyInputDir bool
 }
@@ -104,6 +125,13 @@ type Result struct {
 	// (e.g., ignored unsupported items, inputs with no main media, etc.).
 	Handled bool
 	Reason  string
+
+	// NeedsReview marks a skip that left a file in place awaiting a human
+	// decision -- an untagged-release review hold, an ambiguous show folder,
+	// or an unparseable filename -- as distinct from a benign duplicate skip
+	// where the file's content is already safely in the library. Only
+	// meaningful when Applied is false.
+	NeedsReview bool
 }
 
 // PlanIssue captures a skipped path and the associated error.
@@ -198,10 +226,10 @@ type Config struct {
 	// These are regex patterns expressed as strings (ideally compiled once during processor init).
 	MediaTagBlacklist []string
 
-	// AppendResolution, when true, appends a detected release resolution to the
+	// ResolutionAware, when true, appends a detected release resolution to the
 	// sorted filename radix as a " - <res>" suffix (e.g. "Movie (2020) - 1080p").
-	// Off by default; see naming.append_resolution.
-	AppendResolution bool
+	// Off by default; see naming.resolution_aware.
+	ResolutionAware bool
 }
 
 // NoMainMediaFoundError wraps ErrNoMainMediaFound and carries depth context.

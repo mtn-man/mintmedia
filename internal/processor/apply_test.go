@@ -1053,12 +1053,12 @@ func TestApply_MetadataTagger_DestinationClaimedDuringRemux_LeavesSourceUntouche
 }
 
 // TestApply_MetadataTagger_TitleTagStaysResolutionFree covers the
-// append_resolution interaction: the moved filename carries the " - <res>"
+// resolution_aware interaction: the moved filename carries the " - <res>"
 // suffix, but the embedded container title tag is written from
 // pl.MetadataTitle (resolution-free).
 func TestApply_MetadataTagger_TitleTagStaysResolutionFree(t *testing.T) {
 	t.Parallel()
-	p := newTestProcessorAppendResolution(t)
+	p := newTestProcessorResolutionAware(t)
 	p.xfer = &osRenameTransferer{}
 
 	tagger := &fakeMetaTagger{}
@@ -1313,5 +1313,176 @@ func (t cleanupErrorTransferer) Move(ctx context.Context, src, dst string) error
 		Src: src,
 		Dst: dst,
 		Err: errors.New("forced cleanup failure for test"),
+	}
+}
+
+// TestApply_ResolutionAware_DuplicateReview_SkipsWithReviewReason covers the
+// resolution_aware "untagged release, hold for human review" outcome: Apply
+// must not move the file, and the skip reason must say it was left for review
+// (not the plain "already in library" wording) and cite the tagged library
+// copy that triggered the hold.
+func TestApply_ResolutionAware_DuplicateReview_SkipsWithReviewReason(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+	p.xfer = failIfCalledTransferer{t: t}
+
+	mainSrc := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.mkv")
+	writeFile(t, mainSrc, "dummy")
+	match := filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014) - 1080p.mkv")
+	writeFile(t, match, "already here")
+
+	pl := Plan{
+		Category:           CategoryMovie,
+		MainSourcePath:     mainSrc,
+		MainExt:            ".mkv",
+		DestDir:            filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)"),
+		DestRadix:          "Interstellar (2014)",
+		DestMainPath:       filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014).mkv"),
+		InputPath:          mainSrc,
+		Duplicate:          true,
+		DuplicateReview:    true,
+		DuplicateMatchPath: match,
+	}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Applied || !res.Handled {
+		t.Fatalf("Applied=%v Handled=%v, want false/true", res.Applied, res.Handled)
+	}
+	if !res.NeedsReview {
+		t.Fatalf("NeedsReview = false, want true for a review hold")
+	}
+	if !strings.Contains(res.Reason, "left for review") {
+		t.Fatalf("Reason = %q, want it to mention the review hold", res.Reason)
+	}
+	if !strings.Contains(res.Reason, match) {
+		t.Fatalf("Reason = %q, want it to cite %q", res.Reason, match)
+	}
+	if _, err := os.Stat(mainSrc); err != nil {
+		t.Fatalf("source should remain in place: %v", err)
+	}
+}
+
+// TestApply_ResolutionAware_PlainDuplicate_ReasonUnchanged confirms a normal
+// duplicate (DuplicateReview unset) still gets the "already in library" line.
+func TestApply_ResolutionAware_PlainDuplicate_ReasonUnchanged(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+	p.xfer = failIfCalledTransferer{t: t}
+
+	mainSrc := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.2160p.mkv")
+	writeFile(t, mainSrc, "dummy")
+	match := filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014) - 2160p.mkv")
+	writeFile(t, match, "already here")
+
+	pl := Plan{
+		Category:           CategoryMovie,
+		MainSourcePath:     mainSrc,
+		MainExt:            ".mkv",
+		DestDir:            filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)"),
+		DestRadix:          "Interstellar (2014) - 2160p",
+		DestMainPath:       match,
+		InputPath:          mainSrc,
+		Duplicate:          true,
+		DuplicateMatchPath: match,
+	}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	res := results[0]
+	if res.Applied {
+		t.Fatalf("Applied = true, want false")
+	}
+	if res.NeedsReview {
+		t.Fatalf("NeedsReview = true, want false for a plain duplicate")
+	}
+	if !strings.Contains(res.Reason, "already in library") {
+		t.Fatalf("Reason = %q, want the plain duplicate wording", res.Reason)
+	}
+	if strings.Contains(res.Reason, "review") {
+		t.Fatalf("Reason = %q, should not mention review for a plain duplicate", res.Reason)
+	}
+}
+
+// TestApply_ResolutionAware_DifferentResolution_EmitsAlongsideInfo: when a plan
+// carries AlongsidePath (a resolution_aware different-resolution add), Apply
+// performs the move and then logs the "sorted X alongside existing Y" INFO --
+// past tense, because by then the file is in the library. This is the line that
+// used to fire (wrongly) at Plan time.
+func TestApply_ResolutionAware_DifferentResolution_EmitsAlongsideInfo(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+	mkdirAll(t, drop)
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	var consoleBuf strings.Builder
+	logger, err := logging.New(logging.Options{
+		Stdout:       &consoleBuf,
+		Stderr:       &consoleBuf,
+		ConsoleLevel: "INFO",
+		HistoryLevel: "WARN",
+		HistoryFile:  filepath.Join(root, "history.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("logging.New: %v", err)
+	}
+
+	cfg := Config{
+		DropFolder:               drop,
+		MoviesDir:                movies,
+		ShowsDir:                 shows,
+		MainMediaExtensions:      []string{".mkv"},
+		AssociatedFileExtensions: []string{".srt"},
+		MediaTagBlacklist:        []string{"1080p", "2160p"},
+		ResolutionAware:          true,
+	}
+	pr, err := New(cfg, &osRenameTransferer{}, nil, logger)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	impl := pr.(*processorImpl)
+
+	mainSrc := filepath.Join(drop, "Interstellar.2014.2160p.BluRay.mkv")
+	writeFile(t, mainSrc, "dummy")
+	existing := filepath.Join(movies, "Interstellar (2014)", "Interstellar (2014) - 1080p.mkv")
+	writeFile(t, existing, "already here")
+
+	pl := Plan{
+		Category:       CategoryMovie,
+		MainSourcePath: mainSrc,
+		MainExt:        ".mkv",
+		DestDir:        filepath.Join(movies, "Interstellar (2014)"),
+		DestRadix:      "Interstellar (2014) - 2160p",
+		DestMainPath:   filepath.Join(movies, "Interstellar (2014)", "Interstellar (2014) - 2160p.mkv"),
+		InputPath:      mainSrc,
+		AlongsidePath:  existing,
+	}
+
+	results, err := impl.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if !results[0].Applied {
+		t.Fatalf("Applied = false, want true (different resolution sorts in)")
+	}
+	if _, err := os.Stat(pl.DestMainPath); err != nil {
+		t.Fatalf("destination not written: %v", err)
+	}
+	want := "sorted Interstellar (2014) - 2160p alongside existing Interstellar (2014) - 1080p"
+	if !strings.Contains(consoleBuf.String(), want) {
+		t.Fatalf("Apply INFO notice missing; want %q; console:\n%s", want, consoleBuf.String())
 	}
 }

@@ -176,6 +176,10 @@ func processDropFolder(
 				player.PlayCount(ctx, soundDone, planner.OnAppliedMain())
 				return
 			}
+			if r.NeedsReview {
+				summary.NeedsReview++
+				return
+			}
 			summary.Skipped++
 		}
 

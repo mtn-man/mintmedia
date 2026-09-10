@@ -71,6 +71,26 @@ func TestPrintPlan_DuplicateLine(t *testing.T) {
 	}
 }
 
+func TestPrintPlan_DuplicateReviewLine(t *testing.T) {
+	pl := processor.Plan{
+		Category:           processor.CategoryMovie,
+		MainSourcePath:     "/tmp/drop/Interstellar.2014.mkv",
+		DestMainPath:       "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014).mkv",
+		MovieTitle:         "Interstellar (2014)",
+		Duplicate:          true,
+		DuplicateReview:    true,
+		DuplicateMatchPath: "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv",
+	}
+
+	out := captureStdout(t, func() { printPlan(pl) })
+	if !strings.Contains(out, "Duplicate:    held for review") {
+		t.Fatalf("expected a held-for-review Duplicate line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Interstellar (2014) - 1080p.mkv") {
+		t.Fatalf("expected the existing tagged copy cited, got:\n%s", out)
+	}
+}
+
 func TestPrintPlan_NoDuplicateLineWhenNotDuplicate(t *testing.T) {
 	pl := processor.Plan{
 		Category:       processor.CategoryMovie,
@@ -82,6 +102,40 @@ func TestPrintPlan_NoDuplicateLineWhenNotDuplicate(t *testing.T) {
 	out := captureStdout(t, func() { printPlan(pl) })
 	if strings.Contains(out, "Duplicate:") {
 		t.Fatalf("expected no Duplicate line in plan output, got:\n%s", out)
+	}
+}
+
+func TestPrintPlan_AlongsideLine(t *testing.T) {
+	pl := processor.Plan{
+		Category:       processor.CategoryMovie,
+		MainSourcePath: "/tmp/drop/Interstellar.2014.2160p.BluRay.mkv",
+		DestMainPath:   "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 2160p.mkv",
+		DestRadix:      "Interstellar (2014) - 2160p",
+		MovieTitle:     "Interstellar (2014)",
+		Resolution:     "2160p",
+		AlongsidePath:  "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv",
+	}
+
+	out := captureStdout(t, func() { printPlan(pl) })
+	if !strings.Contains(out, "Alongside:    /Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv (existing, kept)") {
+		t.Fatalf("expected an Alongside line citing the existing copy, got:\n%s", out)
+	}
+	if strings.Contains(out, "Duplicate:") {
+		t.Fatalf("a sort-alongside plan is not a duplicate; got a Duplicate line:\n%s", out)
+	}
+}
+
+func TestPrintPlan_NoAlongsideLineWhenEmpty(t *testing.T) {
+	pl := processor.Plan{
+		Category:       processor.CategoryMovie,
+		MainSourcePath: "/tmp/drop/Interstellar.2014.2160p.BluRay.mkv",
+		DestMainPath:   "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 2160p.mkv",
+		MovieTitle:     "Interstellar (2014)",
+	}
+
+	out := captureStdout(t, func() { printPlan(pl) })
+	if strings.Contains(out, "Alongside:") {
+		t.Fatalf("expected no Alongside line, got:\n%s", out)
 	}
 }
 
@@ -156,6 +210,25 @@ func TestProcessDropSummaryLine(t *testing.T) {
 				Elapsed: 10 * time.Second,
 			},
 			want: "INFO     4 files -- 2 sorted, 2 errors (10s)",
+		},
+		{
+			name: "one needs review",
+			sum: ProcessDropSummary{
+				Applied:     3,
+				NeedsReview: 1,
+				Elapsed:     4 * time.Second,
+			},
+			want: "INFO     4 files -- 3 sorted, 1 needs review (4s)",
+		},
+		{
+			name: "skipped and needs review are separate",
+			sum: ProcessDropSummary{
+				Applied:     10,
+				Skipped:     2,
+				NeedsReview: 3,
+				Elapsed:     3 * time.Second,
+			},
+			want: "INFO     15 files -- 10 sorted, 2 skipped, 3 need review (3s)",
 		},
 		{
 			name: "season pack",

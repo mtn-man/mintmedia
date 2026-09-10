@@ -98,7 +98,7 @@ media_tag_blacklist = []
 # sorted name as a " - <res>" suffix, e.g. "Movie (2020) - 1080p.mkv" /
 # "Show (2020) - S01E02 - 1080p.mkv". The movie folder name stays unchanged.
 # Off by default.
-append_resolution = false
+resolution_aware = false
 
 [torrent]
 # Keep the section present for discoverability, but default it OFF.
