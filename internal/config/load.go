@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/mtn-man/mintmedia/internal/notify"
 )
 
 // defaults_darwin.toml and defaults_linux.toml must be kept in sync with each
@@ -156,7 +157,7 @@ func defaultConfigPath() (string, error) {
 func applyDefaults(cfg *Config) {
 	// System defaults
 	if strings.TrimSpace(cfg.System.DoneNotificationMode) == "" {
-		cfg.System.DoneNotificationMode = "per_file"
+		cfg.System.DoneNotificationMode = notify.DoneNotificationPerFile
 	}
 	if strings.TrimSpace(cfg.System.ShutdownGraceDuration) == "" {
 		cfg.System.ShutdownGraceDuration = defaultShutdownGraceDuration.String()

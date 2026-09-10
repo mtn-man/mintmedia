@@ -16,6 +16,10 @@ const (
 
 // NormalizeDoneNotificationMode validates and normalizes done notification mode.
 // Empty input defaults to DoneNotificationPerFile.
+//
+// The returned error names no config key, so a caller can prefix it with
+// whichever field it is validating (config's normalizeAndValidate wraps it as
+// "system.done_notification_mode: ..."), the same split logging.ParseLevel uses.
 func NormalizeDoneNotificationMode(raw string) (string, error) {
 	mode := strings.ToLower(strings.TrimSpace(raw))
 	if mode == "" {
@@ -26,7 +30,7 @@ func NormalizeDoneNotificationMode(raw string) (string, error) {
 		return mode, nil
 	default:
 		return "", fmt.Errorf(
-			"invalid done_notification_mode %q (allowed: %q, %q, %q)",
+			"invalid value %q (allowed: %q, %q, %q)",
 			raw,
 			DoneNotificationPerFile,
 			DoneNotificationPerJob,
