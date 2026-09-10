@@ -116,7 +116,7 @@ func (t *RenameOrCopy) Move(ctx context.Context, src, dst string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil { //nolint:gosec // library dest dirs need group+other read for the media server
+	if err := paths.MkdirShared(filepath.Dir(dst)); err != nil {
 		return fmt.Errorf("create destination directory: %w", err)
 	}
 

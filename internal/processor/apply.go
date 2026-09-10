@@ -11,6 +11,7 @@ import (
 
 	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/metadata"
+	"github.com/mtn-man/mintmedia/internal/paths"
 	"github.com/mtn-man/mintmedia/internal/transfer"
 )
 
@@ -65,7 +66,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	}
 
 	// Ensure destination directory exists
-	if err := os.MkdirAll(pl.DestDir, 0o755); err != nil { //nolint:gosec // library dest dirs need group+other read for the media server
+	if err := paths.MkdirShared(pl.DestDir); err != nil {
 		if transfer.IsDestinationUnavailable(err) {
 			return Result{Plan: pl}, &DestinationUnavailableError{Category: pl.Category, Err: err}
 		}
@@ -196,7 +197,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		if mv.Source == "" || mv.Dest == "" {
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(mv.Dest), 0o755); err != nil { //nolint:gosec // library dest dirs need group+other read for the media server
+		if err := paths.MkdirShared(filepath.Dir(mv.Dest)); err != nil {
 			if transfer.IsDestinationUnavailable(err) {
 				return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, &DestinationUnavailableError{Category: pl.Category, Err: err}
 			}

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/mtn-man/mintmedia/internal/paths"
 )
 
 // ReleaseFunc releases a lock previously acquired by AcquireLock.
@@ -134,7 +136,7 @@ func AcquireLock(lockPath string) (ReleaseFunc, error) {
 	}
 
 	// Ensure parent directory exists.
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil { //nolint:gosec // state dir stays 0o755 for consistency with the shared mkdirTracked call
+	if err := paths.MkdirShared(filepath.Dir(lockPath)); err != nil {
 		return nil, fmt.Errorf("create lock dir: %w", err)
 	}
 
