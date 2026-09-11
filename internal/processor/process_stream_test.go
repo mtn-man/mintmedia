@@ -114,7 +114,7 @@ func TestProcess_OnResult_StreamedForMoviePackPartialSkip_AndWarns(t *testing.T)
 
 	var streamed []Result
 	var stderr strings.Builder
-	p.logger = newRuntimeLoggerForProcessorTest(t, io.Discard, &stderr)
+	p.log = logging.NewEmitter(newRuntimeLoggerForProcessorTest(t, io.Discard, &stderr), "processor")
 	err := p.Process(context.Background(), Request{
 		InputPath: inputDir,
 		OnResult: func(r Result) {
@@ -164,7 +164,7 @@ func TestProcess_PartialSkipWarnedOnceAcrossRepeatedProcessCalls(t *testing.T) {
 	writeFile(t, unparseable, "dummy")
 
 	var stderr strings.Builder
-	p.logger = newRuntimeLoggerForProcessorTest(t, io.Discard, &stderr)
+	p.log = logging.NewEmitter(newRuntimeLoggerForProcessorTest(t, io.Discard, &stderr), "processor")
 
 	run := func() []Result {
 		var streamed []Result

@@ -25,7 +25,8 @@ type Options struct {
 	HistoryInfoAllowlist []Event
 }
 
-// RuntimeLogger fans out operational logs to console and history sinks.
+// RuntimeLogger writes operational logs to the console and history sinks, each
+// filtered by its own level floor.
 type RuntimeLogger struct {
 	consoleSink *ConsoleSink
 	historySink *HistorySink
@@ -96,21 +97,6 @@ func newEntry(level Level, component string, event Event, msg string, err error,
 	}
 }
 
-// Info logs an INFO-level entry to both sinks (subject to each sink's level floor).
-func (l *RuntimeLogger) Info(component string, event Event, msg string, fields Fields) {
-	l.Log(newEntry(LevelInfo, component, event, msg, nil, fields))
-}
-
-// Warn logs a WARN-level entry to both sinks (subject to each sink's level floor).
-func (l *RuntimeLogger) Warn(component string, event Event, msg string, err error, fields Fields) {
-	l.Log(newEntry(LevelWarn, component, event, msg, err, fields))
-}
-
-// Error logs an ERROR-level entry to both sinks (subject to each sink's level floor).
-func (l *RuntimeLogger) Error(component string, event Event, msg string, err error, fields Fields) {
-	l.Log(newEntry(LevelError, component, event, msg, err, fields))
-}
-
 // ConsoleInfo logs an INFO-level entry to the console sink only.
 func (l *RuntimeLogger) ConsoleInfo(component string, event Event, msg string, fields Fields) {
 	l.logConsoleOnly(newEntry(LevelInfo, component, event, msg, nil, fields))
@@ -139,28 +125,6 @@ func (l *RuntimeLogger) HistoryWarn(component string, event Event, err error, fi
 // HistoryError logs an ERROR-level entry to the history sink only.
 func (l *RuntimeLogger) HistoryError(component string, event Event, err error, fields Fields) {
 	l.logHistoryOnly(newEntry(LevelError, component, event, "", err, fields))
-}
-
-// Log writes entry to both sinks, applying each sink's level floor and the
-// history-info allowlist.
-func (l *RuntimeLogger) Log(entry Entry) {
-	if l == nil {
-		return
-	}
-	entry, ok := l.normalizeAndValidate(entry)
-	if !ok {
-		return
-	}
-	if entry.Level.gte(l.consoleMin) {
-		if err := l.consoleSink.Write(entry); err != nil {
-			l.fallbackError(fmt.Errorf("console sink: %w", err))
-		}
-	}
-	if l.shouldWriteHistory(entry) {
-		if err := l.historySink.Write(entry); err != nil {
-			l.fallbackError(fmt.Errorf("history sink: %w", err))
-		}
-	}
 }
 
 func (l *RuntimeLogger) logHistoryOnly(entry Entry) {

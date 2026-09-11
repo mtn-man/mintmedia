@@ -177,15 +177,12 @@ func (d *Daemon) Run(ctx context.Context) error {
 			})
 		},
 		OnGraceElapsed: func(force time.Duration) {
-			d.logConsoleWarn(
+			d.logWarn(
 				logging.EventSystemShutdownGraceElapsed,
 				"\n"+resultformat.ShutdownGraceElapsedMessage("jobs", force),
 				nil,
 				logging.Fields{"force": shutdown.FormatDurationCompact(force)},
 			)
-			d.logHistoryWarn(logging.EventSystemShutdownGraceElapsed, nil, logging.Fields{
-				"force": shutdown.FormatDurationCompact(force),
-			})
 		},
 	}
 
@@ -280,14 +277,11 @@ runLoop:
 
 				fileCount, _ := processor.CountMainMedia(ctx, d.Proc, sortedPaths)
 				noun := resultformat.Pluralize(fileCount, "file", "files")
-				d.logConsoleInfo(
+				d.logInfo(
 					logging.EventSystemDestinationsReady,
 					fmt.Sprintf("INFO     destinations ready; processing %d pending %s.", fileCount, noun),
 					logging.Fields{"pending": fileCount},
 				)
-				d.logHistoryInfo(logging.EventSystemDestinationsReady, logging.Fields{
-					"pending": fileCount,
-				})
 				for _, pth := range sortedPaths {
 					delete(pending, pth)
 					key := d.inFlightKey(pth)
@@ -308,12 +302,11 @@ runLoop:
 				if !d.destDegraded.Clear(cat) {
 					continue
 				}
-				d.logConsoleInfo(
+				d.logInfo(
 					logging.EventDaemonDestinationRecovered,
 					fmt.Sprintf("INFO     %s destination available again; resuming pending items", cat),
 					logging.Fields{"category": string(cat)},
 				)
-				d.logHistoryInfo(logging.EventDaemonDestinationRecovered, logging.Fields{"category": string(cat)})
 			}
 			for pth, item := range degradedPending {
 				if d.destDegraded.IsDegraded(item.category) {
@@ -336,8 +329,7 @@ runLoop:
 				return nil
 			}
 			if err != nil {
-				d.logConsoleError(logging.EventDaemonWatchError, fmt.Sprintf("ERROR    watcher: %v", err), err, nil)
-				d.logHistoryError(logging.EventDaemonWatchError, err, nil)
+				d.logError(logging.EventDaemonWatchError, fmt.Sprintf("ERROR    watcher: %v", err), err, nil)
 			}
 
 		// --- Stable filesystem events ---
@@ -362,14 +354,11 @@ runLoop:
 				}
 				pending[path] = time.Now()
 				if lastWaitLog.IsZero() || time.Since(lastWaitLog) > time.Minute {
-					d.logConsoleInfo(
+					d.logInfo(
 						logging.EventSystemDestinationsWaiting,
 						"INFO     destination library unavailable; waiting...",
 						logging.Fields{"pending": len(pending)},
 					)
-					d.logHistoryInfo(logging.EventSystemDestinationsWaiting, logging.Fields{
-						"pending": len(pending),
-					})
 					lastWaitLog = time.Now()
 				}
 				continue
@@ -386,8 +375,7 @@ runLoop:
 				continue
 			}
 			if err != nil {
-				d.logConsoleError(logging.EventDaemonClipboardError, fmt.Sprintf("ERROR    clipboard: %v", err), err, nil)
-				d.logHistoryError(logging.EventDaemonClipboardError, err, nil)
+				d.logError(logging.EventDaemonClipboardError, fmt.Sprintf("ERROR    clipboard: %v", err), err, nil)
 			}
 
 		// --- Clipboard magnet events ---
@@ -426,10 +414,7 @@ runLoop:
 				defer cancel()
 
 				if err := d.Tx.AddMagnet(tctx, m); err != nil {
-					d.logConsoleError(logging.EventDaemonTxAddError, fmt.Sprintf("ERROR    torrent: could not add -- %v", err), err, logging.Fields{
-						"btih": btihShort,
-					})
-					d.logHistoryError(logging.EventDaemonTxAddError, err, logging.Fields{
+					d.logError(logging.EventDaemonTxAddError, fmt.Sprintf("ERROR    torrent: could not add -- %v", err), err, logging.Fields{
 						"btih": btihShort,
 					})
 					return
@@ -462,8 +447,7 @@ runLoop:
 	result := <-outcome
 
 	if !result.lastItemTimedOut {
-		d.logConsoleInfo(logging.EventSystemShutdownComplete, "\nShutdown complete.", nil)
-		d.logHistoryInfo(logging.EventSystemShutdownComplete, nil)
+		d.logInfo(logging.EventSystemShutdownComplete, "\nShutdown complete.", nil)
 		return nil
 	}
 	d.logHistoryError(logging.EventSystemShutdownTimeout, ErrShutdownTimedOut, logging.Fields{
@@ -530,12 +514,11 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 	// Fast path: if this item's category is already known degraded, defer it
 	// rather than attempting a move that can only fail the same way.
 	if cat, skip := d.destDegraded.ClassifyDegraded(ctx, d.Proc, pth); skip {
-		d.logConsoleInfo(
+		d.logInfo(
 			logging.EventDaemonDestinationDeferred,
 			fmt.Sprintf("INFO     %s destination still unavailable, deferring: %s", cat, pth),
 			logging.Fields{"path": pth, "category": string(cat)},
 		)
-		d.logHistoryInfo(logging.EventDaemonDestinationDeferred, logging.Fields{"path": pth, "category": string(cat)})
 		select {
 		case d.deferredRetry <- retryItem{path: pth, category: cat}:
 		case <-ctx.Done():
@@ -578,7 +561,7 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 	var destErr *processor.DestinationUnavailableError
 	if errors.As(err, &destErr) {
 		if d.destDegraded.Mark(destErr.Category) {
-			d.logConsoleError(
+			d.logError(
 				logging.EventDaemonDestinationDegraded,
 				resultformat.DestinationDegradedLine(
 					destErr.Category, destErr.Err, "pausing new %s items until it recovers", d.dirFor(destErr.Category), 0,
@@ -586,11 +569,6 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 				destErr.Err,
 				logging.Fields{"category": string(destErr.Category), "dir": d.dirFor(destErr.Category), "path": pth},
 			)
-			d.logHistoryError(logging.EventDaemonDestinationDegraded, destErr.Err, logging.Fields{
-				"category": string(destErr.Category),
-				"dir":      d.dirFor(destErr.Category),
-				"path":     pth,
-			})
 		}
 		select {
 		case d.deferredRetry <- retryItem{path: pth, category: destErr.Category}:
@@ -600,16 +578,12 @@ func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks 
 	}
 
 	if err != nil {
-		d.logConsoleError(
+		d.logError(
 			logging.EventDaemonProcessError,
 			resultformat.ErrorLine(pth, err, dur),
 			err,
 			logging.Fields{"path": pth, "duration": dur.String()},
 		)
-		d.logHistoryError(logging.EventDaemonProcessError, err, logging.Fields{
-			"path":     pth,
-			"duration": dur.String(),
-		})
 		return false
 	}
 
@@ -652,20 +626,16 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 
 	removed, err := d.Tx.RemoveCompleted(tctx)
 	if err != nil {
-		d.logConsoleError(logging.EventDaemonTxCleanupError, fmt.Sprintf("ERROR    torrent cleanup: %v", err), err, nil)
-		d.logHistoryError(logging.EventDaemonTxCleanupError, err, nil)
+		d.logError(logging.EventDaemonTxCleanupError, fmt.Sprintf("ERROR    torrent cleanup: %v", err), err, nil)
 		return
 	}
 	if removed > 0 {
 		noun := resultformat.Pluralize(removed, "torrent", "torrents")
-		d.logConsoleInfo(
+		d.logInfo(
 			logging.EventDaemonTxCleanupRemoved,
 			fmt.Sprintf("REMOVED  %d completed %s", removed, noun),
 			logging.Fields{"removed": removed},
 		)
-		d.logHistoryInfo(logging.EventDaemonTxCleanupRemoved, logging.Fields{
-			"removed": removed,
-		})
 	}
 }
 

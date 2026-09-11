@@ -29,8 +29,8 @@ func TestRuntimeLogger_ConsoleParityNoPrefixes(t *testing.T) {
 		t.Fatalf("New() error: %v", err)
 	}
 
-	l.Info("daemon", Event("daemon.started"), "Mintmedia daemon started.", nil)
-	l.Warn("daemon", Event("daemon.warning"), "watch error: boom", errors.New("boom"), nil)
+	l.ConsoleInfo("daemon", Event("daemon.started"), "Mintmedia daemon started.", nil)
+	l.ConsoleWarn("daemon", Event("daemon.warning"), "watch error: boom", errors.New("boom"), nil)
 
 	if got := stdout.String(); got != "Mintmedia daemon started.\n" {
 		t.Fatalf("stdout = %q", got)
@@ -56,7 +56,7 @@ func TestRuntimeLogger_HistoryJSONLAndErrorField(t *testing.T) {
 		t.Fatalf("New() error: %v", err)
 	}
 
-	l.Error("processor", EventDaemonProcessError, "", errors.New("disk full"), Fields{
+	l.HistoryError("processor", EventDaemonProcessError, errors.New("disk full"), Fields{
 		"input_path": "relative/file.mkv",
 	})
 
@@ -245,7 +245,7 @@ func TestRuntimeLogger_ConcurrentHistoryWritesAreValidJSONL(t *testing.T) {
 	for i := range n {
 		go func(i int) {
 			defer wg.Done()
-			l.Warn("daemon", EventDaemonWatchError, "", errors.New("boom"), Fields{"idx": i})
+			l.HistoryWarn("daemon", EventDaemonWatchError, errors.New("boom"), Fields{"idx": i})
 		}(i)
 	}
 	wg.Wait()

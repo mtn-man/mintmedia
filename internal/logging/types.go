@@ -76,12 +76,12 @@ type Entry struct {
 	Err       *ErrorField `json:"err,omitempty"`
 }
 
-// Logger is the flat logging API used by callers.
+// Logger is the flat logging API used by callers. Every method targets exactly
+// one sink: a single entry can never carry the same message to both, which is
+// what keeps colorized console text out of history.jsonl. Callers wanting one
+// logical event in both places compose two calls -- see logging.Emitter, which
+// does exactly that and is what production code actually uses.
 type Logger interface {
-	Log(entry Entry)
-	Info(component string, event Event, msg string, fields Fields)
-	Warn(component string, event Event, msg string, err error, fields Fields)
-	Error(component string, event Event, msg string, err error, fields Fields)
 	ConsoleInfo(component string, event Event, msg string, fields Fields)
 	ConsoleWarn(component string, event Event, msg string, err error, fields Fields)
 	ConsoleError(component string, event Event, msg string, err error, fields Fields)

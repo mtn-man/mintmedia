@@ -31,7 +31,7 @@ func New(cfg Config, xfer Transferer, metaTagger MetadataTagger, logger logging.
 		cfg:        cfg,
 		xfer:       xfer,
 		metaTagger: metaTagger,
-		logger:     logger,
+		log:        logging.NewEmitter(logger, "processor"),
 	}
 
 	// Normalize extension lists for predictable comparisons.
@@ -80,7 +80,7 @@ type processorImpl struct {
 	cfg        Config
 	xfer       Transferer
 	metaTagger MetadataTagger
-	logger     logging.Logger
+	log        logging.Emitter
 
 	// Prepared helpers
 	mainExtSet  map[string]struct{}
@@ -145,13 +145,13 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 	if err != nil && !isPartial && !isDestUnavailable {
 		var noMediaErr *NoMainMediaFoundError
 		if errors.As(err, &noMediaErr) && noMediaErr.DepthHit {
-			logWarnHistoryOnly(p, logging.EventProcessorInputMaxDepthNoMedia, nil, logging.Fields{
+			logHistoryWarn(p, logging.EventProcessorInputMaxDepthNoMedia, nil, logging.Fields{
 				"input_path": noMediaErr.Path,
 				"depth":      noMediaErr.MaxDepth,
 			})
 		}
 		if errors.Is(err, os.ErrNotExist) {
-			logInfoHistoryOnly(p, logging.EventProcessorInputSkippedInputMissing, logging.Fields{
+			logHistoryInfo(p, logging.EventProcessorInputSkippedInputMissing, logging.Fields{
 				"input_path": req.InputPath,
 			})
 			emit(Result{Handled: true, Applied: false, Reason: ErrInputMissing.Error()})
@@ -160,7 +160,7 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 		var pse *ParseShowError
 		var pme *ParseMovieError
 		if errors.As(err, &pse) || errors.As(err, &pme) {
-			logInfoHistoryOnly(p, logging.EventProcessorInputSkippedParseError, logging.Fields{
+			logHistoryInfo(p, logging.EventProcessorInputSkippedParseError, logging.Fields{
 				"input_path": req.InputPath,
 				"reason":     err.Error(),
 			})
@@ -170,15 +170,15 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 		if errors.Is(err, ErrNotMedia) || errors.Is(err, ErrNoMainMediaFound) || errors.Is(err, ErrAmbiguousShow) {
 			switch {
 			case errors.Is(err, ErrNotMedia):
-				logInfoHistoryOnly(p, logging.EventProcessorInputSkippedNotMedia, logging.Fields{
+				logHistoryInfo(p, logging.EventProcessorInputSkippedNotMedia, logging.Fields{
 					"input_path": req.InputPath,
 				})
 			case errors.Is(err, ErrNoMainMediaFound):
-				logInfoHistoryOnly(p, logging.EventProcessorInputSkippedNoMainMedia, logging.Fields{
+				logHistoryInfo(p, logging.EventProcessorInputSkippedNoMainMedia, logging.Fields{
 					"input_path": req.InputPath,
 				})
 			default:
-				logInfoHistoryOnly(p, logging.EventProcessorInputSkippedParseError, logging.Fields{
+				logHistoryInfo(p, logging.EventProcessorInputSkippedParseError, logging.Fields{
 					"input_path": req.InputPath,
 					"reason":     err.Error(),
 				})
@@ -227,7 +227,7 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 					"input_path": issue.Path,
 				})
 			}
-			logInfoHistoryOnly(p, logging.EventProcessorInputSkippedParseError, logging.Fields{
+			logHistoryInfo(p, logging.EventProcessorInputSkippedParseError, logging.Fields{
 				"input_path": issue.Path,
 				"reason":     issue.Err.Error(),
 			})

@@ -1,51 +1,35 @@
 package processor
 
 import (
-	"github.com/mtn-man/mintmedia/internal/console"
 	"github.com/mtn-man/mintmedia/internal/logging"
 )
 
-func logInfoHistoryOnly(p *processorImpl, event logging.Event, fields logging.Fields) {
-	if p == nil || p.logger == nil {
-		return
-	}
-	p.logger.HistoryInfo("processor", event, fields)
+// These wrappers exist only to spare every call site the p.log receiver and to
+// keep one name set across this package and internal/daemon. The console and
+// history split, colorization, component resolution and the nil-guard all live
+// in logging.Emitter -- see its doc comment for why a console message must
+// never reach the history sink.
+
+func logHistoryInfo(p *processorImpl, event logging.Event, fields logging.Fields) {
+	p.log.HistoryInfo(event, fields)
 }
 
-func logWarnHistoryOnly(p *processorImpl, event logging.Event, err error, fields logging.Fields) {
-	if p == nil || p.logger == nil {
-		return
-	}
-	p.logger.HistoryWarn("processor", event, err, fields)
-}
-
-func logConsoleWarn(p *processorImpl, event logging.Event, msg string, err error, fields logging.Fields) {
-	if p == nil || p.logger == nil {
-		return
-	}
-	p.logger.ConsoleWarn("processor", event, console.ColorizePrefixErr(msg), err, fields)
+func logHistoryWarn(p *processorImpl, event logging.Event, err error, fields logging.Fields) {
+	p.log.HistoryWarn(event, err, fields)
 }
 
 func logConsoleInfo(p *processorImpl, event logging.Event, msg string, fields logging.Fields) {
-	if p == nil || p.logger == nil {
-		return
-	}
-	p.logger.ConsoleInfo("processor", event, console.ColorizePrefixOut(msg), fields)
+	p.log.ConsoleInfo(event, msg, fields)
 }
 
-// logWarn and logInfo emit one logical event to both sinks. They compose the
-// two single-sink helpers rather than calling Logger.Warn/Logger.Info, which
-// write a single Message to both: the console message is label-prefixed and
-// colorized, and colorized text must never reach history.jsonl. That leaves
-// history carrying no message at all -- the Fields at each call site are the
-// record, so anything the console line states must also appear as a field.
-
-func logWarn(p *processorImpl, event logging.Event, msg string, err error, fields logging.Fields) {
-	logConsoleWarn(p, event, msg, err, fields)
-	logWarnHistoryOnly(p, event, err, fields)
+func logConsoleWarn(p *processorImpl, event logging.Event, msg string, err error, fields logging.Fields) {
+	p.log.ConsoleWarn(event, msg, err, fields)
 }
 
 func logInfo(p *processorImpl, event logging.Event, msg string, fields logging.Fields) {
-	logConsoleInfo(p, event, msg, fields)
-	logInfoHistoryOnly(p, event, fields)
+	p.log.Info(event, msg, fields)
+}
+
+func logWarn(p *processorImpl, event logging.Event, msg string, err error, fields logging.Fields) {
+	p.log.Warn(event, msg, err, fields)
 }

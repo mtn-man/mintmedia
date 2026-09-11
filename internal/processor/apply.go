@@ -113,12 +113,12 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 				logConsoleWarn(p, logging.EventProcessorMetadataTitleWriteFailed,
 					fmt.Sprintf("WARNING  metadata title tag not updated for %s", filepath.Base(pl.MainSourcePath)),
 					err, logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
-				logWarnHistoryOnly(p, logging.EventProcessorMetadataTitleWriteFailed, err,
+				logHistoryWarn(p, logging.EventProcessorMetadataTitleWriteFailed, err,
 					logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
 			} else {
 				taggedTmp = tmp
 				mainSource = tmp
-				logInfoHistoryOnly(p, logging.EventProcessorMetadataTitleWriteApplied, logging.Fields{
+				logHistoryInfo(p, logging.EventProcessorMetadataTitleWriteApplied, logging.Fields{
 					"path": pl.MainSourcePath, "title": titleTag,
 				})
 			}
@@ -165,7 +165,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 				err, logging.Fields{"cleanup_kind": "main", "src": pl.MainSourcePath, "dst": pl.DestMainPath})
 		}
 	}
-	logInfoHistoryOnly(p, logging.EventProcessorMoveMainApplied, logging.Fields{
+	logHistoryInfo(p, logging.EventProcessorMoveMainApplied, logging.Fields{
 		"src":      pl.MainSourcePath,
 		"dst":      pl.DestMainPath,
 		"category": string(pl.Category),
@@ -206,7 +206,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		}
 		if err := p.xfer.Move(ctx, mv.Source, mv.Dest); err != nil {
 			if handleCleanupError(p, err, "associated", mv.Source, mv.Dest) {
-				logInfoHistoryOnly(p, logging.EventProcessorMoveAssociatedApplied, logging.Fields{
+				logHistoryInfo(p, logging.EventProcessorMoveAssociatedApplied, logging.Fields{
 					"src":      mv.Source,
 					"dst":      mv.Dest,
 					"category": string(pl.Category),
@@ -225,14 +225,14 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			if pl.InputPath != "" && assocFailedByInput != nil {
 				assocFailedByInput[pl.InputPath] = true
 			}
-			logWarnHistoryOnly(p, logging.EventProcessorMoveAssociatedFailed, err, logging.Fields{
+			logHistoryWarn(p, logging.EventProcessorMoveAssociatedFailed, err, logging.Fields{
 				"src":      mv.Source,
 				"dst":      mv.Dest,
 				"category": string(pl.Category),
 			})
 			continue
 		}
-		logInfoHistoryOnly(p, logging.EventProcessorMoveAssociatedApplied, logging.Fields{
+		logHistoryInfo(p, logging.EventProcessorMoveAssociatedApplied, logging.Fields{
 			"src":      mv.Source,
 			"dst":      mv.Dest,
 			"category": string(pl.Category),
@@ -310,7 +310,7 @@ func skipDuplicateResult(p *processorImpl, pl Plan, duplicateSkippedByInput map[
 	if pl.DuplicateReview {
 		reason = fmt.Sprintf("untagged release, possible duplicate of %s -- left for review", matchPath)
 	}
-	logInfoHistoryOnly(p, logging.EventProcessorInputSkippedDuplicate, logging.Fields{
+	logHistoryInfo(p, logging.EventProcessorInputSkippedDuplicate, logging.Fields{
 		"input_path":      pl.InputPath,
 		"dest_path":       pl.DestMainPath,
 		"match_path":      matchPath,
