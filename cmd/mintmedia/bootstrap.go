@@ -101,7 +101,7 @@ func offerEditConfig(configPath, nextStepsMsg string) {
 }
 
 func printConfigSummary(resolved *config.Resolved) {
-	fmt.Println(console.ColorizePrefixOut("STARTED       mintmedia"))
+	fmt.Println(console.ColorizePrefixOut("STARTED  mintmedia"))
 	fmt.Printf("Version:      %s\n", resolveVersion(version, mainModuleVersion()))
 	fmt.Printf("Config file:  %s\n\n", resolved.ConfigPathAbs)
 
