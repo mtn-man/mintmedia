@@ -511,7 +511,7 @@ func planForMain(
 		pl.DestDir = filepath.Join(p.cfg.ShowsDir, showFolder, seasonFolder)
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
-		if err := checkDuplicate(p, &pl); err != nil {
+		if err := checkShowDuplicate(p, &pl); err != nil {
 			return Plan{}, err
 		}
 
@@ -560,7 +560,7 @@ func planForMain(
 				return Plan{}, err
 			}
 		} else {
-			if err := checkDuplicate(p, &pl); err != nil {
+			if err := checkExactDuplicate(&pl); err != nil {
 				return Plan{}, err
 			}
 			if !pl.Duplicate {
@@ -727,13 +727,14 @@ func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 	})
 }
 
-// checkDuplicate runs the appropriate duplicate check for pl's destination.
-// With resolution_aware off it is the plain exact-path stat; with it on it is
-// the resolution-aware directory scan, which compares on pl.MetadataTitle --
-// the resolution-free radix. Movies with resolution_aware on do NOT come
-// through here -- they take planMovieResolutionAware; this path is the show
-// branch (either setting) and the resolution_aware-off movie branch.
-func checkDuplicate(p *processorImpl, pl *Plan) error {
+// checkShowDuplicate runs the show-branch duplicate check for pl's
+// destination. With resolution_aware off it is the plain exact-path stat;
+// with it on it is the resolution-aware directory scan, which compares on
+// pl.MetadataTitle -- the resolution-free radix. Movies never call this --
+// they dispatch directly to planMovieResolutionAware or checkExactDuplicate
+// from planForMain, since resolution_aware is part of a movie's identity
+// rather than a same-file-or-not toggle.
+func checkShowDuplicate(p *processorImpl, pl *Plan) error {
 	if p.cfg.ResolutionAware {
 		return checkDuplicateWithResolution(p, pl)
 	}
