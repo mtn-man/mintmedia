@@ -2,9 +2,7 @@ package daemon
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/mtn-man/mintmedia/internal/console"
 	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/notify"
 )
@@ -28,64 +26,55 @@ func (d *Daemon) caffeinateHooks() notify.CaffeinateHooks {
 	}
 }
 
-func (d *Daemon) logHistoryInfo(event logging.Event, fields logging.Fields) {
-	if d == nil || d.Logger == nil {
-		return
+// log derives the daemon's Emitter from the exported Logger field. Daemon is a
+// bare struct literal with no constructor -- callers, including tests, assign
+// Logger after construction -- so there is no init point at which to cache one.
+// Emitter is a value type precisely so deriving it per call costs nothing.
+func (d *Daemon) log() logging.Emitter {
+	if d == nil {
+		return logging.Emitter{}
 	}
-	d.Logger.HistoryInfo(componentForEvent(event), event, fields)
+	return logging.NewEmitter(d.Logger, "daemon")
+}
+
+// These wrappers exist only to spare every call site the d.log() receiver and
+// to keep one name set across this package and internal/processor. The console
+// and history split, colorization, component resolution and the nil-guard all
+// live in logging.Emitter -- see its doc comment.
+
+func (d *Daemon) logHistoryInfo(event logging.Event, fields logging.Fields) {
+	d.log().HistoryInfo(event, fields)
 }
 
 func (d *Daemon) logConsoleInfo(event logging.Event, msg string, fields logging.Fields) {
-	if d == nil || d.Logger == nil {
-		return
-	}
-	d.Logger.ConsoleInfo(componentForEvent(event), event, console.ColorizePrefixOut(msg), fields)
-}
-
-func (d *Daemon) logHistoryWarn(event logging.Event, err error, fields logging.Fields) {
-	if d == nil || d.Logger == nil {
-		return
-	}
-	d.Logger.HistoryWarn(componentForEvent(event), event, err, fields)
+	d.log().ConsoleInfo(event, msg, fields)
 }
 
 func (d *Daemon) logConsoleWarn(event logging.Event, msg string, err error, fields logging.Fields) {
-	if d == nil || d.Logger == nil {
-		return
-	}
-	d.Logger.ConsoleWarn(componentForEvent(event), event, console.ColorizePrefixErr(msg), err, fields)
+	d.log().ConsoleWarn(event, msg, err, fields)
 }
 
 func (d *Daemon) logHistoryError(event logging.Event, err error, fields logging.Fields) {
-	if d == nil || d.Logger == nil {
-		return
-	}
-	d.Logger.HistoryError(componentForEvent(event), event, err, fields)
+	d.log().HistoryError(event, err, fields)
 }
 
-func (d *Daemon) logConsoleError(event logging.Event, msg string, err error, fields logging.Fields) {
-	if d == nil || d.Logger == nil {
-		return
-	}
-	d.Logger.ConsoleError(componentForEvent(event), event, console.ColorizePrefixErr(msg), err, fields)
+func (d *Daemon) logInfo(event logging.Event, msg string, fields logging.Fields) {
+	d.log().Info(event, msg, fields)
+}
+
+func (d *Daemon) logWarn(event logging.Event, msg string, err error, fields logging.Fields) {
+	d.log().Warn(event, msg, err, fields)
+}
+
+func (d *Daemon) logError(event logging.Event, msg string, err error, fields logging.Fields) {
+	d.log().Error(event, msg, err, fields)
 }
 
 func (d *Daemon) logSortParseError(path string, err error) {
-	d.logConsoleWarn(
+	d.logWarn(
 		logging.EventProcessorInputSkippedParseError,
 		"WARNING  skipping "+path+": "+err.Error(),
 		err,
 		logging.Fields{"path": path},
 	)
-	d.logHistoryWarn(logging.EventProcessorInputSkippedParseError, err, logging.Fields{"path": path})
-}
-
-func componentForEvent(event logging.Event) string {
-	if strings.HasPrefix(string(event), "system.") {
-		return "system"
-	}
-	if strings.HasPrefix(string(event), "processor.") {
-		return "processor"
-	}
-	return "daemon"
 }
