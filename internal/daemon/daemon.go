@@ -257,63 +257,11 @@ runLoop:
 			break runLoop
 
 		case <-retryTick.C:
-			if len(pending) > 0 && d.DeferDestinationChecks && d.destinationsReady() {
-				pendingPaths := make([]string, 0, len(pending))
-				for pth := range pending {
-					pendingPaths = append(pendingPaths, pth)
-				}
-				sortedPaths, sortErrs, sortErr := processor.SortCandidates(ctx, d.Proc, pendingPaths)
-				if sortErr != nil {
-					sortedPaths = pendingPaths // context canceled; fall back to arbitrary order
-				}
-				for _, se := range sortErrs {
-					// Leave parse-error paths in pending; they will be retried on the next tick.
-					d.logSortParseError(se.Path, se.Err)
-				}
-
-				fileCount, _ := processor.CountMainMedia(ctx, d.Proc, sortedPaths)
-				noun := resultformat.Pluralize(fileCount, "file", "files")
-				d.logInfo(
-					logging.EventSystemDestinationsReady,
-					fmt.Sprintf("INFO     destinations ready; processing %d pending %s.", fileCount, noun),
-					logging.Fields{"pending": fileCount},
-				)
-				for _, pth := range sortedPaths {
-					delete(pending, pth)
-					key := d.inFlight.Key(pth)
-					if key == "" {
-						return fmt.Errorf("empty in-flight key for path: %s", pth)
-					}
-					d.dispatchToQueue(ctx, workQueue, pth, key)
-				}
+			if err := d.retryDeferredDestinationChecks(ctx, workQueue, pending); err != nil {
+				return err
 			}
-
-			// Independent of the defer_destination_checks pending drain above:
-			// probe any runtime-degraded destination for recovery, then flush
-			// items deferred while their category was degraded.
-			for _, cat := range d.destDegraded.Degraded() {
-				if !d.dirWritableFn(d.dirFor(cat)) {
-					continue
-				}
-				if !d.destDegraded.Clear(cat) {
-					continue
-				}
-				d.logInfo(
-					logging.EventDaemonDestinationRecovered,
-					fmt.Sprintf("INFO     %s destination available again; resuming pending items", cat),
-					logging.Fields{"category": string(cat)},
-				)
-			}
-			for pth, item := range degradedPending {
-				if d.destDegraded.IsDegraded(item.category) {
-					continue
-				}
-				delete(degradedPending, pth)
-				key := d.inFlight.Key(pth)
-				if key == "" {
-					return fmt.Errorf("empty in-flight key for path: %s", pth)
-				}
-				d.dispatchToQueue(ctx, workQueue, pth, key)
+			if err := d.recoverDegradedDestinations(ctx, workQueue, degradedPending); err != nil {
+				return err
 			}
 
 		case item := <-d.deferredRetry:
@@ -384,6 +332,78 @@ runLoop:
 	}
 
 	return d.awaitShutdown(outcome)
+}
+
+// retryDeferredDestinationChecks drains items held in pending (deferred at
+// watch-time because defer_destination_checks was set and destinations
+// weren't ready yet) once destinationsReady() reports they now are.
+func (d *Daemon) retryDeferredDestinationChecks(ctx context.Context, workQueue chan<- workItem, pending map[string]time.Time) error {
+	if len(pending) == 0 || !d.DeferDestinationChecks || !d.destinationsReady() {
+		return nil
+	}
+
+	pendingPaths := make([]string, 0, len(pending))
+	for pth := range pending {
+		pendingPaths = append(pendingPaths, pth)
+	}
+	sortedPaths, sortErrs, sortErr := processor.SortCandidates(ctx, d.Proc, pendingPaths)
+	if sortErr != nil {
+		sortedPaths = pendingPaths // context canceled; fall back to arbitrary order
+	}
+	for _, se := range sortErrs {
+		// Leave parse-error paths in pending; they will be retried on the next tick.
+		d.logSortParseError(se.Path, se.Err)
+	}
+
+	fileCount, _ := processor.CountMainMedia(ctx, d.Proc, sortedPaths)
+	noun := resultformat.Pluralize(fileCount, "file", "files")
+	d.logInfo(
+		logging.EventSystemDestinationsReady,
+		fmt.Sprintf("INFO     destinations ready; processing %d pending %s.", fileCount, noun),
+		logging.Fields{"pending": fileCount},
+	)
+	for _, pth := range sortedPaths {
+		delete(pending, pth)
+		key := d.inFlight.Key(pth)
+		if key == "" {
+			return fmt.Errorf("empty in-flight key for path: %s", pth)
+		}
+		d.dispatchToQueue(ctx, workQueue, pth, key)
+	}
+	return nil
+}
+
+// recoverDegradedDestinations probes any runtime-degraded destination for
+// recovery, then flushes items held in degradedPending whose category has
+// cleared -- independent of retryDeferredDestinationChecks (different
+// trigger: a destination that was ready and later went degraded mid-run,
+// rather than one deferred from watch-time).
+func (d *Daemon) recoverDegradedDestinations(ctx context.Context, workQueue chan<- workItem, degradedPending map[string]retryItem) error {
+	for _, cat := range d.destDegraded.Degraded() {
+		if !d.dirWritableFn(d.dirFor(cat)) {
+			continue
+		}
+		if !d.destDegraded.Clear(cat) {
+			continue
+		}
+		d.logInfo(
+			logging.EventDaemonDestinationRecovered,
+			fmt.Sprintf("INFO     %s destination available again; resuming pending items", cat),
+			logging.Fields{"category": string(cat)},
+		)
+	}
+	for pth, item := range degradedPending {
+		if d.destDegraded.IsDegraded(item.category) {
+			continue
+		}
+		delete(degradedPending, pth)
+		key := d.inFlight.Key(pth)
+		if key == "" {
+			return fmt.Errorf("empty in-flight key for path: %s", pth)
+		}
+		d.dispatchToQueue(ctx, workQueue, pth, key)
+	}
+	return nil
 }
 
 // awaitShutdown blocks until runWorker fully stops, then reports how the
