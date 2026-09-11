@@ -21,7 +21,7 @@ import (
 
 const lockFilename = "mintmedia.lock"
 
-func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor.Processor, logger logging.Logger) (bool, error) {
+func runDaemonMode(resolved *config.Resolved, proc processor.Processor, logger logging.Logger) (bool, error) {
 	lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
 	releaseLock, err := state.AcquireLock(lockPath)
 	if err != nil {
@@ -37,10 +37,8 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 		return false, err
 	}
 
-	torrentEnabled := cfg.Features.EnableTorrentAutomation && cfg.Torrent.Enabled
-
 	var poller *clipboard.Poller
-	if torrentEnabled && cfg.Clipboard.Enabled {
+	if resolved.TorrentEnabled && resolved.ClipboardEnabled {
 		poller, err = clipboard.NewPoller(resolved.ClipboardPollInterval)
 		if err != nil {
 			if errors.Is(err, clipboard.ErrUnsupportedPlatform) {
@@ -54,10 +52,10 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 	}
 
 	var tx *transmission.Client
-	if torrentEnabled {
+	if resolved.TorrentEnabled {
 		tx = &transmission.Client{
-			Host: cfg.Torrent.Host,
-			Auth: cfg.Torrent.Auth,
+			Host: resolved.TorrentHost,
+			Auth: resolved.TorrentAuth,
 		}
 	}
 
@@ -68,12 +66,12 @@ func runDaemonMode(cfg *config.Config, resolved *config.Resolved, proc processor
 		Tx:      tx,
 		Logger:  logger,
 
-		TransmissionHost: cfg.Torrent.Host,
+		TransmissionHost: resolved.TorrentHost,
 
 		MoviesDir: resolved.DestDirMoviesAbs,
 		ShowsDir:  resolved.DestDirShowsAbs,
 
-		DeferDestinationChecks: cfg.System.DeferDestinationChecks,
+		DeferDestinationChecks: resolved.DeferDestinationChecks,
 
 		SoundInput:            defaultSoundInput,
 		SoundDone:             defaultSoundDone,

@@ -183,7 +183,7 @@ func main() {
 		return
 	}
 
-	cfg, resolved, bootstrapped, err := config.Load(*configPath)
+	_, resolved, bootstrapped, err := config.Load(*configPath)
 	if err != nil {
 		die(err, exitError)
 	}
@@ -212,7 +212,7 @@ func main() {
 		*processPath,
 		*processDrop,
 		*daemonFlag,
-		cfg.Features.EnableProcessing,
+		resolved.EnableProcessing,
 	)
 	if err != nil {
 		die(err, exitUsage)
@@ -220,7 +220,7 @@ func main() {
 
 	if bootstrapped {
 		fmt.Println(console.ColorizePrefixOut("CREATED  config file"))
-		printConfigSummary(cfg, resolved)
+		printConfigSummary(resolved)
 		switch {
 		case mode.ExplicitCount == 0:
 			if !confirmProcessDrop(resolved.DropFolderAbs) {
@@ -236,10 +236,10 @@ func main() {
 			fmt.Println()
 		}
 	} else if *verbose {
-		printConfigSummary(cfg, resolved)
+		printConfigSummary(resolved)
 	}
 
-	if !cfg.Features.EnableProcessing {
+	if !resolved.EnableProcessing {
 		fmt.Println("Config smoke test complete.")
 		return
 	}
@@ -333,7 +333,7 @@ func main() {
 	}
 
 	// ---- Daemon mode ---------------------------------------------------------
-	interrupted, err := runDaemonMode(cfg, resolved, proc, logger)
+	interrupted, err := runDaemonMode(resolved, proc, logger)
 	if err != nil {
 		code := exitError
 		if errors.Is(err, daemon.ErrShutdownTimedOut) {

@@ -100,7 +100,7 @@ func offerEditConfig(configPath, nextStepsMsg string) {
 	fmt.Println(nextStepsMsg)
 }
 
-func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
+func printConfigSummary(resolved *config.Resolved) {
 	fmt.Println(console.ColorizePrefixOut("STARTED       mintmedia"))
 	fmt.Printf("Version:      %s\n", resolveVersion(version, mainModuleVersion()))
 	fmt.Printf("Config file:  %s\n\n", resolved.ConfigPathAbs)
@@ -121,12 +121,12 @@ func printConfigSummary(cfg *config.Config, resolved *config.Resolved) {
 	fmt.Printf("  History log level:  %s\n", resolved.HistoryLogLevel)
 	fmt.Println()
 
-	if cfg.Features.EnableProcessing {
+	if resolved.EnableProcessing {
 		fmt.Println("Processing:")
 		fmt.Printf("  History file:       %s\n", resolved.HistoryFileAbs)
 		fmt.Printf("  Main extensions:    %d\n", len(resolved.MainMediaExtensions))
 		fmt.Printf("  Assoc extensions:   %d\n", len(resolved.AssociatedFileExtensions))
-		fmt.Printf("  Custom blacklist patterns: %d\n", len(cfg.Naming.MediaTagBlacklist))
+		fmt.Printf("  Custom blacklist patterns: %d\n", len(resolved.MediaTagBlacklist))
 		fmt.Printf("  Metadata title tagging:    %s\n", enabledDisabled(resolved.EnableMetadataTitleTagging))
 	} else {
 		fmt.Println("Processing: disabled")

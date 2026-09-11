@@ -140,4 +140,17 @@ type Resolved struct {
 	AutoCleanupCompletedTorrents bool
 
 	EnableMetadataTitleTagging bool
+
+	EnableProcessing bool
+
+	// TorrentEnabled is features.enable_torrent_automation && torrent.enabled --
+	// the single "is torrent automation actually on" flag, computed once here
+	// rather than re-derived by each caller.
+	TorrentEnabled bool
+	TorrentHost    string
+	TorrentAuth    string
+
+	ClipboardEnabled bool
+
+	DeferDestinationChecks bool
 }
