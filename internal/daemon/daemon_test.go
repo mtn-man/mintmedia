@@ -961,9 +961,6 @@ func TestDaemon_RunWorkerCancelDuringQueue_DrainsOnlyCurrentItem(t *testing.T) {
 	}
 
 	d := &Daemon{Proc: proc}
-	d.inFlightMu.Lock()
-	d.inFlight = make(map[string]struct{})
-	d.inFlightMu.Unlock()
 
 	queue := make(chan workItem, 3)
 	queue <- workItem{path: "/tmp/a.mkv", inFlightKey: "/tmp/a.mkv"}
@@ -1261,30 +1258,6 @@ func writeFile(t *testing.T, path string, contents string) { //nolint:unparam //
 	}
 }
 
-func TestDaemon_InFlightDedupe(t *testing.T) {
-	d := &Daemon{}
-	path := "/tmp/example"
-
-	if !d.tryMarkInFlight(path) {
-		t.Fatalf("expected first mark to succeed")
-	}
-	if !d.isInFlight(path) {
-		t.Fatalf("expected path to be in-flight")
-	}
-	if d.tryMarkInFlight(path) {
-		t.Fatalf("expected duplicate mark to fail")
-	}
-
-	d.clearInFlight(path)
-
-	if d.isInFlight(path) {
-		t.Fatalf("expected path to be cleared from in-flight")
-	}
-	if !d.tryMarkInFlight(path) {
-		t.Fatalf("expected mark after clear to succeed")
-	}
-}
-
 func TestDaemon_DestDegradedTransitions(t *testing.T) {
 	d := &Daemon{MoviesDir: "/movies", ShowsDir: "/shows"}
 
@@ -1328,36 +1301,5 @@ func TestDaemon_DestDegradedTransitions(t *testing.T) {
 	}
 	if d.destDegraded.Any() {
 		t.Fatalf("expected nothing degraded after clearing")
-	}
-}
-
-func TestDaemon_InFlightKeyCanonicalization(t *testing.T) {
-	d := &Daemon{}
-	base := t.TempDir()
-
-	realDir := filepath.Join(base, "RealCaps")
-	subDir := filepath.Join(realDir, "SubCaps")
-	mkdirAll(t, subDir)
-
-	linkDir := filepath.Join(base, "LinkCaps")
-	if err := os.Symlink(realDir, linkDir); err != nil {
-		t.Skipf("symlink not supported: %v", err)
-	}
-
-	targetPath := filepath.Join(linkDir, "SubCaps")
-	key := d.inFlightKey(targetPath)
-
-	eval, err := filepath.EvalSymlinks(targetPath)
-	if err != nil {
-		t.Fatalf("EvalSymlinks failed: %v", err)
-	}
-
-	expected := filepath.Clean(eval)
-	if isCaseInsensitiveFS() {
-		expected = strings.ToLower(expected)
-	}
-
-	if key != expected {
-		t.Fatalf("unexpected in-flight key: got %q want %q", key, expected)
 	}
 }

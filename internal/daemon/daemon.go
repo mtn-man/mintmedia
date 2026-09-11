@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -87,9 +86,9 @@ type Daemon struct {
 	// internal: coalesces rapid-fire Transmission cleanup attempts (see CleanupCooldown).
 	cleanupDebounce notify.Debouncer
 
-	// internal: tracks in-flight paths to suppress duplicate processing
-	inFlightMu sync.Mutex
-	inFlight   map[string]struct{}
+	// internal: tracks in-flight paths to suppress duplicate processing.
+	// See inFlightSet (inflight.go) for the concurrency-safe state this wraps.
+	inFlight inFlightSet
 
 	// internal: tracks which destination categories (Movies/Shows) are
 	// currently refusing writes (disk full, over quota, permission denied).
@@ -186,10 +185,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		},
 	}
 
-	d.inFlightMu.Lock()
-	d.inFlight = make(map[string]struct{})
-	d.inFlightMu.Unlock()
-
+	d.inFlight.Reset()
 	d.destDegraded.Reset()
 	if d.dirWritableFn == nil {
 		d.dirWritableFn = paths.DirWritable
@@ -284,7 +280,7 @@ runLoop:
 				)
 				for _, pth := range sortedPaths {
 					delete(pending, pth)
-					key := d.inFlightKey(pth)
+					key := d.inFlight.Key(pth)
 					if key == "" {
 						return fmt.Errorf("empty in-flight key for path: %s", pth)
 					}
@@ -313,7 +309,7 @@ runLoop:
 					continue
 				}
 				delete(degradedPending, pth)
-				key := d.inFlightKey(pth)
+				key := d.inFlight.Key(pth)
 				if key == "" {
 					return fmt.Errorf("empty in-flight key for path: %s", pth)
 				}
@@ -342,13 +338,13 @@ runLoop:
 				continue
 			}
 			path = filepath.Clean(path)
-			key := d.inFlightKey(path)
+			key := d.inFlight.Key(path)
 			if key == "" {
 				return fmt.Errorf("empty in-flight key for path: %s", path)
 			}
 
 			if d.DeferDestinationChecks && !d.destinationsReady() {
-				if d.isInFlight(key) {
+				if d.inFlight.Is(key) {
 					d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": path})
 					continue
 				}
@@ -509,7 +505,7 @@ func (d *Daemon) runWorker(runCtx context.Context, policy shutdown.Policy, hooks
 // graceful-then-forced drain. It reports timedOut=true when the item was
 // abandoned per policy (see jobrunner.Run's late-callback-dropping guarantee).
 func (d *Daemon) processPath(ctx context.Context, policy shutdown.Policy, hooks shutdown.Hooks, pth string, inFlightKey string) (timedOut bool) {
-	defer d.clearInFlight(inFlightKey)
+	defer d.inFlight.Clear(inFlightKey)
 
 	// Fast path: if this item's category is already known degraded, defer it
 	// rather than attempting a move that can only fail the same way.
@@ -644,7 +640,7 @@ func (d *Daemon) cleanupCompletedTorrents(ctx context.Context) {
 // it on workQueue, logging and skipping if it's already in-flight. It reports
 // whether ctx was done before the enqueue could complete.
 func (d *Daemon) dispatchToQueue(ctx context.Context, workQueue chan<- workItem, pth, key string) (canceled bool) {
-	if !d.tryMarkInFlight(key) {
+	if !d.inFlight.TryMark(key) {
 		d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": pth})
 		return false
 	}
@@ -652,70 +648,14 @@ func (d *Daemon) dispatchToQueue(ctx context.Context, workQueue chan<- workItem,
 	case workQueue <- workItem{path: pth, inFlightKey: key}:
 		return false
 	case <-ctx.Done():
-		d.clearInFlight(key)
+		d.inFlight.Clear(key)
 		return true
 	}
-}
-
-func (d *Daemon) tryMarkInFlight(path string) bool {
-	d.inFlightMu.Lock()
-	defer d.inFlightMu.Unlock()
-	if d.inFlight == nil {
-		d.inFlight = make(map[string]struct{})
-	}
-	if _, ok := d.inFlight[path]; ok {
-		return false
-	}
-	d.inFlight[path] = struct{}{}
-	return true
-}
-
-func (d *Daemon) isInFlight(path string) bool {
-	d.inFlightMu.Lock()
-	defer d.inFlightMu.Unlock()
-	if d.inFlight == nil {
-		return false
-	}
-	_, ok := d.inFlight[path]
-	return ok
-}
-
-func (d *Daemon) clearInFlight(path string) {
-	d.inFlightMu.Lock()
-	defer d.inFlightMu.Unlock()
-	if d.inFlight == nil {
-		return
-	}
-	delete(d.inFlight, path)
 }
 
 // dirFor maps a processor.Category to its configured destination directory.
 func (d *Daemon) dirFor(cat processor.Category) string {
 	return processor.DirFor(cat, d.MoviesDir, d.ShowsDir)
-}
-
-func (d *Daemon) inFlightKey(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	path = filepath.Clean(path)
-	if realPath, err := filepath.EvalSymlinks(path); err == nil {
-		path = filepath.Clean(realPath)
-	}
-	if isCaseInsensitiveFS() {
-		path = strings.ToLower(path)
-	}
-	return path
-}
-
-func isCaseInsensitiveFS() bool {
-	switch runtime.GOOS {
-	case "darwin", "windows":
-		return true
-	default:
-		return false
-	}
 }
 
 // destinationsReady returns true when both destination directories are present and writable.
