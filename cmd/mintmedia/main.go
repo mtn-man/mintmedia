@@ -52,6 +52,63 @@ func die(err error, code int) {
 	os.Exit(code)
 }
 
+// handleStatusOrStop services --status/--stop and reports whether it handled
+// the request -- callers should return immediately from main() when true.
+func handleStatusOrStop(statusFlag, stopFlag bool, resolved *config.Resolved) bool {
+	if statusFlag {
+		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
+		info, running, err := state.CheckLock(lockPath)
+		if err != nil {
+			die(err, exitError)
+		}
+		if !running {
+			fmt.Println(console.ColorizePrefixOut("STATUS   daemon not running"))
+			os.Exit(exitNotRunning)
+		}
+		if info.Started.IsZero() {
+			fmt.Println(console.ColorizePrefixOut(fmt.Sprintf("STATUS   daemon running (pid=%d)", info.PID)))
+		} else {
+			uptime := time.Since(info.Started).Truncate(time.Second)
+			fmt.Println(console.ColorizePrefixOut(fmt.Sprintf("STATUS   daemon running (pid=%d, uptime %s)", info.PID, uptime)))
+		}
+		return true
+	}
+
+	if stopFlag {
+		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
+		info, running, err := state.CheckLock(lockPath)
+		if err != nil {
+			die(err, exitError)
+		}
+		if !running {
+			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr("WARNING  daemon not running"))
+			return true
+		}
+		p, err := os.FindProcess(info.PID)
+		if err != nil {
+			die(err, exitError)
+		}
+		if err := p.Signal(syscall.SIGTERM); err != nil {
+			// Process exited in the window between CheckLock and Signal -- already stopped.
+			if errors.Is(err, syscall.ESRCH) {
+				fmt.Println(console.ColorizePrefixOut("STOPPED  daemon"))
+				return true
+			}
+			die(err, exitError)
+		}
+		timeout := resolved.ShutdownGraceDuration + resolved.ShutdownForceTimeout + 5*time.Second
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		if err := state.WaitUntilReleased(ctx, lockPath, info, 250*time.Millisecond); err != nil {
+			die(fmt.Errorf("timed out waiting for daemon to stop (pid=%d)", info.PID), exitError)
+		}
+		fmt.Println(console.ColorizePrefixOut("STOPPED  daemon"))
+		return true
+	}
+
+	return false
+}
+
 func main() {
 	// Before anything can create a file or directory: a library the media
 	// server cannot read is a silent failure of the tool's whole purpose.
@@ -140,54 +197,7 @@ func main() {
 			flagName, strings.Join(pflag.Args(), " "), filepath.Base(os.Args[0]), flagName, pflag.Arg(0), flagName, resolved.DropFolderAbs,
 		), exitUsage)
 	}
-	if *statusFlag {
-		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
-		info, running, err := state.CheckLock(lockPath)
-		if err != nil {
-			die(err, exitError)
-		}
-		if !running {
-			fmt.Println(console.ColorizePrefixOut("STATUS   daemon not running"))
-			os.Exit(exitNotRunning)
-		}
-		if info.Started.IsZero() {
-			fmt.Println(console.ColorizePrefixOut(fmt.Sprintf("STATUS   daemon running (pid=%d)", info.PID)))
-		} else {
-			uptime := time.Since(info.Started).Truncate(time.Second)
-			fmt.Println(console.ColorizePrefixOut(fmt.Sprintf("STATUS   daemon running (pid=%d, uptime %s)", info.PID, uptime)))
-		}
-		return
-	}
-
-	if *stopFlag {
-		lockPath := filepath.Join(resolved.StateDirAbs, lockFilename)
-		info, running, err := state.CheckLock(lockPath)
-		if err != nil {
-			die(err, exitError)
-		}
-		if !running {
-			fmt.Fprintln(os.Stderr, console.ColorizePrefixErr("WARNING  daemon not running"))
-			return
-		}
-		p, err := os.FindProcess(info.PID)
-		if err != nil {
-			die(err, exitError)
-		}
-		if err := p.Signal(syscall.SIGTERM); err != nil {
-			// Process exited in the window between CheckLock and Signal -- already stopped.
-			if errors.Is(err, syscall.ESRCH) {
-				fmt.Println(console.ColorizePrefixOut("STOPPED  daemon"))
-				return
-			}
-			die(err, exitError)
-		}
-		timeout := resolved.ShutdownGraceDuration + resolved.ShutdownForceTimeout + 5*time.Second
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		if err := state.WaitUntilReleased(ctx, lockPath, info, 250*time.Millisecond); err != nil {
-			die(fmt.Errorf("timed out waiting for daemon to stop (pid=%d)", info.PID), exitError)
-		}
-		fmt.Println(console.ColorizePrefixOut("STOPPED  daemon"))
+	if handleStatusOrStop(*statusFlag, *stopFlag, resolved) {
 		return
 	}
 
@@ -261,7 +271,7 @@ func main() {
 				PrintPlans(plans)
 			}
 			PrintPlanIssues(partial.Issues)
-			os.Exit(exitError) //nolint:gocritic // the earlier defer cancel() (--stop path) always returns before reaching here
+			os.Exit(exitError)
 		}
 		if err != nil {
 			die(err, exitError)
@@ -272,7 +282,7 @@ func main() {
 
 	if mode.PlanDrop {
 		if errCount := planDropFolder(ctx, proc, resolved.DropFolderAbs); errCount > 0 {
-			os.Exit(exitError) //nolint:gocritic // the earlier defer cancel() (--stop path) always returns before reaching here
+			os.Exit(exitError)
 		}
 		return
 	}
@@ -295,21 +305,24 @@ func main() {
 	}
 
 	if mode.ProcessDrop {
-		runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
-
-		outcome := processDropFolder(
-			runCtx,
-			proc,
-			resolved.DropFolderAbs,
-			resolved.DestDirMoviesAbs,
-			resolved.DestDirShowsAbs,
-			defaultSoundDone,
-			resolved.DoneNotificationMode,
-			*verbose,
-			resolved.ShutdownGraceDuration,
-			resolved.ShutdownForceTimeout,
-		)
+		// Scoped in an IIFE (matching the ProcessPath block above) so
+		// defer stop() runs before the exit checks below.
+		outcome := func() ProcessDropOutcome {
+			runCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			return processDropFolder(
+				runCtx,
+				proc,
+				resolved.DropFolderAbs,
+				resolved.DestDirMoviesAbs,
+				resolved.DestDirShowsAbs,
+				defaultSoundDone,
+				resolved.DoneNotificationMode,
+				*verbose,
+				resolved.ShutdownGraceDuration,
+				resolved.ShutdownForceTimeout,
+			)
+		}()
 		if outcome.Interrupted || outcome.TimedOut {
 			os.Exit(exitInterrupted)
 		}
