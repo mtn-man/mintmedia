@@ -48,6 +48,72 @@ func applyWithEmitter(ctx context.Context, p *processorImpl, plans []Plan, emit 
 	return results, nil
 }
 
+// tagForMove is a best-effort attempt to rewrite the embedded container title
+// tag to match the final sorted name before the move, so the remux runs on
+// the file's pre-move (drop folder) location rather than a possibly
+// network-mounted destination. WriteTitleToFile remuxes into a fresh temp
+// file and never touches pl.MainSourcePath -- so the retitled bytes are what
+// the caller should move (the returned mainSource), and the untouched
+// original is left for the caller to remove only after that move succeeds.
+// If a concurrent job claims pl.DestMainPath while ffmpeg is running, the
+// move fails with ErrDestinationExists and the caller skips with
+// pl.MainSourcePath still byte-for-byte untouched -- the "a duplicate skip
+// never mutates the source" contract holds across processes, not just
+// within one.
+//
+// The stat recheck just below still short-circuits the common case (a
+// sibling already claimed the destination between Plan and here) without
+// spawning ffmpeg at all; it's an optimization now, not the safety net.
+//
+// The extension gate deliberately lives here rather than inside the tagger:
+// keeping it a plain skip (not a call) avoids logging a spurious "applied"
+// history event for formats the tagger never touches, without needing a
+// second sentinel-error return path.
+//
+// Returns the path the caller should move (pl.MainSourcePath unchanged, or a
+// retitled temp file) and a cleanup func the caller must defer unconditionally
+// -- a no-op if tagging never ran, and a no-op once the returned path has been
+// consumed by a successful move (Move renames or copies+removes its source on
+// success).
+func tagForMove(ctx context.Context, p *processorImpl, pl Plan) (mainSource string, cleanup func()) {
+	mainSource = pl.MainSourcePath
+	cleanup = func() {}
+
+	if p.metaTagger == nil || !metadata.SupportsExtension(pl.MainExt) {
+		return mainSource, cleanup
+	}
+	if _, statErr := os.Stat(pl.DestMainPath); statErr == nil {
+		return mainSource, cleanup
+	}
+
+	// The embedded container "title" tag uses the resolution-free radix, so an
+	// enabled resolution_aware never pushes a "- 1080p" suffix into metadata.
+	// MetadataTitle is empty on plans built before that field existed -- fall
+	// back to DestRadix then.
+	titleTag := pl.MetadataTitle
+	if titleTag == "" {
+		titleTag = pl.DestRadix
+	}
+
+	logConsoleInfo(p, logging.EventProcessorMetadataTitleWriteStarted,
+		fmt.Sprintf("TAGGING  metadata title for %s (might take a moment)...", filepath.Base(pl.MainSourcePath)),
+		logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
+	tmp, err := p.metaTagger.WriteTitleToFile(ctx, pl.MainSourcePath, titleTag)
+	if err != nil {
+		logConsoleWarn(p, logging.EventProcessorMetadataTitleWriteFailed,
+			fmt.Sprintf("WARNING  metadata title tag not updated for %s", filepath.Base(pl.MainSourcePath)),
+			err, logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
+		logHistoryWarn(p, logging.EventProcessorMetadataTitleWriteFailed, err,
+			logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
+		return mainSource, cleanup
+	}
+
+	logHistoryInfo(p, logging.EventProcessorMetadataTitleWriteApplied, logging.Fields{
+		"path": pl.MainSourcePath, "title": titleTag,
+	})
+	return tmp, func() { _ = os.Remove(tmp) }
+}
+
 func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput, duplicateSkippedByInput map[string]bool) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{Plan: pl}, err
@@ -73,69 +139,14 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		return Result{Plan: pl}, fmt.Errorf("create destination dir %q: %w", pl.DestDir, err)
 	}
 
-	// Best-effort: rewrite the embedded container title tag to match the
-	// final sorted name before the move, so the remux runs on the file's
-	// pre-move (drop folder) location rather than a possibly network-mounted
-	// destination. WriteTitleToFile remuxes into a fresh temp file and never
-	// touches pl.MainSourcePath -- so the retitled bytes are what move into
-	// the library (mainSource below), and the untouched original is dropped
-	// only after that move succeeds. If a concurrent job claims
-	// pl.DestMainPath while ffmpeg is running, the Move fails with
-	// ErrDestinationExists and we skip with pl.MainSourcePath still
-	// byte-for-byte untouched -- the "a duplicate skip never mutates the
-	// source" contract now holds across processes, not just within one.
-	//
-	// The stat recheck just below still short-circuits the common case (a
-	// sibling already claimed the destination between Plan and here) without
-	// spawning ffmpeg at all; it's an optimization now, not the safety net.
-	//
-	// The extension gate deliberately lives here rather than inside the
-	// tagger: keeping it a plain skip (not a call) lets this block avoid
-	// logging a spurious "applied" history event for formats the tagger
-	// never touches, without needing a second sentinel-error return path.
-	mainSource := pl.MainSourcePath
-	// The embedded container "title" tag uses the resolution-free radix, so an
-	// enabled resolution_aware never pushes a "- 1080p" suffix into metadata.
-	// MetadataTitle is empty on plans built before that field existed -- fall
-	// back to DestRadix then.
-	titleTag := pl.MetadataTitle
-	if titleTag == "" {
-		titleTag = pl.DestRadix
-	}
-	taggedTmp := ""
-	if p.metaTagger != nil && metadata.SupportsExtension(pl.MainExt) {
-		if _, statErr := os.Stat(pl.DestMainPath); statErr != nil {
-			logConsoleInfo(p, logging.EventProcessorMetadataTitleWriteStarted,
-				fmt.Sprintf("TAGGING  metadata title for %s (might take a moment)...", filepath.Base(pl.MainSourcePath)),
-				logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
-			tmp, err := p.metaTagger.WriteTitleToFile(ctx, pl.MainSourcePath, titleTag)
-			if err != nil {
-				logConsoleWarn(p, logging.EventProcessorMetadataTitleWriteFailed,
-					fmt.Sprintf("WARNING  metadata title tag not updated for %s", filepath.Base(pl.MainSourcePath)),
-					err, logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
-				logHistoryWarn(p, logging.EventProcessorMetadataTitleWriteFailed, err,
-					logging.Fields{"path": pl.MainSourcePath, "title": titleTag})
-			} else {
-				taggedTmp = tmp
-				mainSource = tmp
-				logHistoryInfo(p, logging.EventProcessorMetadataTitleWriteApplied, logging.Fields{
-					"path": pl.MainSourcePath, "title": titleTag,
-				})
-			}
-		}
-	}
-	// Clean up the retitled remux if anything returns before Move consumes
-	// it (Move renames or copies+removes its source on success, so this is a
-	// no-op once the move lands).
-	if taggedTmp != "" {
-		defer func() { _ = os.Remove(taggedTmp) }()
-	}
+	mainSource, cleanupTaggedTmp := tagForMove(ctx, p, pl)
+	defer cleanupTaggedTmp()
 
-	// Move main media first. When tagging succeeded, mainSource is taggedTmp:
-	// a swallowed transfer.CleanupError (destination finalized, Move couldn't
-	// unlink its own source) then warns with the .mmtag-tmp-* path, but the
-	// deferred os.Remove(taggedTmp) below still clears it -- rare double-fault,
-	// not a leak.
+	// Move main media first. When tagging succeeded, mainSource is a tagged
+	// temp file: a swallowed transfer.CleanupError (destination finalized,
+	// Move couldn't unlink its own source) then warns with the
+	// .mmtag-tmp-* path, but the deferred cleanupTaggedTmp() below still
+	// clears it -- rare double-fault, not a leak.
 	if err := p.xfer.Move(ctx, mainSource, pl.DestMainPath); err != nil {
 		if !handleCleanupError(p, err, "main", mainSource, pl.DestMainPath) {
 			if transfer.IsDestinationUnavailable(err) {
@@ -153,12 +164,13 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			return Result{Plan: pl}, fmt.Errorf("move main media: %w", err)
 		}
 	}
-	if taggedTmp != "" {
-		// The retitled remux is now in the library; the drop-folder
-		// original is redundant. Removing it here mirrors what Move does to
-		// its own source on success -- a failure is post-finalize cleanup,
-		// the same class as transfer.CleanupError, so it warns and carries
-		// on rather than failing an already-applied move.
+	if mainSource != pl.MainSourcePath {
+		// Tagging succeeded, so mainSource is a retitled temp file, now in
+		// the library; the drop-folder original is redundant. Removing it
+		// here mirrors what Move does to its own source on success -- a
+		// failure is post-finalize cleanup, the same class as
+		// transfer.CleanupError, so it warns and carries on rather than
+		// failing an already-applied move.
 		if err := os.Remove(pl.MainSourcePath); err != nil {
 			logWarn(p, logging.EventProcessorCleanupSourceFailed,
 				fmt.Sprintf("WARNING  main source not removed: %s -- %v", pl.MainSourcePath, err),
@@ -193,16 +205,16 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	assocFailedCount := 0
 	for _, mv := range pl.Associated {
 		if ctx.Err() != nil {
-			return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, ctx.Err()
+			return appliedResult(pl), ctx.Err()
 		}
 		if mv.Source == "" || mv.Dest == "" {
 			continue
 		}
 		if err := paths.MkdirShared(filepath.Dir(mv.Dest)); err != nil {
 			if transfer.IsDestinationUnavailable(err) {
-				return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, &DestinationUnavailableError{Category: pl.Category, Err: err}
+				return appliedResult(pl), &DestinationUnavailableError{Category: pl.Category, Err: err}
 			}
-			return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, fmt.Errorf("create associated dest dir %q: %w", filepath.Dir(mv.Dest), err)
+			return appliedResult(pl), fmt.Errorf("create associated dest dir %q: %w", filepath.Dir(mv.Dest), err)
 		}
 		if err := p.xfer.Move(ctx, mv.Source, mv.Dest); err != nil {
 			if handleCleanupError(p, err, "associated", mv.Source, mv.Dest) {
@@ -219,7 +231,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			// for every subsequent write to this category, so it escalates
 			// out of the best-effort path instead of being logged and skipped.
 			if transfer.IsDestinationUnavailable(err) {
-				return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}, &DestinationUnavailableError{Category: pl.Category, Err: err}
+				return appliedResult(pl), &DestinationUnavailableError{Category: pl.Category, Err: err}
 			}
 			assocFailedCount++
 			if pl.InputPath != "" && assocFailedByInput != nil {
@@ -253,12 +265,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			logWarn(p, logging.EventProcessorCleanupSkippedAssociatedFailed, fmt.Sprintf("WARNING  source folder cleanup skipped for %s (associated move failed)", pl.InputPath), nil, logging.Fields{
 				"input_path": pl.InputPath,
 			})
-			return Result{
-				Plan:    pl,
-				Applied: true,
-				Handled: true,
-				Reason:  "applied",
-			}, nil
+			return appliedResult(pl), nil
 		}
 		if pl.InputPath != "" && duplicateSkippedByInput[pl.InputPath] {
 			// A sibling in this batch was left in place because it was a
@@ -267,12 +274,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			logWarn(p, logging.EventProcessorCleanupSkippedDuplicate, fmt.Sprintf("WARNING  source folder cleanup skipped for %s (duplicate file left in place)", pl.InputPath), nil, logging.Fields{
 				"input_path": pl.InputPath,
 			})
-			return Result{
-				Plan:    pl,
-				Applied: true,
-				Handled: true,
-				Reason:  "applied",
-			}, nil
+			return appliedResult(pl), nil
 		}
 		if err := cleanupSourceDirIfSafe(p, pl.InputPath); err != nil {
 			logWarn(p, logging.EventProcessorCleanupSkippedFailed, fmt.Sprintf("WARNING  source folder cleanup skipped for %s: %v", pl.InputPath, err), err, logging.Fields{
@@ -281,12 +283,16 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		}
 	}
 
-	return Result{
-		Plan:    pl,
-		Applied: true,
-		Handled: true,
-		Reason:  "applied",
-	}, nil
+	return appliedResult(pl), nil
+}
+
+// appliedResult builds the Result shared by every applyOne return path once
+// the main media move has succeeded -- an associated-file/cleanup failure
+// downstream is still reported as this same "applied" Result, since the main
+// move (the thing that actually matters for library correctness) already
+// landed.
+func appliedResult(pl Plan) Result {
+	return Result{Plan: pl, Applied: true, Handled: true, Reason: "applied"}
 }
 
 // skipDuplicateResult logs and builds the graceful-skip Result shared by
