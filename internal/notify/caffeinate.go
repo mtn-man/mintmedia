@@ -47,6 +47,22 @@ type CaffeinateHooks struct {
 	OnStopWarn    func(error) // Stop failed
 }
 
+// CaffeinateUnsupportedMessage is the labeled console line for an
+// OnUnsupported hook -- sleep inhibition unavailable on this platform.
+// Shared wording for every StartCaffeinate caller (CLI one-shot paths, the
+// daemon), so it lives next to StartCaffeinate rather than in each caller.
+const CaffeinateUnsupportedMessage = "INFO     caffeinate: sleep inhibition not available on this platform"
+
+// CaffeinateStartWarning formats the labeled console line for an OnStartWarn hook.
+func CaffeinateStartWarning(err error) string {
+	return fmt.Sprintf("WARNING  caffeinate: %v", err)
+}
+
+// CaffeinateStopWarning formats the labeled console line for an OnStopWarn hook.
+func CaffeinateStopWarning(err error) string {
+	return fmt.Sprintf("WARNING  caffeinate stop: %v", err)
+}
+
 // StartCaffeinate best-effort inhibits idle sleep via a controller from
 // newCaff, reporting failures through hooks, and returns a stop func the
 // caller must defer to release it. Single shared implementation for every
