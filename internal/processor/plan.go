@@ -588,7 +588,7 @@ func planForMain(
 						folders[i] = m.folder
 					}
 					logWarn(p, logging.EventProcessorMovieDuplicateNotice,
-						fmt.Sprintf("possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
+						fmt.Sprintf("WARNING  possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
 						nil, logging.Fields{"movies_dir": p.cfg.MoviesDir, "incoming": pl.MovieTitle, "candidates": strings.Join(folders, ", ")})
 				}
 			}
@@ -659,7 +659,7 @@ func planMovieResolutionAware(p *processorImpl, pl *Plan, title, year string) er
 			folders[i] = m.folder
 		}
 		logWarn(p, logging.EventProcessorMovieDuplicateNotice,
-			fmt.Sprintf("possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
+			fmt.Sprintf("WARNING  possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
 			nil, logging.Fields{"movies_dir": p.cfg.MoviesDir, "incoming": pl.MovieTitle, "candidates": strings.Join(folders, ", ")})
 	}
 	return nil
@@ -718,7 +718,7 @@ func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 	// Stem, not basename: "existing" pairs with "incoming" (pl.DestRadix), and
 	// both sides of that pair are in sorted-name form.
 	existingStem := strings.TrimSuffix(filepath.Base(existing), filepath.Ext(existing))
-	logWarn(p, logging.EventProcessorMovieDuplicateNotice, warn, nil, logging.Fields{
+	logWarn(p, logging.EventProcessorMovieDuplicateNotice, "WARNING  "+warn, nil, logging.Fields{
 		"movies_dir":      p.cfg.MoviesDir,
 		"incoming":        pl.DestRadix,
 		"folder":          pl.DestDir,
@@ -787,7 +787,7 @@ func checkDuplicateWithResolution(p *processorImpl, pl *Plan) error {
 				// Both sides in sorted-name form (no extension): the incoming
 				// file's would-be radix vs the library file's actual stem.
 				logWarn(p, logging.EventProcessorShowDuplicateResolutionMismatch,
-					fmt.Sprintf("skipping %s: library already has %s", pl.DestRadix, rawStem),
+					fmt.Sprintf("WARNING  skipping %s: library already has %s", pl.DestRadix, rawStem),
 					nil, logging.Fields{
 						"dest_dir":     pl.DestDir,
 						"episode":      pl.MetadataTitle,

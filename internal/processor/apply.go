@@ -161,7 +161,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		// on rather than failing an already-applied move.
 		if err := os.Remove(pl.MainSourcePath); err != nil {
 			logWarn(p, logging.EventProcessorCleanupSourceFailed,
-				fmt.Sprintf("main source not removed: %s -- %v", pl.MainSourcePath, err),
+				fmt.Sprintf("WARNING  main source not removed: %s -- %v", pl.MainSourcePath, err),
 				err, logging.Fields{"cleanup_kind": "main", "src": pl.MainSourcePath, "dst": pl.DestMainPath})
 		}
 	}
@@ -179,7 +179,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		// shows it there without reaching this Apply-only line.
 		existing := strings.TrimSuffix(filepath.Base(pl.AlongsidePath), filepath.Ext(pl.AlongsidePath))
 		logInfo(p, logging.EventProcessorMovieDuplicateNotice,
-			fmt.Sprintf("sorted %s alongside existing %s", pl.DestRadix, existing),
+			fmt.Sprintf("INFO     sorted %s alongside existing %s", pl.DestRadix, existing),
 			logging.Fields{
 				"movies_dir":   p.cfg.MoviesDir,
 				"incoming":     pl.DestRadix,
@@ -250,7 +250,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 	// Cleanup: move source directory to Trash if safe (only for directory inputs)
 	if pl.DeleteEmptyInputDir {
 		if pl.InputPath != "" && assocFailedByInput[pl.InputPath] {
-			logWarn(p, logging.EventProcessorCleanupSkippedAssociatedFailed, fmt.Sprintf("source folder cleanup skipped for %s (associated move failed)", pl.InputPath), nil, logging.Fields{
+			logWarn(p, logging.EventProcessorCleanupSkippedAssociatedFailed, fmt.Sprintf("WARNING  source folder cleanup skipped for %s (associated move failed)", pl.InputPath), nil, logging.Fields{
 				"input_path": pl.InputPath,
 			})
 			return Result{
@@ -264,7 +264,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			// A sibling in this batch was left in place because it was a
 			// duplicate (see skipDuplicateResult) -- trashing the input
 			// directory now would take that un-moved file down with it.
-			logWarn(p, logging.EventProcessorCleanupSkippedDuplicate, fmt.Sprintf("source folder cleanup skipped for %s (duplicate file left in place)", pl.InputPath), nil, logging.Fields{
+			logWarn(p, logging.EventProcessorCleanupSkippedDuplicate, fmt.Sprintf("WARNING  source folder cleanup skipped for %s (duplicate file left in place)", pl.InputPath), nil, logging.Fields{
 				"input_path": pl.InputPath,
 			})
 			return Result{
@@ -275,7 +275,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			}, nil
 		}
 		if err := cleanupSourceDirIfSafe(p, pl.InputPath); err != nil {
-			logWarn(p, logging.EventProcessorCleanupSkippedFailed, fmt.Sprintf("source folder cleanup skipped for %s: %v", pl.InputPath, err), err, logging.Fields{
+			logWarn(p, logging.EventProcessorCleanupSkippedFailed, fmt.Sprintf("WARNING  source folder cleanup skipped for %s: %v", pl.InputPath, err), err, logging.Fields{
 				"input_path": pl.InputPath,
 			})
 		}
@@ -343,7 +343,7 @@ func handleCleanupError(p *processorImpl, err error, kind, src, dst string) bool
 	logWarn(
 		p,
 		logging.EventProcessorCleanupSourceFailed,
-		fmt.Sprintf("%s source not removed: %s -- %v", kind, logSrc, logErr),
+		fmt.Sprintf("WARNING  %s source not removed: %s -- %v", kind, logSrc, logErr),
 		logErr,
 		logging.Fields{
 			"cleanup_kind": kind,

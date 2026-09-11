@@ -3,8 +3,10 @@ package processor
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mtn-man/mintmedia/internal/logging"
@@ -143,16 +145,55 @@ func newTestProcessorResolutionAware(t *testing.T) *processorImpl {
 // during Plan regardless of level.
 func newTestProcessorResolutionAwareWithLog(t *testing.T) (*processorImpl, *bytes.Buffer) {
 	t.Helper()
+	p, console, _ := newTestProcessorResolutionAwareWithSinks(t)
+	return p, console
+}
+
+// newTestProcessorResolutionAwareWithSinks is newTestProcessorResolutionAwareWithLog
+// that also returns the history file path. The two sinks deliberately record
+// the same event differently -- the console gets a labeled, colorized message,
+// history gets fields and no message -- so a test asserting that contract needs
+// to read both.
+func newTestProcessorResolutionAwareWithSinks(t *testing.T) (*processorImpl, *bytes.Buffer, string) {
+	t.Helper()
 	var console bytes.Buffer
+	historyPath := filepath.Join(t.TempDir(), "history.jsonl")
 	lg, err := logging.New(logging.Options{
 		Stdout:       &console,
 		Stderr:       &console,
 		ConsoleLevel: "info",
 		HistoryLevel: "warn",
-		HistoryFile:  filepath.Join(t.TempDir(), "history.jsonl"),
+		HistoryFile:  historyPath,
 	})
 	if err != nil {
 		t.Fatalf("logging.New: %v", err)
 	}
-	return mustProcessorImpl(t, resolutionAwareTestConfig(t), lg), &console
+	return mustProcessorImpl(t, resolutionAwareTestConfig(t), lg), &console, historyPath
+}
+
+// readHistoryEvent returns the single history entry for event, failing the test
+// if there is not exactly one.
+func readHistoryEvent(t *testing.T, historyPath string, event logging.Event) logging.Entry {
+	t.Helper()
+	raw, err := os.ReadFile(historyPath) //nolint:gosec // test-owned temp path
+	if err != nil {
+		t.Fatalf("read history %q: %v", historyPath, err)
+	}
+	var found []logging.Entry
+	for line := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+		if line == "" {
+			continue
+		}
+		var entry logging.Entry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("unmarshal history line %q: %v", line, err)
+		}
+		if entry.Event == event {
+			found = append(found, entry)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("history has %d entries for %q, want 1; file:\n%s", len(found), event, raw)
+	}
+	return found[0]
 }
