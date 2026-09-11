@@ -211,7 +211,7 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 			var pse *ParseShowError
 			switch {
 			case errors.As(issue.Err, &pme):
-				msg := fmt.Sprintf("movie pack skipped (unparseable filename): %s: %v", issue.Path, issue.Err)
+				msg := fmt.Sprintf("WARNING  movie pack skipped (unparseable filename): %s: %v", issue.Path, issue.Err)
 				logWarn(p, logging.EventProcessorMoviePackSkipUnparseable, msg, issue.Err, logging.Fields{
 					"input_path": issue.Path,
 				})
@@ -222,7 +222,7 @@ func (p *processorImpl) Process(ctx context.Context, req Request) error {
 				// e.g. a movie that happens to sit in a season folder. Rather
 				// than guess whether it's really a movie, this is surfaced as
 				// a visible warning for human review instead of a silent skip.
-				msg := fmt.Sprintf("show file skipped (doesn't parse as an episode): %s: %v", issue.Path, issue.Err)
+				msg := fmt.Sprintf("WARNING  show file skipped (doesn't parse as an episode): %s: %v", issue.Path, issue.Err)
 				logWarn(p, logging.EventProcessorShowFileSkipUnparseable, msg, issue.Err, logging.Fields{
 					"input_path": issue.Path,
 				})

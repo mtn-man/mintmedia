@@ -33,16 +33,19 @@ func logConsoleInfo(p *processorImpl, event logging.Event, msg string, fields lo
 	p.logger.ConsoleInfo("processor", event, console.ColorizePrefixOut(msg), fields)
 }
 
+// logWarn and logInfo emit one logical event to both sinks. They compose the
+// two single-sink helpers rather than calling Logger.Warn/Logger.Info, which
+// write a single Message to both: the console message is label-prefixed and
+// colorized, and colorized text must never reach history.jsonl. That leaves
+// history carrying no message at all -- the Fields at each call site are the
+// record, so anything the console line states must also appear as a field.
+
 func logWarn(p *processorImpl, event logging.Event, msg string, err error, fields logging.Fields) {
-	if p == nil || p.logger == nil {
-		return
-	}
-	p.logger.Warn("processor", event, msg, err, fields)
+	logConsoleWarn(p, event, msg, err, fields)
+	logWarnHistoryOnly(p, event, err, fields)
 }
 
 func logInfo(p *processorImpl, event logging.Event, msg string, fields logging.Fields) {
-	if p == nil || p.logger == nil {
-		return
-	}
-	p.logger.Info("processor", event, msg, fields)
+	logConsoleInfo(p, event, msg, fields)
+	logInfoHistoryOnly(p, event, fields)
 }

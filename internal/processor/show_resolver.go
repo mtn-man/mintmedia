@@ -138,7 +138,7 @@ func tryQualifiedFallback(p *processorImpl, showsDir, showName string, otherQual
 	case 1:
 		folder = otherQualifiedFolders[0]
 		logWarn(p, logging.EventProcessorShowFolderQualifiedGuess,
-			fmt.Sprintf("using best-effort match for %q: existing folder %q has an unrecognized qualifier", showName, folder),
+			fmt.Sprintf("WARNING  using best-effort match for %q: existing folder %q has an unrecognized qualifier", showName, folder),
 			nil, logging.Fields{"path": showsDir, "show": showName, "folder": folder})
 		return folder, true, nil
 	default:
@@ -243,6 +243,6 @@ func warnPossibleDuplicateShowFolder(p *processorImpl, showsDir string, entries 
 		return
 	}
 	logWarn(p, logging.EventProcessorShowPossibleDuplicateFolder,
-		fmt.Sprintf("possible duplicate show: %q may match existing folder(s): %s", showName, strings.Join(matches, ", ")),
+		fmt.Sprintf("WARNING  possible duplicate show: %q may match existing folder(s): %s", showName, strings.Join(matches, ", ")),
 		nil, logging.Fields{"path": showsDir, "show": showName, "candidates": strings.Join(matches, ", ")})
 }

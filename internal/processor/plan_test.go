@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mtn-man/mintmedia/internal/logging"
 )
 
 func TestPlan_TableDriven(t *testing.T) {
@@ -3261,5 +3263,37 @@ func TestPlan_ResolutionAware_Movie_ReviewHold_WarnsOncePerInput(t *testing.T) {
 
 	if n := strings.Count(logs.String(), "left for human review"); n != 1 {
 		t.Fatalf("review WARNING emitted %d times, want exactly 1; log:\n%s", n, logs.String())
+	}
+}
+
+// The two sinks record one event differently on purpose: the console line
+// carries the labeled, colorized message, history carries none at all. That
+// makes the Fields the whole history record, so this asserts both halves --
+// the label the console line must have, and the fields history must not be
+// missing. Without the label the line breaks the console voice silently
+// (colorizePrefix matches on the label, so an unlabeled line just goes plain).
+func TestPlan_DuplicateNotice_LabelsConsoleAndLeavesHistoryMessageEmpty(t *testing.T) {
+	p, logs, historyPath := newTestProcessorResolutionAwareWithSinks(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.2160p.BluRay.mkv")
+	writeFile(t, src, "dummy")
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014).mkv"), "already here")
+
+	if _, err := planOne(t, p, src); err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+
+	if got := logs.String(); !strings.Contains(got, "WARNING  possible duplicate: untagged copy") {
+		t.Fatalf("console line is missing the WARNING label; log:\n%s", got)
+	}
+
+	entry := readHistoryEvent(t, historyPath, logging.EventProcessorMovieDuplicateNotice)
+	if entry.Message != "" {
+		t.Fatalf("history msg = %q, want empty -- fields are the record", entry.Message)
+	}
+	for _, key := range []string{"movies_dir", "incoming", "folder", "existing"} {
+		if _, ok := entry.Fields[key]; !ok {
+			t.Fatalf("history entry missing field %q; fields: %v", key, entry.Fields)
+		}
 	}
 }
