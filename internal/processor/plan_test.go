@@ -2142,7 +2142,7 @@ func TestPlan_DirectoryBatch_PreservesEarlierPlansOnDestinationUnavailable(t *te
 
 // TestPlan_Duplicate_MovieAlreadyInLibrary covers case 1 of duplicate
 // detection: a file already sits at the computed DestMainPath, so Plan must
-// mark pl.Duplicate rather than leaving Apply to discover the collision as a
+// mark pl.DupVerdict rather than leaving Apply to discover the collision as a
 // raw transfer error.
 func TestPlan_Duplicate_MovieAlreadyInLibrary(t *testing.T) {
 	p := newTestProcessor(t)
@@ -2157,8 +2157,8 @@ func TestPlan_Duplicate_MovieAlreadyInLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 }
 
@@ -2176,8 +2176,8 @@ func TestPlan_Duplicate_ShowAlreadyInLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 }
 
@@ -2194,8 +2194,8 @@ func TestPlan_Duplicate_FalseWhenDestDirMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false")
 	}
 }
 
@@ -2241,8 +2241,8 @@ func TestPlan_Duplicate_DifferentTitleNotFlagged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false")
 	}
 }
 
@@ -2262,12 +2262,12 @@ func TestPlan_Duplicate_MovieFuzzyDiacritic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 	wantMatch := filepath.Join(p.cfg.MoviesDir, "Amélie (2001)")
-	if pl.DuplicateMatchPath != wantMatch {
-		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, wantMatch)
+	if pl.DupVerdict.Path != wantMatch {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, wantMatch)
 	}
 	// A confident fuzzy match will never actually be moved (Apply skips any
 	// Duplicate plan), so the destination fields should describe the real
@@ -2300,8 +2300,8 @@ func TestPlan_Duplicate_MovieFuzzyPunctuation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 }
 
@@ -2320,8 +2320,8 @@ func TestPlan_Duplicate_MovieFuzzyBothNoYear(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 }
 
@@ -2341,8 +2341,8 @@ func TestPlan_Duplicate_MovieFuzzyPossible_ExistingHasYear(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (tier 2 should warn, not skip)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (tier 2 should warn, not skip)")
 	}
 }
 
@@ -2362,8 +2362,8 @@ func TestPlan_Duplicate_MovieFuzzyPossible_IncomingHasYear(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (tier 2 should warn, not skip)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (tier 2 should warn, not skip)")
 	}
 }
 
@@ -2384,8 +2384,8 @@ func TestPlan_Duplicate_MovieFuzzyPossible_MultipleCandidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (tier 2 should warn, not skip)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (tier 2 should warn, not skip)")
 	}
 }
 
@@ -2404,8 +2404,8 @@ func TestPlan_Duplicate_MovieFuzzy_DifferentYearsNoAction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (different years means different movies)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (different years means different movies)")
 	}
 }
 
@@ -2424,8 +2424,8 @@ func TestPlan_Duplicate_MovieFuzzy_ArticleNotDropped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (leading article must not be dropped by normalization)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (leading article must not be dropped by normalization)")
 	}
 }
 
@@ -2578,8 +2578,8 @@ func TestPlan_ResolutionAware_Duplicate_SameResolution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 }
 
@@ -2597,18 +2597,18 @@ func TestPlan_ResolutionAware_Movie_DifferentResolution_SortsAlongside(t *testin
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate || pl.DuplicateReview {
-		t.Fatalf("Duplicate=%v DuplicateReview=%v, want both false (different resolution sorts alongside)", pl.Duplicate, pl.DuplicateReview)
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (different resolution sorts alongside)")
 	}
 	if got := filepath.Base(pl.DestMainPath); got != "Interstellar (2014) - 1080p.mkv" {
 		t.Fatalf("DestMainPath base = %q, want %q", got, "Interstellar (2014) - 1080p.mkv")
 	}
-	if got := filepath.Base(pl.AlongsidePath); got != "Interstellar (2014) - 2160p.mkv" {
+	if got := filepath.Base(pl.DupVerdict.Path); got != "Interstellar (2014) - 2160p.mkv" {
 		t.Fatalf("AlongsidePath base = %q, want the existing 2160p copy recorded", got)
 	}
 }
 
-// A pure different-resolution add records the existing copy on Plan.AlongsidePath
+// A pure different-resolution add records the existing copy on Plan.DupVerdict.Path
 // (so --plan can show the folder isn't empty) but does NOT emit the "alongside
 // existing" INFO at Plan time -- that line is Apply's, where the move has
 // actually happened.
@@ -2623,11 +2623,11 @@ func TestPlan_ResolutionAware_Movie_DifferentResolution_RecordsAlongsidePath(t *
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false")
 	}
-	if got := filepath.Base(pl.AlongsidePath); got != "Interstellar (2014) - 1080p.mkv" {
-		t.Fatalf("AlongsidePath base = %q, want %q", got, "Interstellar (2014) - 1080p.mkv")
+	if got := filepath.Base(pl.DupVerdict.Path); got != "Interstellar (2014) - 1080p.mkv" {
+		t.Fatalf("DupVerdict.Path base = %q, want %q", got, "Interstellar (2014) - 1080p.mkv")
 	}
 	if strings.Contains(logs.String(), "alongside existing") {
 		t.Fatalf("Plan must not emit the 'alongside existing' INFO (it's Apply's); log:\n%s", logs.String())
@@ -2635,7 +2635,7 @@ func TestPlan_ResolutionAware_Movie_DifferentResolution_RecordsAlongsidePath(t *
 }
 
 // The untagged-sibling case emits its own WARNING and does not record an
-// AlongsidePath -- that outcome is surfaced through the WARNING, not the
+// DupVerdict.Path -- that outcome is surfaced through the WARNING, not the
 // multi-resolution INFO / --plan line.
 func TestPlan_ResolutionAware_Movie_UntaggedSibling_NoAlongsidePath(t *testing.T) {
 	p, logs := newTestProcessorResolutionAwareWithLog(t)
@@ -2648,8 +2648,8 @@ func TestPlan_ResolutionAware_Movie_UntaggedSibling_NoAlongsidePath(t *testing.T
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.AlongsidePath != "" {
-		t.Fatalf("AlongsidePath = %q, want empty for an untagged-sibling sort", pl.AlongsidePath)
+	if pl.DupVerdict.Path != "" {
+		t.Fatalf("DupVerdict.Path = %q, want empty for an untagged-sibling sort", pl.DupVerdict.Path)
 	}
 	if s := logs.String(); strings.Contains(s, "alongside existing") {
 		t.Fatalf("did not expect the multi-resolution INFO for an untagged-sibling sort; log:\n%s", s)
@@ -2671,8 +2671,8 @@ func TestPlan_ResolutionAware_Movie_UntaggedExisting_TaggedIncoming_SortsWithWar
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate || pl.DuplicateReview {
-		t.Fatalf("Duplicate=%v DuplicateReview=%v, want both false", pl.Duplicate, pl.DuplicateReview)
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false")
 	}
 	if got := filepath.Base(pl.DestMainPath); got != "Interstellar (2014) - 1080p.mkv" {
 		t.Fatalf("DestMainPath base = %q, want %q", got, "Interstellar (2014) - 1080p.mkv")
@@ -2682,7 +2682,7 @@ func TestPlan_ResolutionAware_Movie_UntaggedExisting_TaggedIncoming_SortsWithWar
 // TestPlan_ResolutionAware_Movie_UntaggedIncoming_TaggedExisting_HeldForReview:
 // an incoming file with no detectable resolution that collides with a
 // resolution-tagged library copy can't be named safely alongside it, so the
-// plan is a review hold (Duplicate + DuplicateReview, no move).
+// plan is a review hold (DupVerdict.Kind == DuplicateReviewHold, no move).
 func TestPlan_ResolutionAware_Movie_UntaggedIncoming_TaggedExisting_HeldForReview(t *testing.T) {
 	p := newTestProcessorResolutionAware(t)
 
@@ -2698,11 +2698,11 @@ func TestPlan_ResolutionAware_Movie_UntaggedIncoming_TaggedExisting_HeldForRevie
 	if pl.Resolution != "" {
 		t.Fatalf("Resolution = %q, want empty (test needs an untagged incoming file)", pl.Resolution)
 	}
-	if !pl.Duplicate || !pl.DuplicateReview {
-		t.Fatalf("Duplicate=%v DuplicateReview=%v, want both true", pl.Duplicate, pl.DuplicateReview)
+	if pl.DupVerdict.Kind != DuplicateReviewHold {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateReviewHold", pl.DupVerdict.Kind)
 	}
-	if pl.DuplicateMatchPath != existing {
-		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, existing)
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
 	}
 }
 
@@ -2721,11 +2721,11 @@ func TestPlan_ResolutionAware_Movie_UntaggedIncoming_UntaggedExisting_Duplicate(
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate || pl.DuplicateReview {
-		t.Fatalf("Duplicate=%v DuplicateReview=%v, want true/false", pl.Duplicate, pl.DuplicateReview)
+	if pl.DupVerdict.Kind != DuplicateExact {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateExact", pl.DupVerdict.Kind)
 	}
-	if pl.DuplicateMatchPath != existing {
-		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, existing)
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
 	}
 }
 
@@ -2743,11 +2743,11 @@ func TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
-	if pl.DuplicateMatchPath != existing {
-		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, existing)
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
 	}
 }
 
@@ -2766,8 +2766,8 @@ func TestPlan_ResolutionAware_Duplicate_DifferentEpisodeNotFlagged(t *testing.T)
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (different episode)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (different episode)")
 	}
 }
 
@@ -2855,7 +2855,7 @@ func TestDecideMovieResolutionDuplicate(t *testing.T) {
 		name        string
 		sc          movieResScan
 		tagged      bool
-		wantVerdict movieDupVerdict
+		wantVerdict DuplicateKind
 		wantMatch   string
 		wantWarn    bool
 	}{
@@ -2863,27 +2863,27 @@ func TestDecideMovieResolutionDuplicate(t *testing.T) {
 			name:        "exact match wins regardless of tagged",
 			sc:          movieResScan{exactMatchPath: "/lib/M - 2160p.mkv", variantPath: "/lib/M - 1080p.mkv"},
 			tagged:      true,
-			wantVerdict: movieDupExact,
+			wantVerdict: DuplicateExact,
 			wantMatch:   "/lib/M - 2160p.mkv",
 		},
 		{
 			name:        "tagged + different-res variant -> sort along, no warn",
 			sc:          movieResScan{variantPath: "/lib/M - 1080p.mkv"},
 			tagged:      true,
-			wantVerdict: movieDupSortAlong,
+			wantVerdict: DuplicateSortAlong,
 		},
 		{
 			name:        "tagged + untagged sibling -> sort along, with warn",
 			sc:          movieResScan{untaggedSiblingPath: "/lib/M.mkv"},
 			tagged:      true,
-			wantVerdict: movieDupSortAlong,
+			wantVerdict: DuplicateSortAlong,
 			wantWarn:    true,
 		},
 		{
 			name:        "untagged incoming + tagged variant -> review, with warn",
 			sc:          movieResScan{variantPath: "/lib/M - 1080p.mkv"},
 			tagged:      false,
-			wantVerdict: movieDupReview,
+			wantVerdict: DuplicateReviewHold,
 			wantMatch:   "/lib/M - 1080p.mkv",
 			wantWarn:    true,
 		},
@@ -2891,13 +2891,13 @@ func TestDecideMovieResolutionDuplicate(t *testing.T) {
 			name:        "nothing in folder -> none",
 			sc:          movieResScan{},
 			tagged:      true,
-			wantVerdict: movieDupNone,
+			wantVerdict: DuplicateNone,
 		},
 		{
 			name:        "untagged incoming + untagged sibling only -> none (exact would have caught a real match)",
 			sc:          movieResScan{untaggedSiblingPath: "/lib/M.mkv"},
 			tagged:      false,
-			wantVerdict: movieDupNone,
+			wantVerdict: DuplicateNone,
 		},
 	}
 
@@ -2927,7 +2927,7 @@ func TestPlan_ResolutionAware_MovieDecisionMatrix(t *testing.T) {
 		wantDup           bool
 		wantReview        bool
 		wantDestBase      string // only checked when !wantDup
-		wantAlongsideBase string // "" => AlongsidePath must be empty
+		wantAlongsideBase string // "" => DupVerdict.Kind must not be DuplicateSortAlong
 	}{
 		{
 			name:     "same resolution present -> duplicate",
@@ -3025,22 +3025,26 @@ func TestPlan_ResolutionAware_MovieDecisionMatrix(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Plan() error: %v", err)
 			}
-			if pl.Duplicate != c.wantDup {
-				t.Fatalf("Duplicate = %v, want %v", pl.Duplicate, c.wantDup)
+			if pl.DupVerdict.Skip() != c.wantDup {
+				t.Fatalf("DupVerdict.Skip() = %v, want %v", pl.DupVerdict.Skip(), c.wantDup)
 			}
-			if pl.DuplicateReview != c.wantReview {
-				t.Fatalf("DuplicateReview = %v, want %v", pl.DuplicateReview, c.wantReview)
+			if (pl.DupVerdict.Kind == DuplicateReviewHold) != c.wantReview {
+				t.Fatalf("DupVerdict.Kind == DuplicateReviewHold: %v, want %v", pl.DupVerdict.Kind == DuplicateReviewHold, c.wantReview)
 			}
 			if !c.wantDup && c.wantDestBase != "" {
 				if got := filepath.Base(pl.DestMainPath); got != c.wantDestBase {
 					t.Fatalf("DestMainPath base = %q, want %q", got, c.wantDestBase)
 				}
 			}
+			gotAlongsideBase := ""
+			if pl.DupVerdict.Kind == DuplicateSortAlong {
+				gotAlongsideBase = filepath.Base(pl.DupVerdict.Path)
+			}
 			switch {
-			case c.wantAlongsideBase == "" && pl.AlongsidePath != "":
-				t.Fatalf("AlongsidePath = %q, want empty", pl.AlongsidePath)
-			case c.wantAlongsideBase != "" && filepath.Base(pl.AlongsidePath) != c.wantAlongsideBase:
-				t.Fatalf("AlongsidePath base = %q, want %q", filepath.Base(pl.AlongsidePath), c.wantAlongsideBase)
+			case c.wantAlongsideBase == "" && gotAlongsideBase != "":
+				t.Fatalf("alongside base = %q, want empty", gotAlongsideBase)
+			case c.wantAlongsideBase != "" && gotAlongsideBase != c.wantAlongsideBase:
+				t.Fatalf("alongside base = %q, want %q", gotAlongsideBase, c.wantAlongsideBase)
 			}
 		})
 	}
@@ -3059,8 +3063,8 @@ func TestPlan_ResolutionAware_MovieFuzzy_AdoptsFolder_DifferentResolution_SortsA
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate || pl.DuplicateReview {
-		t.Fatalf("Duplicate=%v DuplicateReview=%v, want both false", pl.Duplicate, pl.DuplicateReview)
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false")
 	}
 	if got := filepath.Base(pl.DestDir); got != "Amélie (2001)" {
 		t.Fatalf("DestDir base = %q, want %q (adopt existing spelling)", got, "Amélie (2001)")
@@ -3085,11 +3089,11 @@ func TestPlan_ResolutionAware_MovieFuzzy_AdoptsFolder_SameResolution_Skips(t *te
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate || pl.DuplicateReview {
-		t.Fatalf("Duplicate=%v DuplicateReview=%v, want true/false", pl.Duplicate, pl.DuplicateReview)
+	if pl.DupVerdict.Kind != DuplicateExact {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateExact", pl.DupVerdict.Kind)
 	}
-	if pl.DuplicateMatchPath != existing {
-		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, existing)
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
 	}
 }
 
@@ -3105,11 +3109,11 @@ func TestPlan_ResolutionAware_MovieFuzzy_AdoptsFolder_UntaggedIncoming_TaggedVar
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate || !pl.DuplicateReview {
-		t.Fatalf("Duplicate=%v DuplicateReview=%v, want both true", pl.Duplicate, pl.DuplicateReview)
+	if pl.DupVerdict.Kind != DuplicateReviewHold {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateReviewHold", pl.DupVerdict.Kind)
 	}
-	if pl.DuplicateMatchPath != existing {
-		t.Fatalf("DuplicateMatchPath = %q, want %q", pl.DuplicateMatchPath, existing)
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
 	}
 }
 
@@ -3125,8 +3129,8 @@ func TestPlan_ResolutionAware_MovieFuzzy_NoMediaSignal_SortsIntoAdoptedFolder(t 
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate || pl.DuplicateReview {
-		t.Fatalf("Duplicate=%v DuplicateReview=%v, want both false (permissive: sort into the matched folder)", pl.Duplicate, pl.DuplicateReview)
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (permissive: sort into the matched folder)")
 	}
 	if got := filepath.Base(pl.DestDir); got != "Amélie (2001)" {
 		t.Fatalf("DestDir base = %q, want %q", got, "Amélie (2001)")
@@ -3149,8 +3153,8 @@ func TestPlan_ResolutionAware_MovieFuzzy_SelfMatchNotTriggered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (fuzzy self-match must not fire)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (fuzzy self-match must not fire)")
 	}
 	if got := filepath.Base(pl.DestMainPath); got != "Interstellar (2014) - 2160p.mkv" {
 		t.Fatalf("DestMainPath base = %q, want %q", got, "Interstellar (2014) - 2160p.mkv")
@@ -3169,8 +3173,8 @@ func TestPlan_ResolutionAware_MovieFuzzy_Tier2_UnchangedWarnOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate || pl.DuplicateReview {
-		t.Fatalf("Duplicate=%v DuplicateReview=%v, want both false (tier 2 warns, doesn't skip)", pl.Duplicate, pl.DuplicateReview)
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (tier 2 warns, doesn't skip)")
 	}
 	if got := filepath.Base(pl.DestDir); got != "Survivor (2000)" {
 		t.Fatalf("DestDir base = %q, want %q (new folder from the parsed title)", got, "Survivor (2000)")
@@ -3190,8 +3194,8 @@ func TestPlan_ResolutionAware_Show_DifferentResolution_WarnsOnSkip(t *testing.T)
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true (shows still skip a different-resolution re-drop)")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true (shows still skip a different-resolution re-drop)")
 	}
 	got := logs.String()
 	for _, want := range []string{"Deadwood - S01E01 - 2160p", "Deadwood - S01E01 - 1080p"} {
@@ -3212,8 +3216,8 @@ func TestPlan_ResolutionAware_Show_SameResolution_NoWarn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 	if s := logs.String(); strings.Contains(s, "library already has") {
 		t.Fatalf("did not expect a resolution-mismatch WARNING for a same-resolution skip; log was:\n%s", s)
@@ -3231,8 +3235,8 @@ func TestPlan_ResolutionAware_Show_UntaggedIncoming_WarnsOnSkip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 	got := logs.String()
 	// Untagged incoming: its radix has no " - <res>" suffix; the library side does.
@@ -3256,8 +3260,8 @@ func TestPlan_ResolutionAware_Movie_ReviewHold_WarnsOncePerInput(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Plan() #%d error: %v", i, err)
 		}
-		if !pl.Duplicate || !pl.DuplicateReview {
-			t.Fatalf("plan #%d: Duplicate=%v DuplicateReview=%v, want both true", i, pl.Duplicate, pl.DuplicateReview)
+		if pl.DupVerdict.Kind != DuplicateReviewHold {
+			t.Fatalf("plan #%d: DupVerdict.Kind = %v, want DuplicateReviewHold", i, pl.DupVerdict.Kind)
 		}
 	}
 

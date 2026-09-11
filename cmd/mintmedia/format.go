@@ -64,19 +64,19 @@ func printPlanBody(pl processor.Plan) {
 		fmt.Printf("  - %s -> %s\n", mv.Source, mv.Dest)
 	}
 
-	switch {
-	case pl.Duplicate && pl.DuplicateReview:
-		fmt.Printf("Duplicate:    held for review (untagged release; existing tagged copy: %s)\n", pl.DuplicateMatchPath)
-	case pl.Duplicate && pl.DuplicateMatchPath != "":
-		fmt.Printf("Duplicate:    yes (matches existing library entry: %s)\n", pl.DuplicateMatchPath)
-	case pl.Duplicate:
-		fmt.Println("Duplicate:    yes (already exists at DestMain)")
-	}
-
-	// Not a duplicate, but the target folder already holds another resolution
-	// of this movie -- the file sorts in beside it (resolution_aware).
-	if pl.AlongsidePath != "" {
-		fmt.Printf("Alongside:    %s (existing, kept)\n", pl.AlongsidePath)
+	switch pl.DupVerdict.Kind {
+	case processor.DuplicateReviewHold:
+		fmt.Printf("Duplicate:    held for review (untagged release; existing tagged copy: %s)\n", pl.DupVerdict.Path)
+	case processor.DuplicateExact:
+		if pl.DupVerdict.Path != "" {
+			fmt.Printf("Duplicate:    yes (matches existing library entry: %s)\n", pl.DupVerdict.Path)
+		} else {
+			fmt.Println("Duplicate:    yes (already exists at DestMain)")
+		}
+	case processor.DuplicateSortAlong:
+		// Not a duplicate, but the target folder already holds another
+		// resolution of this movie -- the file sorts in beside it (resolution_aware).
+		fmt.Printf("Alongside:    %s (existing, kept)\n", pl.DupVerdict.Path)
 	}
 }
 

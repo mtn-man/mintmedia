@@ -36,6 +36,43 @@ type Move struct {
 	Kind   string // "main" or "associated"
 }
 
+// DuplicateKind classifies the outcome of duplicate detection for a Plan.
+type DuplicateKind int
+
+const (
+	// DuplicateNone means not a duplicate -- the move proceeds normally.
+	DuplicateNone DuplicateKind = iota
+	// DuplicateExact means an existing library entry matches; Apply must skip.
+	DuplicateExact
+	// DuplicateReviewHold applies to resolution_aware movies only -- an
+	// untagged release whose target folder already holds a resolution-tagged
+	// copy. Skipped, but surfaced as a WARNING/NeedsReview hold, not a
+	// silent skip.
+	DuplicateReviewHold
+	// DuplicateSortAlong applies to resolution_aware movies only -- not a
+	// skip; sorts in beside an existing copy of the same film at a
+	// different resolution.
+	DuplicateSortAlong
+)
+
+// DuplicateVerdict is the outcome of duplicate detection for a Plan,
+// replacing what used to be four independently-settable fields that only
+// ever took four valid combinations together.
+type DuplicateVerdict struct {
+	Kind DuplicateKind
+	// Path is the existing-library path associated with Kind. Empty for
+	// DuplicateNone. Empty for DuplicateExact when the match IS
+	// pl.DestMainPath (the literal-collision case needs no separate path).
+	// Populated for DuplicateReviewHold and DuplicateSortAlong.
+	Path string
+}
+
+// Skip reports whether Apply must not attempt this plan's move and should
+// report a graceful skip instead.
+func (v DuplicateVerdict) Skip() bool {
+	return v.Kind == DuplicateExact || v.Kind == DuplicateReviewHold
+}
+
 // Plan is the deterministic result of analyzing an input.
 // It should be stable and testable, and should not depend on global state.
 type Plan struct {
@@ -79,38 +116,11 @@ type Plan struct {
 	// Associated files to move (if any)
 	Associated []Move
 
-	// Duplicate is true when DestMainPath already exists in the library.
-	// Apply must not attempt to move a plan with Duplicate set; it should
-	// report a graceful skip instead.
-	Duplicate bool
-
-	// DuplicateMatchPath is the actual existing-library path that caused
-	// Duplicate to be set, when it differs from DestMainPath (a fuzzy title
-	// match against a differently-spelled existing folder, e.g. incoming
-	// "Amelie (2001)" matching an existing "Amélie (2001)" folder). Empty
-	// when Duplicate was set by the literal DestMainPath collision.
-	DuplicateMatchPath string
-
-	// DuplicateReview marks the "untagged release, hold for human review"
-	// outcome of resolution_aware movie duplicate detection: an incoming file
-	// with no detectable resolution whose target folder already holds a
-	// resolution-tagged copy of the same movie (and no exact untagged match).
-	// Duplicate is also set -- Apply must not move it -- but the skip is
-	// surfaced as a WARNING telling the user to decide, not the silent
-	// "already in library" line. Only set for CategoryMovie when
+	// DupVerdict is the outcome of duplicate/sort-alongside detection for
+	// this plan. The zero value (DuplicateNone) means "not a duplicate."
+	// ReviewHold and SortAlong are only ever produced for CategoryMovie when
 	// Config.ResolutionAware is true.
-	DuplicateReview bool
-
-	// AlongsidePath is set when a resolution_aware movie sorts in next to an
-	// existing copy of the same film at a different resolution rather than into
-	// a fresh folder. It holds that existing file's path. Not a skip --
-	// Duplicate stays false and the move proceeds -- but --plan surfaces it so
-	// the preview shows the folder isn't empty, and Apply logs an INFO line
-	// naming both once the move lands. The untagged-sibling variant of this
-	// (incoming tagged, existing copy has no resolution) is left for its own
-	// WARNING instead. Only set for CategoryMovie when Config.ResolutionAware
-	// is true.
-	AlongsidePath string
+	DupVerdict DuplicateVerdict
 
 	// Cleanup intent (optional; not all Apply implementations will honor this initially)
 	DeleteEmptyInputDir bool

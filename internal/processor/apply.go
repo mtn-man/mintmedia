@@ -61,7 +61,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		return Result{Plan: pl}, fmt.Errorf("processor misconfigured: Transferer is nil")
 	}
 
-	if pl.Duplicate {
+	if pl.DupVerdict.Skip() {
 		return skipDuplicateResult(p, pl, duplicateSkippedByInput), nil
 	}
 
@@ -144,7 +144,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 			if transfer.IsDestinationExists(err) {
 				// Lost a race against another job/batch item that claimed
 				// this destination after Plan's own duplicate check ran (see
-				// pl.Duplicate above) but before this move -- treat it the
+				// pl.DupVerdict.Skip() above) but before this move -- treat it the
 				// same as a Plan-time-detected duplicate rather than a hard
 				// failure. pl.MainSourcePath is untouched either way (only
 				// the discarded taggedTmp remux ever saw a write).
@@ -171,13 +171,13 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		"category": string(pl.Category),
 	})
 
-	if !pl.Duplicate && pl.AlongsidePath != "" {
+	if pl.DupVerdict.Kind == DuplicateSortAlong {
 		// resolution_aware different-resolution add: the move landed next to an
 		// existing copy of this film at another resolution. mintmedia keeps
 		// both -- surface it (now, past tense, because the move happened) so the
-		// user can prune if they'd rather not. Plan sets AlongsidePath; --plan
+		// user can prune if they'd rather not. Plan sets DupVerdict; --plan
 		// shows it there without reaching this Apply-only line.
-		existing := strings.TrimSuffix(filepath.Base(pl.AlongsidePath), filepath.Ext(pl.AlongsidePath))
+		existing := strings.TrimSuffix(filepath.Base(pl.DupVerdict.Path), filepath.Ext(pl.DupVerdict.Path))
 		logInfo(p, logging.EventProcessorMovieDuplicateNotice,
 			fmt.Sprintf("INFO     sorted %s alongside existing %s", pl.DestRadix, existing),
 			logging.Fields{
@@ -290,33 +290,34 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 }
 
 // skipDuplicateResult logs and builds the graceful-skip Result shared by
-// both duplicate-detection paths: the Plan-time check (pl.Duplicate) and the
-// Apply-time TOCTOU downgrade (transfer.IsDestinationExists). It also
+// both duplicate-detection paths: the Plan-time check (pl.DupVerdict.Skip())
+// and the Apply-time TOCTOU downgrade (transfer.IsDestinationExists). It also
 // records pl.InputPath in duplicateSkippedByInput so the batch-level cleanup
 // gate below won't trash a directory that still holds this un-moved file.
 func skipDuplicateResult(p *processorImpl, pl Plan, duplicateSkippedByInput map[string]bool) Result {
 	if pl.InputPath != "" && duplicateSkippedByInput != nil {
 		duplicateSkippedByInput[pl.InputPath] = true
 	}
-	matchPath := pl.DuplicateMatchPath
+	matchPath := pl.DupVerdict.Path
 	if matchPath == "" {
 		matchPath = pl.DestMainPath
 	}
-	// pl.DuplicateReview is only ever set by planMovieResolutionAware, which
-	// also sets pl.Duplicate -- so a review plan short-circuits at the
-	// pl.Duplicate guard in applyOne and never reaches the TOCTOU downgrade
-	// caller. Here it just selects the wording.
+	// A DuplicateReviewHold verdict always satisfies Skip() -- so a review
+	// plan short-circuits at the pl.DupVerdict.Skip() guard in applyOne and
+	// never reaches the TOCTOU downgrade caller. Here it just selects the
+	// wording.
+	isReview := pl.DupVerdict.Kind == DuplicateReviewHold
 	reason := fmt.Sprintf("already in library: %s", matchPath)
-	if pl.DuplicateReview {
+	if isReview {
 		reason = fmt.Sprintf("untagged release, possible duplicate of %s -- left for review", matchPath)
 	}
 	logHistoryInfo(p, logging.EventProcessorInputSkippedDuplicate, logging.Fields{
 		"input_path":      pl.InputPath,
 		"dest_path":       pl.DestMainPath,
 		"match_path":      matchPath,
-		"held_for_review": pl.DuplicateReview,
+		"held_for_review": isReview,
 	})
-	return Result{Plan: pl, Applied: false, Handled: true, Reason: reason, NeedsReview: pl.DuplicateReview}
+	return Result{Plan: pl, Applied: false, Handled: true, Reason: reason, NeedsReview: isReview}
 }
 
 func handleCleanupError(p *processorImpl, err error, kind, src, dst string) bool {

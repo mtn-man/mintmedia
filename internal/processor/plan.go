@@ -563,15 +563,15 @@ func planForMain(
 			if err := checkExactDuplicate(&pl); err != nil {
 				return Plan{}, err
 			}
-			if !pl.Duplicate {
+			if !pl.DupVerdict.Skip() {
 				tier1, tier2, err := findFuzzyMovieMatches(p.cfg.MoviesDir, title, year)
 				if err != nil {
 					return Plan{}, err
 				}
 				if len(tier1) > 0 {
-					pl.Duplicate = true
 					matchFolder := tier1[0].folder
-					pl.DuplicateMatchPath = filepath.Join(p.cfg.MoviesDir, matchFolder)
+					matchPath := filepath.Join(p.cfg.MoviesDir, matchFolder)
+					pl.DupVerdict = DuplicateVerdict{Kind: DuplicateExact, Path: matchPath}
 					// A confident fuzzy match means the destination fields computed
 					// above (from the freshly parsed title) describe a folder that
 					// will never actually be created -- Apply always skips a
@@ -579,7 +579,7 @@ func planForMain(
 					// the existing folder's actual on-disk spelling here instead,
 					// mirroring how resolveShowFolder already returns an existing
 					// folder's real name rather than a freshly parsed guess.
-					pl.DestDir = pl.DuplicateMatchPath
+					pl.DestDir = matchPath
 					pl.DestRadix = matchFolder
 					pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 				} else if len(tier2) > 0 {
@@ -665,34 +665,30 @@ func planMovieResolutionAware(p *processorImpl, pl *Plan, title, year string) er
 	return nil
 }
 
-// applyMovieDupVerdict maps a folder scan onto plan fields. It may set
-// pl.Duplicate (Apply skips the move), pl.DuplicateReview (the skip is
-// surfaced as a review WARNING rather than a silent "already in library"), and
-// pl.DuplicateMatchPath, and emits a non-blocking WARNING when the verdict
-// carries one. movieDupNone / movieDupSortAlong leave the plan untouched -- the
+// applyMovieDupVerdict maps a folder scan onto pl.DupVerdict (Apply skips the
+// move when its Kind is Exact or ReviewHold), and emits a non-blocking
+// WARNING when the verdict carries one. DuplicateNone / DuplicateSortAlong
+// (without a variant to report) leave pl.DupVerdict at its zero value -- the
 // incoming file sorts in at pl.DestMainPath.
 func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 	v, matchPath, warn := decideMovieResolutionDuplicate(sc, pl.Resolution != "")
 	switch v {
-	case movieDupExact:
-		pl.Duplicate = true
-		pl.DuplicateMatchPath = matchPath
-	case movieDupReview:
-		pl.Duplicate = true
-		pl.DuplicateReview = true
-		pl.DuplicateMatchPath = matchPath
-	case movieDupSortAlong, movieDupNone:
+	case DuplicateExact:
+		pl.DupVerdict = DuplicateVerdict{Kind: DuplicateExact, Path: matchPath}
+	case DuplicateReviewHold:
+		pl.DupVerdict = DuplicateVerdict{Kind: DuplicateReviewHold, Path: matchPath}
+	case DuplicateSortAlong, DuplicateNone:
 		// Nothing to skip -- the file sorts in at pl.DestMainPath, into the
 		// exact folder or (fuzzy phase) the adopted differently spelled
 		// folder, even when that folder holds no recognizable copy yet: a
 		// confident name+year folder match is enough to place it there.
-		if v == movieDupSortAlong && sc.variantPath != "" && sc.untaggedSiblingPath == "" {
+		if v == DuplicateSortAlong && sc.variantPath != "" && sc.untaggedSiblingPath == "" {
 			// Pure different-resolution add: not a duplicate, but the folder
 			// already holds another resolution of this movie. Record it so
 			// --plan can show the folder isn't empty; Apply logs the INFO line
 			// once the move lands. (The untagged-sibling case is covered by its
 			// WARNING below instead.)
-			pl.AlongsidePath = sc.variantPath
+			pl.DupVerdict = DuplicateVerdict{Kind: DuplicateSortAlong, Path: sc.variantPath}
 		}
 	}
 	if warn == "" {
@@ -704,7 +700,7 @@ func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 	// is deliberately not gated: the incoming file moves and won't resurface,
 	// but an untagged sibling left in the folder should keep prompting on every
 	// new resolution added until the user tags it or turns resolution_aware off.
-	if v == movieDupReview && !p.firstSkipWarning(pl.InputPath) {
+	if v == DuplicateReviewHold && !p.firstSkipWarning(pl.InputPath) {
 		return
 	}
 	// warn names an existing library file: the resolution-tagged copy for a
@@ -723,7 +719,7 @@ func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 		"incoming":        pl.DestRadix,
 		"folder":          pl.DestDir,
 		"existing":        existingStem,
-		"held_for_review": v == movieDupReview,
+		"held_for_review": v == DuplicateReviewHold,
 	})
 }
 
@@ -744,7 +740,7 @@ func checkShowDuplicate(p *processorImpl, pl *Plan) error {
 // checkDuplicateWithResolution is the resolution_aware counterpart to
 // checkExactDuplicate for the show branch. It scans pl.DestDir for an existing
 // file belonging to the same episode as pl, ignoring any " - <res>" qualifier
-// on either side, and sets pl.Duplicate (plus pl.DuplicateMatchPath, the real
+// on either side, and sets pl.DupVerdict to DuplicateExact (with Path the real
 // on-disk path) on a hit. Comparing against pl.MetadataTitle (the
 // resolution-free radix) rather than the resolution-qualified DestMainPath is
 // what makes a re-download at a *different* resolution -- or an untagged copy
@@ -780,8 +776,7 @@ func checkDuplicateWithResolution(p *processorImpl, pl *Plan) error {
 		}
 		rawStem := strings.TrimSuffix(name, ext)
 		if strings.EqualFold(stripTrailingResolution(rawStem), pl.MetadataTitle) {
-			pl.Duplicate = true
-			pl.DuplicateMatchPath = filepath.Join(pl.DestDir, name)
+			pl.DupVerdict = DuplicateVerdict{Kind: DuplicateExact, Path: filepath.Join(pl.DestDir, name)}
 
 			matchRes := detectResolution(name)
 			if !strings.EqualFold(pl.Resolution, matchRes) {
@@ -804,11 +799,11 @@ func checkDuplicateWithResolution(p *processorImpl, pl *Plan) error {
 	return nil
 }
 
-// checkExactDuplicate stats pl.DestMainPath and sets pl.Duplicate on a
+// checkExactDuplicate stats pl.DestMainPath and sets pl.DupVerdict on a
 // literal collision. Returns a plan error for anything but "not exist".
 func checkExactDuplicate(pl *Plan) error {
 	if _, err := os.Stat(pl.DestMainPath); err == nil {
-		pl.Duplicate = true
+		pl.DupVerdict = DuplicateVerdict{Kind: DuplicateExact}
 		return nil
 	} else if !os.IsNotExist(err) {
 		if transfer.IsDestinationUnavailable(err) {
