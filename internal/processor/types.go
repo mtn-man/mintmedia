@@ -55,9 +55,7 @@ const (
 	DuplicateSortAlong
 )
 
-// DuplicateVerdict is the outcome of duplicate detection for a Plan,
-// replacing what used to be four independently-settable fields that only
-// ever took four valid combinations together.
+// DuplicateVerdict is the outcome of duplicate detection for a Plan.
 type DuplicateVerdict struct {
 	Kind DuplicateKind
 	// Path is the existing-library path associated with Kind. Empty for
