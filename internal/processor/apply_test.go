@@ -489,7 +489,7 @@ func TestApply_MultiEpisodeDir_DuplicateSiblingBlocksCleanup(t *testing.T) {
 
 	var dupResult, appliedResult *Result
 	for i := range results {
-		if results[i].Plan.Duplicate {
+		if results[i].Plan.DupVerdict.Skip() {
 			dupResult = &results[i]
 		} else {
 			appliedResult = &results[i]
@@ -536,8 +536,8 @@ func TestApply_Duplicate_SkipsWithoutMoving(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 
 	p.xfer = failIfCalledTransferer{t: t}
@@ -569,7 +569,7 @@ func TestApply_Duplicate_SkipsWithoutMoving(t *testing.T) {
 
 // TestApply_FuzzyDuplicate_ReasonCitesExistingFolder covers the fuzzy
 // (tier 1) duplicate case: the skip reason must cite the actual existing
-// library folder that caused the match (pl.DuplicateMatchPath), not
+// library folder that caused the match (pl.DupVerdict.Path), not
 // pl.DestMainPath, since that's the incoming file's own never-created path
 // and would be misleading here (it names a folder spelled differently from
 // what's actually in the library).
@@ -588,8 +588,8 @@ func TestApply_FuzzyDuplicate_ReasonCitesExistingFolder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.Duplicate {
-		t.Fatalf("Duplicate = false, want true")
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 
 	p.xfer = failIfCalledTransferer{t: t}
@@ -614,7 +614,7 @@ func TestApply_FuzzyDuplicate_ReasonCitesExistingFolder(t *testing.T) {
 }
 
 // TestApply_DuplicateRace_DowngradesToGracefulSkip covers the TOCTOU case:
-// Plan saw no duplicate (pl.Duplicate == false), but another job/batch item
+// Plan saw no duplicate (pl.DupVerdict.Kind == DuplicateNone), but another job/batch item
 // claimed the destination before this Move ran. The real transfer.RenameOrCopy
 // refuses to overwrite and returns a transfer.ErrDestinationExists-wrapped
 // error; applyOne must downgrade that to the same graceful skip Result as
@@ -631,8 +631,8 @@ func TestApply_DuplicateRace_DowngradesToGracefulSkip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (nothing exists yet at plan time)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (nothing exists yet at plan time)")
 	}
 
 	// Simulate another job winning the race between Plan and Apply.
@@ -950,8 +950,8 @@ func TestApply_MetadataTagger_SkipsWriteTitleWhenDestinationClaimedConcurrently(
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (nothing exists yet at plan time)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (nothing exists yet at plan time)")
 	}
 
 	// Simulate another job winning the race between Plan and this Apply call.
@@ -1012,8 +1012,8 @@ func TestApply_MetadataTagger_DestinationClaimedDuringRemux_LeavesSourceUntouche
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.Duplicate {
-		t.Fatalf("Duplicate = true, want false (nothing exists yet at plan time)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (nothing exists yet at plan time)")
 	}
 
 	tagger := &fakeMetaTagger{onCall: func() {
@@ -1332,16 +1332,14 @@ func TestApply_ResolutionAware_DuplicateReview_SkipsWithReviewReason(t *testing.
 	writeFile(t, match, "already here")
 
 	pl := Plan{
-		Category:           CategoryMovie,
-		MainSourcePath:     mainSrc,
-		MainExt:            ".mkv",
-		DestDir:            filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)"),
-		DestRadix:          "Interstellar (2014)",
-		DestMainPath:       filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014).mkv"),
-		InputPath:          mainSrc,
-		Duplicate:          true,
-		DuplicateReview:    true,
-		DuplicateMatchPath: match,
+		Category:       CategoryMovie,
+		MainSourcePath: mainSrc,
+		MainExt:        ".mkv",
+		DestDir:        filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)"),
+		DestRadix:      "Interstellar (2014)",
+		DestMainPath:   filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014).mkv"),
+		InputPath:      mainSrc,
+		DupVerdict:     DuplicateVerdict{Kind: DuplicateReviewHold, Path: match},
 	}
 
 	results, err := p.Apply(context.Background(), []Plan{pl})
@@ -1382,15 +1380,14 @@ func TestApply_ResolutionAware_PlainDuplicate_ReasonUnchanged(t *testing.T) {
 	writeFile(t, match, "already here")
 
 	pl := Plan{
-		Category:           CategoryMovie,
-		MainSourcePath:     mainSrc,
-		MainExt:            ".mkv",
-		DestDir:            filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)"),
-		DestRadix:          "Interstellar (2014) - 2160p",
-		DestMainPath:       match,
-		InputPath:          mainSrc,
-		Duplicate:          true,
-		DuplicateMatchPath: match,
+		Category:       CategoryMovie,
+		MainSourcePath: mainSrc,
+		MainExt:        ".mkv",
+		DestDir:        filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)"),
+		DestRadix:      "Interstellar (2014) - 2160p",
+		DestMainPath:   match,
+		InputPath:      mainSrc,
+		DupVerdict:     DuplicateVerdict{Kind: DuplicateExact, Path: match},
 	}
 
 	results, err := p.Apply(context.Background(), []Plan{pl})
@@ -1468,7 +1465,7 @@ func TestApply_ResolutionAware_DifferentResolution_EmitsAlongsideInfo(t *testing
 		DestRadix:      "Interstellar (2014) - 2160p",
 		DestMainPath:   filepath.Join(movies, "Interstellar (2014)", "Interstellar (2014) - 2160p.mkv"),
 		InputPath:      mainSrc,
-		AlongsidePath:  existing,
+		DupVerdict:     DuplicateVerdict{Kind: DuplicateSortAlong, Path: existing},
 	}
 
 	results, err := impl.Apply(context.Background(), []Plan{pl})

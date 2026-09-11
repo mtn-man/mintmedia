@@ -144,44 +144,26 @@ func scanMovieFolderForResolution(dir string, pl *Plan) (movieResScan, error) {
 	return sc, nil
 }
 
-// movieDupVerdict is the outcome of decideMovieResolutionDuplicate.
-type movieDupVerdict int
-
-const (
-	// movieDupNone: no same-movie file in the folder -- the caller sorts the
-	// incoming file in (into the exact folder, or an adopted fuzzy-matched one).
-	movieDupNone movieDupVerdict = iota
-	// movieDupSortAlong: a same-movie file exists but at a different resolution
-	// (or only as an untagged sibling) -- not a duplicate, sort in alongside.
-	movieDupSortAlong
-	// movieDupExact: same movie, same resolution (byte-name match) -- skip.
-	movieDupExact
-	// movieDupReview: the incoming file has no detectable resolution and the
-	// folder already holds a resolution-tagged copy -- can't be named safely
-	// alongside it, so hold for human review.
-	movieDupReview
-)
-
 // decideMovieResolutionDuplicate applies the resolution_aware movie decision
 // table to a folder scan. incomingTagged is (pl.Resolution != ""). warn is a
 // fully formatted, ready-to-log message, or "" when there is nothing to warn
 // about. matchPath is the existing-library file the verdict points at, or ""
-// for movieDupNone / movieDupSortAlong.
-func decideMovieResolutionDuplicate(sc movieResScan, incomingTagged bool) (v movieDupVerdict, matchPath, warn string) {
+// for DuplicateNone / DuplicateSortAlong.
+func decideMovieResolutionDuplicate(sc movieResScan, incomingTagged bool) (v DuplicateKind, matchPath, warn string) {
 	switch {
 	case sc.exactMatchPath != "":
-		return movieDupExact, sc.exactMatchPath, ""
+		return DuplicateExact, sc.exactMatchPath, ""
 	case incomingTagged && sc.untaggedSiblingPath != "":
-		return movieDupSortAlong, "", fmt.Sprintf(
+		return DuplicateSortAlong, "", fmt.Sprintf(
 			"possible duplicate: untagged copy %q already in this folder -- sorting the tagged release in alongside it",
 			filepath.Base(sc.untaggedSiblingPath))
 	case incomingTagged && sc.variantPath != "":
-		return movieDupSortAlong, "", ""
+		return DuplicateSortAlong, "", ""
 	case !incomingTagged && sc.variantPath != "":
-		return movieDupReview, sc.variantPath, fmt.Sprintf(
+		return DuplicateReviewHold, sc.variantPath, fmt.Sprintf(
 			"untagged release: folder already holds a resolution-tagged copy (%s) -- left for human review",
 			filepath.Base(sc.variantPath))
 	default:
-		return movieDupNone, "", ""
+		return DuplicateNone, "", ""
 	}
 }

@@ -62,7 +62,7 @@ func TestPrintPlan_DuplicateLine(t *testing.T) {
 		MainSourcePath: "/tmp/drop/Get.Smart.2008.1080p.BluRay.x264-GROUP.mkv",
 		DestMainPath:   "/Volumes/media/Movies/Get Smart (2008)/Get Smart (2008).mkv",
 		MovieTitle:     "Get Smart (2008)",
-		Duplicate:      true,
+		DupVerdict:     processor.DuplicateVerdict{Kind: processor.DuplicateExact},
 	}
 
 	out := captureStdout(t, func() { printPlan(pl) })
@@ -73,13 +73,11 @@ func TestPrintPlan_DuplicateLine(t *testing.T) {
 
 func TestPrintPlan_DuplicateReviewLine(t *testing.T) {
 	pl := processor.Plan{
-		Category:           processor.CategoryMovie,
-		MainSourcePath:     "/tmp/drop/Interstellar.2014.mkv",
-		DestMainPath:       "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014).mkv",
-		MovieTitle:         "Interstellar (2014)",
-		Duplicate:          true,
-		DuplicateReview:    true,
-		DuplicateMatchPath: "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv",
+		Category:       processor.CategoryMovie,
+		MainSourcePath: "/tmp/drop/Interstellar.2014.mkv",
+		DestMainPath:   "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014).mkv",
+		MovieTitle:     "Interstellar (2014)",
+		DupVerdict:     processor.DuplicateVerdict{Kind: processor.DuplicateReviewHold, Path: "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv"},
 	}
 
 	out := captureStdout(t, func() { printPlan(pl) })
@@ -113,7 +111,7 @@ func TestPrintPlan_AlongsideLine(t *testing.T) {
 		DestRadix:      "Interstellar (2014) - 2160p",
 		MovieTitle:     "Interstellar (2014)",
 		Resolution:     "2160p",
-		AlongsidePath:  "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv",
+		DupVerdict:     processor.DuplicateVerdict{Kind: processor.DuplicateSortAlong, Path: "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv"},
 	}
 
 	out := captureStdout(t, func() { printPlan(pl) })
