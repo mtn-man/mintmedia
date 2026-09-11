@@ -199,10 +199,10 @@ func (r *terminalReporter) renderBarLine(name string, s Snapshot) string {
 	bar := console.Cyan + barRaw + console.Reset
 
 	// Color conventions:
-	// - "SORTING " label in yellow
+	// - "SORTING  " label in yellow
 	// - progress bar in teal (cyan)
 	// - percentage token in cyan
-	labelRaw := "SORTING "
+	labelRaw := "SORTING  "
 	label := console.Yellow + labelRaw + console.Reset
 	pctTokRaw := fmt.Sprintf("%.0f%%", pct)
 	pctTok := console.Cyan + pctTokRaw + console.Reset
