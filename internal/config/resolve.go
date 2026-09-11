@@ -260,6 +260,15 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		AutoCleanupCompletedTorrents: cfg.Torrent.AutoCleanupCompletedTorrents,
 
 		EnableMetadataTitleTagging: cfg.Features.EnableMetadataTitleTagging,
+		EnableProcessing:           cfg.Features.EnableProcessing,
+
+		TorrentEnabled: torrentOn,
+		TorrentHost:    cfg.Torrent.Host,
+		TorrentAuth:    cfg.Torrent.Auth,
+
+		ClipboardEnabled: cfg.Clipboard.Enabled,
+
+		DeferDestinationChecks: cfg.System.DeferDestinationChecks,
 
 		CreatedDirs: createdDirs,
 	}, nil
