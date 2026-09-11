@@ -379,67 +379,19 @@ runLoop:
 			if !ok {
 				continue
 			}
-			magnet = strings.TrimSpace(magnet)
-			if magnet == "" {
-				continue
-			}
-
-			btih, dn, tr, okMag := magnetSummary(magnet)
-			if !okMag {
-				// Not a valid magnet URI; ignore silently.
-				continue
-			}
-			if dn == "" {
-				dn = "(no dn)"
-			}
-
-			d.logConsoleInfo(
-				logging.EventDaemonMagnetAdded,
-				fmt.Sprintf("TORRENT  %q  (btih=%s, %d trackers)", truncateForLog(dn, 80), btih, tr),
-				logging.Fields{"btih": btih, "dn": dn, "trackers": tr},
-			)
-
-			// If Transmission not enabled, just log.
-			if d.Tx == nil {
-				continue
-			}
-
-			// Non-blocking add
-			go func(m string, btihShort string, dn string) {
-				tctx, cancel := context.WithTimeout(ctx, d.MagnetTimeout)
-				defer cancel()
-
-				if err := d.Tx.AddMagnet(tctx, m); err != nil {
-					d.logError(logging.EventDaemonTxAddError, fmt.Sprintf("ERROR    torrent: could not add -- %v", err), err, logging.Fields{
-						"btih": btihShort,
-					})
-					return
-				}
-
-				if strings.TrimSpace(d.TransmissionHost) != "" {
-					d.trackProgressOnce.Do(func() {
-						d.logConsoleInfo(
-							logging.EventDaemonMagnetAdded,
-							fmt.Sprintf("TORRENT  Track progress here: http://%s/transmission/web/", d.TransmissionHost),
-							logging.Fields{"host": d.TransmissionHost},
-						)
-					})
-				}
-				base := context.WithoutCancel(ctx)
-				_ = notify.PlaySound(base, d.SoundInput)
-				d.logHistoryInfo(logging.EventDaemonMagnetAdded, logging.Fields{
-					"btih": btihShort,
-					"dn":   dn,
-				})
-			}(magnet, btih, dn)
+			d.handleMagnet(ctx, magnet)
 		}
 	}
 
-	// Wait for runWorker to fully stop. jobrunner.Run (invoked per item inside
-	// processPath) guarantees runWorker returns within policy.Grace+policy.Force
-	// of ctx being canceled, even if the underlying processor ignores
-	// cancellation entirely, so this wait is bounded in practice despite having
-	// no explicit timeout here.
+	return d.awaitShutdown(outcome)
+}
+
+// awaitShutdown blocks until runWorker fully stops, then reports how the
+// shutdown went. jobrunner.Run (invoked per item inside processPath)
+// guarantees runWorker returns within policy.Grace+policy.Force of ctx being
+// canceled, even if the underlying processor ignores cancellation entirely,
+// so this wait is bounded in practice despite having no explicit timeout here.
+func (d *Daemon) awaitShutdown(outcome <-chan workerOutcome) error {
 	result := <-outcome
 
 	if !result.lastItemTimedOut {
@@ -457,6 +409,66 @@ runLoop:
 		shutdown.FormatDurationCompact(d.ShutdownGraceDuration),
 		shutdown.FormatDurationCompact(d.ShutdownForceTimeout),
 	)
+}
+
+// handleMagnet parses a raw magnet URI pulled off the clipboard poller,
+// logs it, and (if Transmission is configured) queues a non-blocking add.
+// Malformed or empty input is ignored silently -- the poller can emit
+// clipboard noise that never was a magnet link.
+func (d *Daemon) handleMagnet(ctx context.Context, magnet string) {
+	magnet = strings.TrimSpace(magnet)
+	if magnet == "" {
+		return
+	}
+
+	btih, dn, tr, okMag := magnetSummary(magnet)
+	if !okMag {
+		// Not a valid magnet URI; ignore silently.
+		return
+	}
+	if dn == "" {
+		dn = "(no dn)"
+	}
+
+	d.logConsoleInfo(
+		logging.EventDaemonMagnetAdded,
+		fmt.Sprintf("TORRENT  %q  (btih=%s, %d trackers)", truncateForLog(dn, 80), btih, tr),
+		logging.Fields{"btih": btih, "dn": dn, "trackers": tr},
+	)
+
+	// If Transmission not enabled, just log.
+	if d.Tx == nil {
+		return
+	}
+
+	// Non-blocking add
+	go func(m string, btihShort string, dn string) {
+		tctx, cancel := context.WithTimeout(ctx, d.MagnetTimeout)
+		defer cancel()
+
+		if err := d.Tx.AddMagnet(tctx, m); err != nil {
+			d.logError(logging.EventDaemonTxAddError, fmt.Sprintf("ERROR    torrent: could not add -- %v", err), err, logging.Fields{
+				"btih": btihShort,
+			})
+			return
+		}
+
+		if strings.TrimSpace(d.TransmissionHost) != "" {
+			d.trackProgressOnce.Do(func() {
+				d.logConsoleInfo(
+					logging.EventDaemonMagnetAdded,
+					fmt.Sprintf("TORRENT  Track progress here: http://%s/transmission/web/", d.TransmissionHost),
+					logging.Fields{"host": d.TransmissionHost},
+				)
+			})
+		}
+		base := context.WithoutCancel(ctx)
+		_ = notify.PlaySound(base, d.SoundInput)
+		d.logHistoryInfo(logging.EventDaemonMagnetAdded, logging.Fields{
+			"btih": btihShort,
+			"dn":   dn,
+		})
+	}(magnet, btih, dn)
 }
 
 // workerOutcome reports how runWorker's item processing ended.
