@@ -601,14 +601,8 @@ func planForMain(
 					pl.DestDir = matchPath
 					pl.DestRadix = matchFolder
 					pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
-				} else if len(tier2) > 0 {
-					folders := make([]string, len(tier2))
-					for i, m := range tier2 {
-						folders[i] = m.folder
-					}
-					logWarn(p, logging.EventProcessorMovieDuplicateNotice,
-						fmt.Sprintf("WARNING  possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
-						nil, logging.Fields{"movies_dir": p.cfg.MoviesDir, "incoming": pl.MovieTitle, "candidates": strings.Join(folders, ", ")})
+				} else {
+					warnPossibleDuplicateMovieFolder(p, p.cfg.MoviesDir, pl.MovieTitle, tier2)
 				}
 			}
 		}
@@ -672,15 +666,7 @@ func planMovieResolutionAware(p *processorImpl, pl *Plan, title, year string) er
 		applyMovieDupVerdict(p, pl, sc2)
 		return nil
 	}
-	if len(tier2) > 0 {
-		folders := make([]string, len(tier2))
-		for i, m := range tier2 {
-			folders[i] = m.folder
-		}
-		logWarn(p, logging.EventProcessorMovieDuplicateNotice,
-			fmt.Sprintf("WARNING  possible duplicate movie: %q may match existing folder(s): %s", pl.MovieTitle, strings.Join(folders, ", ")),
-			nil, logging.Fields{"movies_dir": p.cfg.MoviesDir, "incoming": pl.MovieTitle, "candidates": strings.Join(folders, ", ")})
-	}
+	warnPossibleDuplicateMovieFolder(p, p.cfg.MoviesDir, pl.MovieTitle, tier2)
 	return nil
 }
 
