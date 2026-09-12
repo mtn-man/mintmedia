@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Category represents Mintmedia's two canonical library targets.
@@ -122,6 +123,23 @@ type Plan struct {
 
 	// Cleanup intent (optional; not all Apply implementations will honor this initially)
 	DeleteEmptyInputDir bool
+}
+
+// resolutionSuffixSep is the exact separator Plan inserts between the radix
+// and a detected resolution when Config.ResolutionAware folds it into
+// DestRadix. plan.go's append sites and HasResolutionSuffix share this one
+// literal so a future change to the suffix format can't silently desync the
+// writer from the one place that reads it back.
+const resolutionSuffixSep = " - "
+
+// HasResolutionSuffix reports whether DestRadix actually carries the
+// resolution suffix Plan appends when Config.ResolutionAware folds a
+// detected resolution into the sorted name. Resolution is detected on every
+// plan regardless of the setting (see the Resolution field doc), so a caller
+// checking whether the toggle actually took effect can't just test
+// Resolution != "" -- it has to confirm the suffix landed on DestRadix too.
+func (pl Plan) HasResolutionSuffix() bool {
+	return pl.Resolution != "" && strings.HasSuffix(pl.DestRadix, resolutionSuffixSep+pl.Resolution)
 }
 
 // Result reports the outcome of applying a plan.

@@ -2771,6 +2771,38 @@ func TestPlan_ResolutionAware_Duplicate_DifferentEpisodeNotFlagged(t *testing.T)
 	}
 }
 
+func TestPlan_HasResolutionSuffix(t *testing.T) {
+	cases := []struct {
+		name       string
+		destRadix  string
+		resolution string
+		want       bool
+	}{
+		{"suffix present", "Movie (2020) - 1080p", "1080p", true},
+		{"resolution detected but never appended (resolution_aware off)", "Movie (2020)", "1080p", false},
+		{"no resolution detected", "Movie (2020)", "", false},
+		{
+			// DestRadix can diverge from the originally computed radix for a
+			// reason that has nothing to do with the resolution suffix -- e.g.
+			// planMovieResolutionAware's fuzzy-match path adopts an existing
+			// library folder's real on-disk spelling. Resolution being
+			// non-empty here must not be mistaken for the suffix having landed.
+			name:       "DestRadix diverges for an unrelated reason (fuzzy folder adoption)",
+			destRadix:  "Amélie (2001)",
+			resolution: "1080p",
+			want:       false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			pl := Plan{DestRadix: c.destRadix, Resolution: c.resolution}
+			if got := pl.HasResolutionSuffix(); got != c.want {
+				t.Fatalf("HasResolutionSuffix() = %v, want %v (DestRadix=%q, Resolution=%q)", got, c.want, c.destRadix, c.resolution)
+			}
+		})
+	}
+}
+
 // --- resolution_aware: movie folder scan + decision table (pure) ----------
 
 func TestScanMovieFolderForResolution(t *testing.T) {

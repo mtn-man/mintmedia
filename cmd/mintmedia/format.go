@@ -47,7 +47,7 @@ func printPlanBody(pl processor.Plan) {
 	// suffix. It is detected on every plan regardless of the setting, so
 	// printing it unconditionally would imply an effect the toggle-off path
 	// doesn't have.
-	if pl.Resolution != "" && strings.HasSuffix(pl.DestRadix, " - "+pl.Resolution) {
+	if pl.HasResolutionSuffix() {
 		fmt.Printf("Resolution:   %s\n", pl.Resolution)
 	}
 
