@@ -2949,6 +2949,54 @@ func TestDecideMovieResolutionDuplicate(t *testing.T) {
 	}
 }
 
+// TestWarnPossibleDuplicateMovieFolder pins the exact WARNING wording and
+// history fields shared by both of Plan's tier2 call sites (the
+// resolution_aware-off fuzzy fallback in planForMain and
+// planMovieResolutionAware's own fuzzy fallback) -- neither call-site test
+// asserts message content directly, so this is the one place a future wording
+// or field change to either site is guaranteed to be checked.
+func TestWarnPossibleDuplicateMovieFolder(t *testing.T) {
+	p, console, historyPath := newTestProcessorResolutionAwareWithSinks(t)
+
+	tier2 := []movieFuzzyMatch{{folder: "Survivor (1997)"}, {folder: "Survivor (1998)"}}
+	warnPossibleDuplicateMovieFolder(p, "/library/Movies", "Survivor", tier2)
+
+	wantLine := `WARNING  possible duplicate movie: "Survivor" may match existing folder(s): Survivor (1997), Survivor (1998)`
+	if got := console.String(); !strings.Contains(got, wantLine) {
+		t.Fatalf("console missing expected WARNING line %q; got:\n%s", wantLine, got)
+	}
+
+	entry := readHistoryEvent(t, historyPath, logging.EventProcessorMovieDuplicateNotice)
+	if entry.Message != "" {
+		t.Fatalf("history msg = %q, want empty -- fields are the record", entry.Message)
+	}
+	wantFields := map[string]string{
+		"movies_dir": "/library/Movies",
+		"incoming":   "Survivor",
+		"candidates": "Survivor (1997), Survivor (1998)",
+	}
+	for k, want := range wantFields {
+		got, _ := entry.Fields[k].(string)
+		if got != want {
+			t.Fatalf("history field %q = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestWarnPossibleDuplicateMovieFolder_EmptyTier2IsNoOp(t *testing.T) {
+	p, console, historyPath := newTestProcessorResolutionAwareWithSinks(t)
+
+	warnPossibleDuplicateMovieFolder(p, "/library/Movies", "Survivor", nil)
+
+	if got := console.String(); got != "" {
+		t.Fatalf("expected no console output for an empty tier2, got:\n%s", got)
+	}
+	raw, err := os.ReadFile(historyPath) //nolint:gosec // test-owned temp path
+	if err == nil && strings.TrimSpace(string(raw)) != "" {
+		t.Fatalf("expected no history entries for an empty tier2, got:\n%s", raw)
+	}
+}
+
 // --- resolution_aware: movie Plan-level decision matrix (exact folder) ----
 
 func TestPlan_ResolutionAware_MovieDecisionMatrix(t *testing.T) {

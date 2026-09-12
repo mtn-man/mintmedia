@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mtn-man/mintmedia/internal/logging"
 	"github.com/mtn-man/mintmedia/internal/transfer"
 )
 
@@ -70,6 +71,25 @@ func findFuzzyMovieMatches(moviesDir, incomingTitle, incomingYear string) (tier1
 	}
 
 	return tier1, tier2, nil
+}
+
+// warnPossibleDuplicateMovieFolder logs a non-blocking WARNING when tier2's
+// asymmetric year match makes an existing library folder a possible spelling
+// match for movieTitle -- ambiguous rather than a confident duplicate (see
+// findFuzzyMovieMatches), so Plan proceeds normally rather than skipping.
+// Mirrors warnPossibleDuplicateShowFolder's shape for the same case on the
+// show side.
+func warnPossibleDuplicateMovieFolder(p *processorImpl, moviesDir, movieTitle string, tier2 []movieFuzzyMatch) {
+	if len(tier2) == 0 {
+		return
+	}
+	folders := make([]string, len(tier2))
+	for i, m := range tier2 {
+		folders[i] = m.folder
+	}
+	logWarn(p, logging.EventProcessorMovieDuplicateNotice,
+		fmt.Sprintf("WARNING  possible duplicate movie: %q may match existing folder(s): %s", movieTitle, strings.Join(folders, ", ")),
+		nil, logging.Fields{"movies_dir": moviesDir, "incoming": movieTitle, "candidates": strings.Join(folders, ", ")})
 }
 
 // movieResScan is the single-ReadDir view of a target movie folder used by
