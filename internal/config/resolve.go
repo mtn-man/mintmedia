@@ -60,7 +60,24 @@ func resolveMediaTagBlacklist(user []string) []string {
 	return merged
 }
 
-func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
+// configFields bundles validateConfigFields' normalized outputs -- both what
+// provisionConfigDirs needs to create/check directories and what
+// normalizeAndValidate's final Resolved{} assembly reads back afterward.
+type configFields struct {
+	dropAbs, stateAbs, moviesAbs, showsAbs, historyAbs string
+
+	settle, poll, shutdownGrace, shutdownForce time.Duration
+
+	doneNotificationMode string
+	torrentOn            bool
+}
+
+// validateConfigFields normalizes and validates every config field that
+// doesn't depend on the filesystem existing yet: durations, required paths,
+// extension formatting, torrent settings. cfg is mutated in place for the
+// string fields normalizeAndValidate's final assembly still reads directly
+// off it afterward (ConsoleLevel, HistoryLevel).
+func validateConfigFields(cfg *Config) (configFields, []error) {
 	var errs []error
 
 	consoleLevel, err := logging.ParseLevel(cfg.Logging.ConsoleLevel)
@@ -176,12 +193,29 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		}
 	}
 
-	// Fail early if parsing/expansion produced errors.
-	if len(errs) > 0 {
-		return nil, formatConfigError(cfgPathAbs, errs...)
-	}
+	return configFields{
+		dropAbs:              dropAbs,
+		stateAbs:             stateAbs,
+		moviesAbs:            moviesAbs,
+		showsAbs:             showsAbs,
+		historyAbs:           historyAbs,
+		settle:               settle,
+		poll:                 poll,
+		shutdownGrace:        shutdownGrace,
+		shutdownForce:        shutdownForce,
+		doneNotificationMode: doneNotificationMode,
+		torrentOn:            torrentOn,
+	}, errs
+}
 
-	// Directory creation / existence checks
+// provisionConfigDirs creates or validates the directories normalizeAndValidate
+// depends on existing (skipping destinations when DeferDestinationChecks is
+// set). Only called once validateConfigFields has already returned zero
+// errors, so it always starts from its own fresh errs rather than one
+// inherited across the phase boundary.
+func provisionConfigDirs(cfg *Config, dropAbs, stateAbs, moviesAbs, showsAbs, historyAbs string) ([]string, []error) {
+	var errs []error
+
 	type namedDir struct {
 		name string
 		path string
@@ -228,6 +262,18 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		}
 	}
 
+	return createdDirs, errs
+}
+
+func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
+	// Fail early if parsing/expansion produced errors -- directory creation
+	// must not run against unvalidated paths.
+	fields, errs := validateConfigFields(cfg)
+	if len(errs) > 0 {
+		return nil, formatConfigError(cfgPathAbs, errs...)
+	}
+
+	createdDirs, errs := provisionConfigDirs(cfg, fields.dropAbs, fields.stateAbs, fields.moviesAbs, fields.showsAbs, fields.historyAbs)
 	if len(errs) > 0 {
 		return nil, formatConfigError(cfgPathAbs, errs...)
 	}
@@ -235,21 +281,21 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 	return &Resolved{
 		ConfigPathAbs: cfgPathAbs,
 
-		DropFolderAbs: dropAbs,
-		StateDirAbs:   stateAbs,
+		DropFolderAbs: fields.dropAbs,
+		StateDirAbs:   fields.stateAbs,
 
-		DestDirMoviesAbs: moviesAbs,
-		DestDirShowsAbs:  showsAbs,
+		DestDirMoviesAbs: fields.moviesAbs,
+		DestDirShowsAbs:  fields.showsAbs,
 
-		DropSettleDuration:    settle,
-		ClipboardPollInterval: poll,
-		DoneNotificationMode:  doneNotificationMode,
-		ShutdownGraceDuration: shutdownGrace,
-		ShutdownForceTimeout:  shutdownForce,
+		DropSettleDuration:    fields.settle,
+		ClipboardPollInterval: fields.poll,
+		DoneNotificationMode:  fields.doneNotificationMode,
+		ShutdownGraceDuration: fields.shutdownGrace,
+		ShutdownForceTimeout:  fields.shutdownForce,
 
 		ConsoleLogLevel: cfg.Logging.ConsoleLevel,
 		HistoryLogLevel: cfg.Logging.HistoryLevel,
-		HistoryFileAbs:  historyAbs,
+		HistoryFileAbs:  fields.historyAbs,
 
 		MainMediaExtensions:      append([]string(nil), cfg.Media.MainMediaExtensions...),
 		AssociatedFileExtensions: append([]string(nil), cfg.Media.AssociatedFileExtensions...),
@@ -262,7 +308,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		EnableMetadataTitleTagging: cfg.Features.EnableMetadataTitleTagging,
 		EnableProcessing:           cfg.Features.EnableProcessing,
 
-		TorrentEnabled: torrentOn,
+		TorrentEnabled: fields.torrentOn,
 		TorrentHost:    cfg.Torrent.Host,
 		TorrentAuth:    cfg.Torrent.Auth,
 
