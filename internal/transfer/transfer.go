@@ -295,21 +295,17 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 	closeErr := out.Close()
 
 	if copyErr != nil {
-		_ = os.Remove(tmp)
 		return fmt.Errorf("copy file: %w", copyErr)
 	}
 	if syncErr != nil {
-		_ = os.Remove(tmp)
 		return fmt.Errorf("sync temp file: %w", syncErr)
 	}
 	if closeErr != nil {
-		_ = os.Remove(tmp)
 		return fmt.Errorf("close temp file: %w", closeErr)
 	}
 
 	// Atomic finalize on destination filesystem
 	if err := os.Rename(tmp, dst); err != nil {
-		_ = os.Remove(tmp)
 		return fmt.Errorf("rename temp file to destination: %w", err)
 	}
 
