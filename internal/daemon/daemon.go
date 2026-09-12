@@ -266,9 +266,7 @@ runLoop:
 			if err := d.retryDeferredDestinationChecks(ctx, workQueue, pending); err != nil {
 				return err
 			}
-			if err := d.recoverDegradedDestinations(ctx, workQueue, degradedPending); err != nil {
-				return err
-			}
+			d.recoverDegradedDestinations(ctx, workQueue, degradedPending)
 
 		case item := <-d.deferredRetry:
 			degradedPending[d.inFlight.Key(item.path)] = item
@@ -384,7 +382,7 @@ func (d *Daemon) retryDeferredDestinationChecks(ctx context.Context, workQueue c
 // cleared -- independent of retryDeferredDestinationChecks (different
 // trigger: a destination that was ready and later went degraded mid-run,
 // rather than one deferred from watch-time).
-func (d *Daemon) recoverDegradedDestinations(ctx context.Context, workQueue chan<- workItem, degradedPending map[string]retryItem) error {
+func (d *Daemon) recoverDegradedDestinations(ctx context.Context, workQueue chan<- workItem, degradedPending map[string]retryItem) {
 	for _, cat := range d.destDegraded.Degraded() {
 		if !d.dirWritableFn(d.dirFor(cat)) {
 			continue
@@ -410,7 +408,6 @@ func (d *Daemon) recoverDegradedDestinations(ctx context.Context, workQueue chan
 		// here.
 		d.dispatchToQueue(ctx, workQueue, item.path, key)
 	}
-	return nil
 }
 
 // awaitShutdown blocks until runWorker fully stops, then reports how the
