@@ -427,8 +427,13 @@ func TestCopyThenReplace_CleanupError(t *testing.T) {
 	if ce.Src != src || ce.Dst != dst {
 		t.Fatalf("CleanupError paths: src=%q dst=%q", ce.Src, ce.Dst)
 	}
-	if _, err := os.Stat(dst); err != nil {
+	st, err := os.Stat(dst)
+	if err != nil {
 		t.Fatalf("expected dst to exist (destination was finalized): %v", err)
+	}
+	if perm := st.Mode().Perm(); perm != LibraryFileMode {
+		t.Fatalf("destination mode = %o, want %o -- a CleanupError still finalizes dst, so it must carry the library mode",
+			perm, LibraryFileMode)
 	}
 }
 
