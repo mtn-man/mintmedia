@@ -37,7 +37,20 @@ func planOne(t *testing.T, p *processorImpl, inputPath string) (Plan, error) {
 	if len(plans) != 1 {
 		t.Fatalf("expected 1 plan, got %d", len(plans))
 	}
-	return plans[0], nil
+	pl := plans[0]
+	// MetadataTitle is meant to always be DestRadix's resolution-free form for
+	// any plan that will actually reach Apply's move (a Skip()==true plan's
+	// DestRadix can legitimately diverge from it -- e.g. the non-resolution_aware
+	// fuzzy-match branch overwrites DestRadix with an adopted folder's on-disk
+	// spelling without updating MetadataTitle, since that plan's move never
+	// happens and MetadataTitle is never read for it). Checked here, once, so
+	// every one of this helper's callers guards the invariant for free.
+	if !pl.DupVerdict.Skip() {
+		if want := stripTrailingResolution(pl.DestRadix); pl.MetadataTitle != want {
+			t.Fatalf("MetadataTitle = %q, want %q (stripTrailingResolution(DestRadix)) for a non-skipped plan", pl.MetadataTitle, want)
+		}
+	}
+	return pl, nil
 }
 
 func newTestProcessor(t *testing.T) *processorImpl {
