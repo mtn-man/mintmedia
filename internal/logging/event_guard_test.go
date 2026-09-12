@@ -39,6 +39,8 @@ func TestConsoleLabelLiteralsArePaddedToNineColumns(t *testing.T) {
 		t.Fatalf("find repo root: %v", err)
 	}
 
+	// Every package that holds labeled console literals. A package that starts
+	// emitting them has to be added here, or its labels go unchecked.
 	targetDirs := []string{
 		filepath.Join(repoRoot, "cmd", "mintmedia"),
 		filepath.Join(repoRoot, "internal", "daemon"),
@@ -46,6 +48,7 @@ func TestConsoleLabelLiteralsArePaddedToNineColumns(t *testing.T) {
 		filepath.Join(repoRoot, "internal", "resultformat"),
 		filepath.Join(repoRoot, "internal", "transfer"),
 		filepath.Join(repoRoot, "internal", "processor"),
+		filepath.Join(repoRoot, "internal", "notify"),
 	}
 
 	for _, dir := range targetDirs {
