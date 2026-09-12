@@ -2956,10 +2956,11 @@ func TestPlan_ResolutionAware_MovieDecisionMatrix(t *testing.T) {
 			wantDestBase: "Interstellar (2014) - 2160p.mkv",
 		},
 		{
-			name:         "untagged sibling + different resolution -> sort alongside (+warn)",
-			incoming:     "Interstellar.2014.2160p.BluRay.mkv",
-			existing:     []string{"Interstellar (2014).mkv", "Interstellar (2014) - 1080p.mkv"},
-			wantDestBase: "Interstellar (2014) - 2160p.mkv",
+			name:              "untagged sibling + different resolution -> sort alongside (+warn)",
+			incoming:          "Interstellar.2014.2160p.BluRay.mkv",
+			existing:          []string{"Interstellar (2014).mkv", "Interstellar (2014) - 1080p.mkv"},
+			wantDestBase:      "Interstellar (2014) - 2160p.mkv",
+			wantAlongsideBase: "Interstellar (2014) - 1080p.mkv",
 		},
 		{
 			name:     "untagged sibling + same resolution -> duplicate (exact wins)",
