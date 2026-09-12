@@ -529,6 +529,13 @@ func heightToBucket(h int) int {
 	return bucket
 }
 
+// pathStem returns path's filename without its extension -- the "sorted-name
+// form" library-entry comparisons in this package share (see
+// stripTrailingResolution for the resolution-suffix-aware variant).
+func pathStem(path string) string {
+	return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+}
+
 // stripTrailingResolution removes a trailing " - <res>" qualifier (as appended
 // by the resolution_aware feature) from a filename stem, leaving the
 // resolution-free radix. A stem without such a suffix is returned unchanged.
