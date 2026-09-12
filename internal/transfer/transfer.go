@@ -106,16 +106,37 @@ func (rt *realTicker) Stop()               { rt.t.Stop() }
 
 // NewRenameOrCopy creates a transferer that attempts os.Rename, and falls back to copy+atomic finalize.
 func NewRenameOrCopy(opts Options) *RenameOrCopy {
-	if opts.UpdateEvery <= 0 {
-		opts.UpdateEvery = 250 * time.Millisecond
+	return &RenameOrCopy{opts: opts}
+}
+
+// tickInterval, tickerFactory, and copier are the single source of truth for
+// RenameOrCopy's defaults, each falling back only when the corresponding
+// field/Options value is zero. This makes a zero-value &RenameOrCopy{} (used
+// directly by one test, and implicitly by any caller that skips
+// NewRenameOrCopy) behave identically to a constructed one, so the
+// constructor doesn't need to duplicate these fallbacks itself.
+
+func (t *RenameOrCopy) tickInterval() time.Duration {
+	if t.opts.UpdateEvery > 0 {
+		return t.opts.UpdateEvery
 	}
-	return &RenameOrCopy{
-		opts: opts,
-		newTicker: func(d time.Duration) ticker {
-			return &realTicker{t: time.NewTicker(d)}
-		},
-		copyFn: io.Copy,
+	return 250 * time.Millisecond
+}
+
+func (t *RenameOrCopy) tickerFactory() func(time.Duration) ticker {
+	if t.newTicker != nil {
+		return t.newTicker
 	}
+	return func(d time.Duration) ticker {
+		return &realTicker{t: time.NewTicker(d)}
+	}
+}
+
+func (t *RenameOrCopy) copier() func(io.Writer, io.Reader) (int64, error) {
+	if t.copyFn != nil {
+		return t.copyFn
+	}
+	return io.Copy
 }
 
 // Move relocates src to dst, attempting os.Rename first and falling back to
@@ -228,17 +249,7 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 	if t.opts.Reporter != nil {
 		stopReport = make(chan struct{})
 		reportWG.Go(func() {
-			tick := t.opts.UpdateEvery
-			if tick <= 0 {
-				tick = 250 * time.Millisecond
-			}
-			newTicker := t.newTicker
-			if newTicker == nil {
-				newTicker = func(d time.Duration) ticker {
-					return &realTicker{t: time.NewTicker(d)}
-				}
-			}
-			progressTicker := newTicker(tick)
+			progressTicker := t.tickerFactory()(t.tickInterval())
 			defer progressTicker.Stop()
 
 			var lastBytes int64
@@ -286,11 +297,7 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 		copied: &copied,
 	}
 
-	copyFn := t.copyFn
-	if copyFn == nil {
-		copyFn = io.Copy
-	}
-	_, copyErr := copyFn(out, cr)
+	_, copyErr := t.copier()(out, cr)
 	syncErr := out.Sync()
 	closeErr := out.Close()
 
