@@ -701,12 +701,14 @@ func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 		// exact folder or (fuzzy phase) the adopted differently spelled
 		// folder, even when that folder holds no recognizable copy yet: a
 		// confident name+year folder match is enough to place it there.
-		if v == DuplicateSortAlong && sc.variantPath != "" && sc.untaggedSiblingPath == "" {
-			// Pure different-resolution add: not a duplicate, but the folder
-			// already holds another resolution of this movie. Record it so
-			// --plan can show the folder isn't empty; Apply logs the INFO line
-			// once the move lands. (The untagged-sibling case is covered by its
-			// WARNING below instead.)
+		if v == DuplicateSortAlong && sc.variantPath != "" {
+			// Not a duplicate, but the folder already holds another resolution
+			// of this movie. Record it so --plan can show the folder isn't
+			// empty and Apply logs the INFO line once the move lands. This is
+			// independent of an untagged sibling also being present -- that
+			// case gets its own WARNING below, but doesn't make the variant
+			// any less real, so both can and do apply to the same incoming
+			// file.
 			pl.DupVerdict = DuplicateVerdict{Kind: DuplicateSortAlong, Path: sc.variantPath}
 		}
 	}
