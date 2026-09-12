@@ -10,7 +10,7 @@ import (
 )
 
 // discoverDropPaths reads dropRoot, filters ignorable entries, stats each
-// candidate, and returns them sorted via processor.SortCandidates. errCount
+// candidate, and returns them sorted via proc.SortCandidates. errCount
 // accumulates non-fatal per-entry stat errors and non-fatal sort errors,
 // both of which are already printed to stderr by this function. readErr and
 // sortErr are fatal -- callers are responsible for reporting them (they
@@ -42,7 +42,7 @@ func discoverDropPaths(ctx context.Context, proc processor.Processor, dropRoot s
 		candidates = append(candidates, path)
 	}
 
-	sortedPaths, sortErrs, sortErr := processor.SortCandidates(ctx, proc, candidates)
+	sortedPaths, sortErrs, sortErr := proc.SortCandidates(ctx, candidates)
 	if sortErr != nil {
 		return nil, errCount, nil, sortErr
 	}

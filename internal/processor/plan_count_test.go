@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestCountMainMedia_SumsAcrossExpansionWithoutNamingLogic(t *testing.T) {
+func TestSumMainMediaCounts_SumsAcrossExpansionWithoutNamingLogic(t *testing.T) {
 	p := newTestProcessor(t)
 
 	movie := filepath.Join(p.cfg.DropFolder, "Movie.2020.1080p.x265.mkv")
@@ -19,7 +19,7 @@ func TestCountMainMedia_SumsAcrossExpansionWithoutNamingLogic(t *testing.T) {
 	nonMedia := filepath.Join(p.cfg.DropFolder, "readme.txt")
 	writeFile(t, nonMedia, "not media")
 
-	count, interrupted := CountMainMedia(context.Background(), p, []string{movie, seasonPackRoot, nonMedia})
+	count, interrupted := SumMainMediaCounts(context.Background(), p, []string{movie, seasonPackRoot, nonMedia})
 	if interrupted {
 		t.Fatalf("interrupted = true, want false")
 	}
@@ -28,8 +28,8 @@ func TestCountMainMedia_SumsAcrossExpansionWithoutNamingLogic(t *testing.T) {
 	}
 }
 
-func TestCountMainMedia_IncludesFilesPlanWouldRejectAsUnparseable(t *testing.T) {
-	// CountMainMedia is a cheap, extension-only estimate: it
+func TestSumMainMediaCounts_IncludesFilesPlanWouldRejectAsUnparseable(t *testing.T) {
+	// SumMainMediaCounts is a cheap, extension-only estimate: it
 	// does not run naming logic, so a media-extension file with an
 	// unparseable name is still counted here even though Plan() would reject
 	// it. This documents the intentional divergence behind the "expected"
@@ -39,16 +39,16 @@ func TestCountMainMedia_IncludesFilesPlanWouldRejectAsUnparseable(t *testing.T) 
 	unparseable := filepath.Join(p.cfg.DropFolder, "....mkv")
 	writeFile(t, unparseable, "dummy")
 
-	countMedia, interrupted := CountMainMedia(context.Background(), p, []string{unparseable})
+	countMedia, interrupted := SumMainMediaCounts(context.Background(), p, []string{unparseable})
 	if interrupted {
 		t.Fatalf("interrupted = true, want false")
 	}
 	if countMedia != 1 {
-		t.Fatalf("CountMainMedia = %d, want 1 (extension-only, name not evaluated)", countMedia)
+		t.Fatalf("SumMainMediaCounts = %d, want 1 (extension-only, name not evaluated)", countMedia)
 	}
 }
 
-func TestCountMainMedia_StopsEarlyOnCanceledContext(t *testing.T) {
+func TestSumMainMediaCounts_StopsEarlyOnCanceledContext(t *testing.T) {
 	p := newTestProcessor(t)
 
 	movie := filepath.Join(p.cfg.DropFolder, "Movie.2020.1080p.x265.mkv")
@@ -57,7 +57,7 @@ func TestCountMainMedia_StopsEarlyOnCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	count, interrupted := CountMainMedia(ctx, p, []string{movie})
+	count, interrupted := SumMainMediaCounts(ctx, p, []string{movie})
 	if !interrupted {
 		t.Fatalf("interrupted = false, want true for canceled context")
 	}
