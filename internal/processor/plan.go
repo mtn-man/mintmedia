@@ -720,7 +720,7 @@ func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 	}
 	// Stem, not basename: "existing" pairs with "incoming" (pl.DestRadix), and
 	// both sides of that pair are in sorted-name form.
-	existingStem := strings.TrimSuffix(filepath.Base(existing), filepath.Ext(existing))
+	existingStem := pathStem(existing)
 	logWarn(p, logging.EventProcessorMovieDuplicateNotice, "WARNING  "+warn, nil, logging.Fields{
 		"movies_dir":      p.cfg.MoviesDir,
 		"incoming":        pl.DestRadix,

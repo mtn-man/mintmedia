@@ -189,7 +189,7 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 		// both -- surface it (now, past tense, because the move happened) so the
 		// user can prune if they'd rather not. Plan sets DupVerdict; --plan
 		// shows it there without reaching this Apply-only line.
-		existing := strings.TrimSuffix(filepath.Base(pl.DupVerdict.Path), filepath.Ext(pl.DupVerdict.Path))
+		existing := pathStem(pl.DupVerdict.Path)
 		logInfo(p, logging.EventProcessorMovieDuplicateNotice,
 			fmt.Sprintf("INFO     sorted %s alongside existing %s", pl.DestRadix, existing),
 			logging.Fields{
