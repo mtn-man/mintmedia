@@ -242,7 +242,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 		"mode":   "daemon",
 	})
 
-	pending := make(map[string]time.Time)
+	// pending is keyed by inFlight's normalized identity, not the raw path, so
+	// two spellings of the same real file (a symlink, or a case difference on
+	// macOS) collapse to one entry instead of double-counting; the raw path is
+	// the value since dispatch needs it, not the normalized form.
+	pending := make(map[string]string)
+	// degradedPending is likewise keyed by normalized identity; retryItem.path
+	// already carries the raw path for dispatch.
 	degradedPending := make(map[string]retryItem)
 	var lastWaitLog time.Time
 
@@ -265,7 +271,7 @@ runLoop:
 			}
 
 		case item := <-d.deferredRetry:
-			degradedPending[item.path] = item
+			degradedPending[d.inFlight.Key(item.path)] = item
 
 		// --- Watcher errors ---
 		case err, ok := <-d.Watcher.Errors():
@@ -296,7 +302,7 @@ runLoop:
 					d.logHistoryInfo(logging.EventDaemonPathDuplicate, logging.Fields{"path": path})
 					continue
 				}
-				pending[path] = time.Now()
+				pending[key] = path
 				if lastWaitLog.IsZero() || time.Since(lastWaitLog) > time.Minute {
 					d.logInfo(
 						logging.EventSystemDestinationsWaiting,
@@ -337,13 +343,13 @@ runLoop:
 // retryDeferredDestinationChecks drains items held in pending (deferred at
 // watch-time because defer_destination_checks was set and destinations
 // weren't ready yet) once destinationsReady() reports they now are.
-func (d *Daemon) retryDeferredDestinationChecks(ctx context.Context, workQueue chan<- workItem, pending map[string]time.Time) error {
+func (d *Daemon) retryDeferredDestinationChecks(ctx context.Context, workQueue chan<- workItem, pending map[string]string) error {
 	if len(pending) == 0 || !d.DeferDestinationChecks || !d.destinationsReady() {
 		return nil
 	}
 
 	pendingPaths := make([]string, 0, len(pending))
-	for pth := range pending {
+	for _, pth := range pending {
 		pendingPaths = append(pendingPaths, pth)
 	}
 	sortedPaths, sortErrs, sortErr := d.Proc.SortCandidates(ctx, pendingPaths)
@@ -363,11 +369,11 @@ func (d *Daemon) retryDeferredDestinationChecks(ctx context.Context, workQueue c
 		logging.Fields{"pending": fileCount},
 	)
 	for _, pth := range sortedPaths {
-		delete(pending, pth)
 		key := d.inFlight.Key(pth)
 		if key == "" {
 			return fmt.Errorf("empty in-flight key for path: %s", pth)
 		}
+		delete(pending, key)
 		d.dispatchToQueue(ctx, workQueue, pth, key)
 	}
 	return nil
@@ -392,16 +398,17 @@ func (d *Daemon) recoverDegradedDestinations(ctx context.Context, workQueue chan
 			logging.Fields{"category": string(cat)},
 		)
 	}
-	for pth, item := range degradedPending {
+	for key, item := range degradedPending {
 		if d.destDegraded.IsDegraded(item.category) {
 			continue
 		}
-		delete(degradedPending, pth)
-		key := d.inFlight.Key(pth)
-		if key == "" {
-			return fmt.Errorf("empty in-flight key for path: %s", pth)
-		}
-		d.dispatchToQueue(ctx, workQueue, pth, key)
+		delete(degradedPending, key)
+		// key is already item.path's normalized identity -- it was computed
+		// once at insertion (see the deferredRetry case in Run), so unlike
+		// retryDeferredDestinationChecks (which only has raw paths from
+		// SortCandidates to work with) there's no fresh path to re-normalize
+		// here.
+		d.dispatchToQueue(ctx, workQueue, item.path, key)
 	}
 	return nil
 }

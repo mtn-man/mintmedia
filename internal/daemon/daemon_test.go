@@ -575,6 +575,143 @@ func TestDaemon_DeferDestinationChecks(t *testing.T) {
 	}
 }
 
+// countingStubProcessor overrides CountMainMedia to report one file per
+// path, so SumMainMediaCounts' total (surfaced in the
+// EventSystemDestinationsReady history field asserted below) reflects how
+// many distinct entries actually drained from pending -- stubProcessor's
+// default of 0 would make that field 0 either way and hide the bug.
+type countingStubProcessor struct {
+	*stubProcessor
+}
+
+func (c *countingStubProcessor) CountMainMedia(context.Context, string) (int, error) {
+	return 1, nil
+}
+
+// TestDaemon_DeferDestinationChecks_DuplicateSpellingCollapses covers a
+// symlink and its target both landing in the drop folder while destinations
+// are unavailable: the watcher emits two distinct raw paths for what is the
+// same real file, and pending must key on inFlight's normalized identity
+// (symlink-resolved) rather than the raw path, or the daemon would carry two
+// separate pending entries for one file.
+//
+// dispatchToQueue's own TryMark already dedupes at the point a path actually
+// reaches the work queue (it keys on the same normalized identity), so a
+// second Process() call was never actually reachable here even before the
+// fix -- the observable defect was pending double-counting the same file,
+// which surfaces in EventSystemDestinationsReady's "pending" field.
+func TestDaemon_DeferDestinationChecks_DuplicateSpellingCollapses(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	mkdirAll(t, drop)
+
+	w, err := watch.NewDropFolderWatcher(drop, 200*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	proc := &countingStubProcessor{stubProcessor: &stubProcessor{started: make(chan string, 4)}}
+
+	historyPath := filepath.Join(t.TempDir(), "history.jsonl")
+	logger, err := logging.New(logging.Options{
+		Stdout:               io.Discard,
+		Stderr:               io.Discard,
+		ConsoleLevel:         "INFO",
+		HistoryLevel:         "WARN",
+		HistoryFile:          historyPath,
+		HistoryInfoAllowlist: logging.DefaultHistoryInfoAllowlist(),
+	})
+	if err != nil {
+		t.Fatalf("logging.New() error: %v", err)
+	}
+
+	d := &Daemon{
+		Watcher: w,
+		Proc:    proc,
+		Logger:  logger,
+
+		MoviesDir: movies,
+		ShowsDir:  shows,
+
+		DeferDestinationChecks: true,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Start watcher error: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+
+	realFile := filepath.Join(drop, "real.mkv")
+	writeFile(t, realFile, "data")
+
+	link := filepath.Join(drop, "link.mkv")
+	if err := os.Symlink(realFile, link); err != nil {
+		cancel()
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	expectNoPath(t, proc.started, 700*time.Millisecond)
+
+	mkdirAll(t, movies)
+	mkdirAll(t, shows)
+
+	got := waitForPath(t, proc.started, 7*time.Second)
+	if got != realFile && got != link {
+		cancel()
+		t.Fatalf("Process called with %q, want %q or %q", got, realFile, link)
+	}
+
+	select {
+	case second := <-proc.started:
+		cancel()
+		t.Fatalf("Process called a second time with %q", second)
+	case <-time.After(700 * time.Millisecond):
+	}
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Run did not exit after cancel")
+	}
+
+	raw, err := os.ReadFile(historyPath)
+	if err != nil {
+		t.Fatalf("read history file: %v", err)
+	}
+	var readyPending float64 = -1
+	for line := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+		if line == "" {
+			continue
+		}
+		var entry logging.Entry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			t.Fatalf("unmarshal history line %q: %v", line, err)
+		}
+		if entry.Event != logging.EventSystemDestinationsReady {
+			continue
+		}
+		pending, ok := entry.Fields["pending"].(float64)
+		if !ok {
+			t.Fatalf("EventSystemDestinationsReady missing numeric %q field: %+v", "pending", entry.Fields)
+		}
+		readyPending = pending
+	}
+	if readyPending != 1 {
+		t.Fatalf("EventSystemDestinationsReady pending = %v, want 1 -- the symlink and its target should have collapsed to one pending entry", readyPending)
+	}
+}
+
 func TestDaemon_DestinationDegraded_DefersAndRecovers(t *testing.T) {
 	root := t.TempDir()
 	drop := filepath.Join(root, "drop")
