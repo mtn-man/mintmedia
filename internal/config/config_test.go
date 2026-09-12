@@ -118,6 +118,9 @@ associated_file_extensions = [".srt"]
 	if len(res.MediaTagBlacklist) != len(defaultMediaTagBlacklist) {
 		t.Fatalf("MediaTagBlacklist = %v, want built-in defaults %v", res.MediaTagBlacklist, defaultMediaTagBlacklist)
 	}
+	if res.CustomMediaTagBlacklistCount != 0 {
+		t.Fatalf("CustomMediaTagBlacklistCount = %d, want 0 when media_tag_blacklist is omitted", res.CustomMediaTagBlacklistCount)
+	}
 }
 
 func TestLoad_MediaTagBlacklist_MergesUserPatternsWithDefaults(t *testing.T) {
@@ -171,6 +174,9 @@ media_tag_blacklist = ["proper", "repack"]
 		if !sliceContains(res.MediaTagBlacklist, pat) {
 			t.Fatalf("MediaTagBlacklist missing user pattern %q: %v", pat, res.MediaTagBlacklist)
 		}
+	}
+	if res.CustomMediaTagBlacklistCount != 2 {
+		t.Fatalf("CustomMediaTagBlacklistCount = %d, want 2 (user patterns only, not the merged list)", res.CustomMediaTagBlacklistCount)
 	}
 }
 

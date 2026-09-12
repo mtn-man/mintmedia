@@ -130,6 +130,11 @@ type Resolved struct {
 	// Naming patterns passed to Go processor.
 	MediaTagBlacklist []string
 
+	// CustomMediaTagBlacklistCount is how many of MediaTagBlacklist's patterns
+	// came from naming.media_tag_blacklist rather than the built-in defaults.
+	// Display-only: the processor always receives the merged MediaTagBlacklist.
+	CustomMediaTagBlacklistCount int
+
 	// ResolutionAware mirrors naming.resolution_aware.
 	ResolutionAware bool
 

@@ -300,8 +300,9 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		MainMediaExtensions:      append([]string(nil), cfg.Media.MainMediaExtensions...),
 		AssociatedFileExtensions: append([]string(nil), cfg.Media.AssociatedFileExtensions...),
 
-		MediaTagBlacklist: resolveMediaTagBlacklist(cfg.Naming.MediaTagBlacklist),
-		ResolutionAware:   cfg.Naming.ResolutionAware,
+		MediaTagBlacklist:            resolveMediaTagBlacklist(cfg.Naming.MediaTagBlacklist),
+		CustomMediaTagBlacklistCount: len(cfg.Naming.MediaTagBlacklist),
+		ResolutionAware:              cfg.Naming.ResolutionAware,
 
 		AutoCleanupCompletedTorrents: cfg.Torrent.AutoCleanupCompletedTorrents,
 
