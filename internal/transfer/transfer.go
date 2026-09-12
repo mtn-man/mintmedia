@@ -311,6 +311,13 @@ func (t *RenameOrCopy) copyThenReplace(ctx context.Context, src, dst string) (re
 		return fmt.Errorf("close temp file: %w", closeErr)
 	}
 
+	// Publish the temp at the library mode: os.CreateTemp makes it 0o600 and the
+	// rename below makes it visible under its final name at once. Move's chmod
+	// normalizes the mode across both transfer paths, but it runs after this
+	// returns -- and the CleanupError below means dst is already finalized, so
+	// the mode has to be right before the rename rather than after it.
+	_ = os.Chmod(tmp, LibraryFileMode) //nolint:gosec // deliberate: see LibraryFileMode
+
 	// Atomic finalize on destination filesystem
 	if err := os.Rename(tmp, dst); err != nil {
 		return fmt.Errorf("rename temp file to destination: %w", err)
