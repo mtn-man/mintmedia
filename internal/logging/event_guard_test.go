@@ -11,6 +11,7 @@ import (
 
 var quotedOperationalEventRe = regexp.MustCompile(`"(system|daemon|processor)\.[a-z0-9_]+(?:\.[a-z0-9_]+)*"`)
 var forbiddenConsoleWriteRe = regexp.MustCompile(`\bfmt\.(?:Print|Printf|Println|Fprint|Fprintf|Fprintln)\s*\(|\bos\.(?:Stdout|Stderr)\b`)
+var eventConstDeclRe = regexp.MustCompile(`^\s*Event\w+\s+Event\s*=\s*"([^"]+)"`)
 
 // consoleLabelWidth is the fixed column width every labeled console line
 // pads its label to (see internal/console's prefixColors table). A literal
@@ -126,6 +127,61 @@ func TestNoQuotedOperationalEventLiteralsInProductionCallSites(t *testing.T) {
 			assertNoQuotedOperationalEvents(t, path)
 		}
 	}
+}
+
+// TestNoDeclaredEventConstantMissingFromAllOperationalEvents guards
+// AllOperationalEvents() against silently drifting out of sync with the
+// const block it's meant to restate in full: a new Event constant declared
+// in events.go but forgotten from the returned slice would otherwise pass
+// every other test in this package undetected.
+func TestNoDeclaredEventConstantMissingFromAllOperationalEvents(t *testing.T) {
+	t.Parallel()
+
+	repoRoot, err := findRepoRootFromCWD()
+	if err != nil {
+		t.Fatalf("find repo root: %v", err)
+	}
+
+	declared := declaredEventConstantValues(t, filepath.Join(repoRoot, "internal", "logging", "events.go"))
+
+	listed := make(map[string]struct{}, len(AllOperationalEvents()))
+	for _, e := range AllOperationalEvents() {
+		listed[string(e)] = struct{}{}
+	}
+
+	for value := range declared {
+		if _, ok := listed[value]; !ok {
+			t.Errorf("event constant %q is declared in events.go but missing from AllOperationalEvents()", value)
+		}
+	}
+}
+
+func declaredEventConstantValues(t *testing.T, path string) map[string]struct{} {
+	t.Helper()
+
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			t.Fatalf("close %s: %v", path, err)
+		}
+	}()
+
+	declared := make(map[string]struct{})
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		m := eventConstDeclRe.FindStringSubmatch(sc.Text())
+		if m == nil {
+			continue
+		}
+		declared[m[1]] = struct{}{}
+	}
+	if err := sc.Err(); err != nil {
+		t.Fatalf("scan %s: %v", path, err)
+	}
+	return declared
 }
 
 func TestNoDirectConsoleWritesInScopedInternalPackages(t *testing.T) {
