@@ -524,7 +524,7 @@ func planForMain(
 		pl.DestRadix = fmt.Sprintf("%s - S%02dE%s", displayShowName, season, padEpisode(episode))
 		pl.MetadataTitle = pl.DestRadix
 		if p.cfg.ResolutionAware && pl.Resolution != "" {
-			pl.DestRadix = pl.DestRadix + " - " + pl.Resolution
+			pl.DestRadix += resolutionSuffixSep + pl.Resolution
 		}
 
 		pl.DestDir = filepath.Join(p.cfg.ShowsDir, showFolder, seasonFolder)
@@ -567,7 +567,7 @@ func planForMain(
 		pl.DestRadix = pl.MovieTitle
 		pl.MetadataTitle = pl.MovieTitle
 		if p.cfg.ResolutionAware && pl.Resolution != "" {
-			pl.DestRadix = pl.DestRadix + " - " + pl.Resolution
+			pl.DestRadix += resolutionSuffixSep + pl.Resolution
 		}
 		// The movie folder name stays resolution-free (pl.MovieTitle); only the
 		// file inside it carries the suffix.
@@ -661,7 +661,7 @@ func planMovieResolutionAware(p *processorImpl, pl *Plan, title, year string) er
 		pl.MetadataTitle = mf
 		pl.DestRadix = mf
 		if pl.Resolution != "" {
-			pl.DestRadix = pl.DestRadix + " - " + pl.Resolution
+			pl.DestRadix += resolutionSuffixSep + pl.Resolution
 		}
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
