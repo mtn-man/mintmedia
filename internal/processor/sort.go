@@ -90,10 +90,6 @@ func parseSortKey(blacklist []*regexp.Regexp, path string) (sortKey, error) {
 // names cannot be parsed are omitted from sorted and reported in errs. A non-nil
 // err signals a fatal failure (e.g. context canceled); in that case both sorted
 // and errs are nil.
-func SortCandidates(ctx context.Context, proc Processor, paths []string) ([]string, []SortError, error) {
-	return proc.SortCandidates(ctx, paths)
-}
-
 func (p *processorImpl) SortCandidates(ctx context.Context, paths []string) ([]string, []SortError, error) {
 	if len(paths) == 0 {
 		return nil, nil, nil

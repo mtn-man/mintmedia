@@ -195,7 +195,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// Wire media-aware ordering into the watcher's settle batch. The closure
 	// captures ctx so sorting respects daemon shutdown cancellation.
 	d.Watcher.SetSortFunc(func(paths []string) []string {
-		sorted, errs, sortErr := processor.SortCandidates(ctx, d.Proc, paths)
+		sorted, errs, sortErr := d.Proc.SortCandidates(ctx, paths)
 		if sortErr != nil {
 			return paths // context canceled; preserve original order
 		}
@@ -346,7 +346,7 @@ func (d *Daemon) retryDeferredDestinationChecks(ctx context.Context, workQueue c
 	for pth := range pending {
 		pendingPaths = append(pendingPaths, pth)
 	}
-	sortedPaths, sortErrs, sortErr := processor.SortCandidates(ctx, d.Proc, pendingPaths)
+	sortedPaths, sortErrs, sortErr := d.Proc.SortCandidates(ctx, pendingPaths)
 	if sortErr != nil {
 		sortedPaths = pendingPaths // context canceled; fall back to arbitrary order
 	}
@@ -355,7 +355,7 @@ func (d *Daemon) retryDeferredDestinationChecks(ctx context.Context, workQueue c
 		d.logSortParseError(se.Path, se.Err)
 	}
 
-	fileCount, _ := processor.CountMainMedia(ctx, d.Proc, sortedPaths)
+	fileCount, _ := processor.SumMainMediaCounts(ctx, d.Proc, sortedPaths)
 	noun := resultformat.Pluralize(fileCount, "file", "files")
 	d.logInfo(
 		logging.EventSystemDestinationsReady,

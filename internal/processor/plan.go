@@ -867,10 +867,10 @@ func (p *processorImpl) CountMainMedia(ctx context.Context, path string) (int, e
 	return len(mainPaths), nil
 }
 
-// CountMainMedia sums the cheap, extension-only media count (see
+// SumMainMediaCounts sums the cheap, extension-only media count (see
 // (*processorImpl).CountMainMedia) across paths, for a fast upfront estimate
 // without running Plan's naming/hint-resolution logic.
-func CountMainMedia(ctx context.Context, proc Processor, paths []string) (count int, interrupted bool) {
+func SumMainMediaCounts(ctx context.Context, proc Processor, paths []string) (count int, interrupted bool) {
 	for _, p := range paths {
 		if ctx.Err() != nil {
 			return count, true

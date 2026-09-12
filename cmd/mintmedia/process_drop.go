@@ -75,7 +75,7 @@ func processDropFolder(
 	// count: Plan may still reject a file this count includes (unparseable or
 	// ambiguous name), which is why it's labeled "expected" rather than
 	// "discovered".
-	fileCount, countInterrupted := processor.CountMainMedia(ctx, proc, candidates)
+	fileCount, countInterrupted := processor.SumMainMediaCounts(ctx, proc, candidates)
 	if countInterrupted {
 		return ProcessDropOutcome{ErrorCount: errCount, Interrupted: true}
 	}
