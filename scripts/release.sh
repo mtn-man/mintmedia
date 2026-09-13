@@ -75,14 +75,18 @@ done
 command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || command -v sha256 >/dev/null 2>&1 \
   || err "No sha256 tool found (need sha256sum, shasum, or sha256)"
 
-# Must be on main branch
-CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-[[ "$CURRENT_BRANCH" == "main" ]] \
-  || err "Must be on main branch (currently on: $CURRENT_BRANCH)"
-
 # Working tree must be clean
 [[ -z "$(git status --porcelain)" ]] \
   || err "Working tree is not clean — commit or stash changes before releasing"
+
+# Must be on main branch — auto-switch if currently on dev
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$CURRENT_BRANCH" == "dev" ]]; then
+  info "Currently on dev — switching to main"
+  git switch main
+elif [[ "$CURRENT_BRANCH" != "main" ]]; then
+  err "Must be on main or dev branch (currently on: $CURRENT_BRANCH)"
+fi
 
 # Tag must not already exist
 git tag | grep -qx "$VERSION" \
@@ -301,3 +305,6 @@ git -C "$FORMULA_REPO" add "$FORMULA"
 git -C "$FORMULA_REPO" commit -m "mintmedia: update formula to ${VERSION}"
 
 success "Homebrew formula committed (not pushed)"
+
+echo ""
+echo "  cd $FORMULA_REPO"
