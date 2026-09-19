@@ -62,6 +62,7 @@ func determineCategoryFromName(name string) Category {
 
 func hasShowSeasonSignal(name string) bool {
 	return reSeasonEpisode.MatchString(name) ||
+		reSeasonEpisodeRange.MatchString(name) ||
 		reSeasonEpisodeX.MatchString(name) ||
 		reSeasonRange.MatchString(name) ||
 		reSeasonWordRange.MatchString(name) ||
@@ -70,6 +71,7 @@ func hasShowSeasonSignal(name string) bool {
 
 func hasShowEpisodeSignal(name string) bool {
 	return reSeasonEpisode.MatchString(name) ||
+		reSeasonEpisodeRange.MatchString(name) ||
 		reSeasonEpisodeX.MatchString(name) ||
 		reEpisodeWord.MatchString(name)
 }
@@ -90,17 +92,17 @@ func determineCategoryFromNames(inputName, mainName string) Category {
 	return CategoryMovie
 }
 
-func parseShowFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear string, season, episode int, err error) {
-	if sn, sy, s, e, ok := parseShowOnce(blacklist, baseName); ok {
-		return sn, sy, s, e, nil
+func parseShowFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear string, season, episode, episodeEnd int, err error) {
+	if sn, sy, s, e, ee, ok := parseShowOnce(blacklist, baseName); ok {
+		return sn, sy, s, e, ee, nil
 	}
-	if sn, sy, s, e, ok := parseShowOnce(blacklist, fileName); ok {
-		return sn, sy, s, e, nil
+	if sn, sy, s, e, ee, ok := parseShowOnce(blacklist, fileName); ok {
+		return sn, sy, s, e, ee, nil
 	}
 	if sn, sy, s, e, ok := parseShowCrossSeasonEpisode(blacklist, baseName, fileName); ok {
-		return sn, sy, s, e, nil
+		return sn, sy, s, e, 0, nil
 	}
-	return "", "", 0, 0, &ParseShowError{BaseName: baseName, FileName: fileName}
+	return "", "", 0, 0, 0, &ParseShowError{BaseName: baseName, FileName: fileName}
 }
 
 // deriveShowHintFromFolder attempts to extract a show name/year from a season-pack style folder.
@@ -151,21 +153,29 @@ func deriveShowHintFromFolder(blacklist []*regexp.Regexp, folderName string) (sh
 	return showName, showYear, season, seasonOK, true
 }
 
-func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear string, season, episode int, ok bool) {
-	season, seasonIdx, seasonOK := parseSeasonComponent(raw)
-	episode, episodeIdx, episodeOK := parseEpisodeComponent(raw)
+func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear string, season, episode, episodeEnd int, ok bool) {
+	var seasonIdx, episodeIdx int
+	var seasonOK, episodeOK bool
+	if s, start, end, idx, rangeOK := parseEpisodeRangeComponent(raw); rangeOK {
+		season, episode, episodeEnd = s, start, end
+		seasonIdx, episodeIdx = idx, idx
+		seasonOK, episodeOK = true, true
+	} else {
+		season, seasonIdx, seasonOK = parseSeasonComponent(raw)
+		episode, episodeIdx, episodeOK = parseEpisodeComponent(raw)
+	}
 	if !seasonOK || !episodeOK {
-		return "", "", 0, 0, false
+		return "", "", 0, 0, 0, false
 	}
 
 	// Allow season 00 and episode 00 (both used for specials).
 	if season < 0 || episode < 0 {
-		return "", "", 0, 0, false
+		return "", "", 0, 0, 0, false
 	}
 
 	titleCut := min(seasonIdx, episodeIdx)
 	if titleCut <= 0 || titleCut > len(raw) {
-		return "", "", 0, 0, false
+		return "", "", 0, 0, 0, false
 	}
 
 	// Everything before the season/episode marker.
@@ -173,7 +183,7 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 	titlePart = cleanReleaseName(blacklist, titlePart)
 	titlePart = strings.TrimSpace(titlePart)
 	if titlePart == "" {
-		return "", "", 0, 0, false
+		return "", "", 0, 0, 0, false
 	}
 
 	// If the title contains a year token, treat it as show year and remove it from the name.
@@ -185,11 +195,11 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 	}
 
 	if titlePart == "" {
-		return "", "", 0, 0, false
+		return "", "", 0, 0, 0, false
 	}
 
 	showName = titleCaseSimple(titlePart)
-	return showName, showYear, season, episode, true
+	return showName, showYear, season, episode, episodeEnd, true
 }
 
 // isLeadingBareToken reports whether fileName[:pos] contains nothing but release-noise --
@@ -267,20 +277,30 @@ func parseBareSeasonEpisode(hint showHint, fileName string) (season, episode int
 	return season, episode, found
 }
 
-func parseSeasonEpisode(raw string) (season, episode int, ok bool) {
+func parseSeasonEpisode(raw string) (season, episode, episodeEnd int, ok bool) {
+	if s, start, end, _, rangeOK := parseEpisodeRangeComponent(raw); rangeOK {
+		return s, start, end, true
+	}
+
 	season, _, seasonOK := parseSeasonComponent(raw)
 	episode, _, episodeOK := parseEpisodeComponent(raw)
 	if !seasonOK || !episodeOK {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 
 	if season < 0 || episode < 0 {
-		return 0, 0, false
+		return 0, 0, 0, false
 	}
 
-	return season, episode, true
+	return season, episode, 0, true
 }
 
+// parseShowCrossSeasonEpisode is the fallback used when the season and
+// episode are split across the folder and file names (e.g. folder "Season
+// 01", file "12 - Title.mkv"). It deliberately does not attempt multi-episode
+// range parsing: the file-side token here typically has no "S##" prefix at
+// all (season comes from the folder), so reSeasonEpisodeRange wouldn't match
+// it anyway. Accepted gap, same as parseBareSeasonEpisode's documented gaps.
 func parseShowCrossSeasonEpisode(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear string, season, episode int, ok bool) {
 	episode, episodeIdx, episodeOK := parseEpisodeComponent(fileName)
 	if !episodeOK {
@@ -373,6 +393,24 @@ func parseSeasonComponent(raw string) (season int, idx int, ok bool) {
 
 func parseEpisodeComponent(raw string) (episode int, idx int, ok bool) {
 	return matchComponent(raw, episodePatterns)
+}
+
+// parseEpisodeRangeComponent matches a multi-episode token (e.g. "S01E12-E13",
+// "S01E12E13") in raw, returning the season and both episode numbers. Refuses
+// to guess (ok=false) when the second number doesn't exceed the first --
+// e.g. a malformed "S03E13-E12" -- rather than reporting a nonsensical range.
+func parseEpisodeRangeComponent(raw string) (season, start, end, idx int, ok bool) {
+	idxs := reSeasonEpisodeRange.FindStringSubmatchIndex(raw)
+	if idxs == nil {
+		return 0, 0, 0, 0, false
+	}
+	season = atoiSafe(raw[idxs[2]:idxs[3]])
+	start = atoiSafe(raw[idxs[4]:idxs[5]])
+	end = atoiSafe(raw[idxs[6]:idxs[7]])
+	if end <= start {
+		return 0, 0, 0, 0, false
+	}
+	return season, start, end, idxs[0], true
 }
 
 func parseMovieFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (title string, year string, err error) {
@@ -644,6 +682,16 @@ func padEpisode(ep int) string {
 		return fmt.Sprintf("%d", ep)
 	}
 	return fmt.Sprintf("%02d", ep)
+}
+
+// formatEpisodeTag renders the "E<nn>" (or "E<nn>-E<mm>" for a multi-episode
+// range) portion of a show's destination radix.
+func formatEpisodeTag(episode, episodeEnd int) string {
+	tag := "E" + padEpisode(episode)
+	if episodeEnd > 0 {
+		tag += "-E" + padEpisode(episodeEnd)
+	}
+	return tag
 }
 
 func atoiSafe(s string) int {

@@ -67,7 +67,7 @@ func parseSortKey(blacklist []*regexp.Regexp, path string) (sortKey, error) {
 	cat := determineCategoryFromNames(name, name)
 	switch cat {
 	case CategoryShow:
-		showName, _, season, episode, err := parseShowFromName(blacklist, name, name)
+		showName, _, season, episode, _, err := parseShowFromName(blacklist, name, name)
 		if err != nil {
 			return sortKey{}, err
 		}

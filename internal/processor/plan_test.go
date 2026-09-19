@@ -1076,6 +1076,83 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// Note: the real-world motivating filename for this feature also
+			// carries a second parenthetical ("(US)") before the year, but that
+			// combination trips an unrelated pre-existing bug in
+			// parseShowFolderQualifier (internal/processor/show_resolver.go) --
+			// see conversation notes. This fixture isolates the range behavior
+			// from that separate issue.
+			name: "ShowFile_EpisodeRange_DashForm_MultiEpisode",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Office (2005) - S03E12-E13 - Traveling Salesmen & The Return (1080p BluRay x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "The Office" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "The Office")
+				}
+				if pl.ShowYear != "2005" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2005")
+				}
+				if pl.Season != 3 || pl.Episode != 12 || pl.EpisodeEnd != 13 {
+					t.Fatalf("Season/Episode/EpisodeEnd = %d/%d/%d, want 3/12/13", pl.Season, pl.Episode, pl.EpisodeEnd)
+				}
+				if pl.DestRadix != "The Office (2005) - S03E12-E13" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Office (2005) - S03E12-E13")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (2005)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			// Regression test: before reSeasonEpisodeRange was added to the
+			// classification signals, this no-separator form ("S02E01E02")
+			// didn't match reSeasonEpisode at all (no word boundary between
+			// the digit and the following "E"), so the file wasn't even
+			// recognized as a show.
+			name: "ShowFile_EpisodeRange_NoDashForm_ClassifiesAsShow",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Bear S02E01E02 Extras.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "The Bear" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "The Bear")
+				}
+				if pl.Season != 2 || pl.Episode != 1 || pl.EpisodeEnd != 2 {
+					t.Fatalf("Season/Episode/EpisodeEnd = %d/%d/%d, want 2/1/2", pl.Season, pl.Episode, pl.EpisodeEnd)
+				}
+				if pl.DestRadix != "The Bear - S02E01-E02" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Bear - S02E01-E02")
+				}
+			},
+		},
+		{
 			name: "ShowFile_Fallout_YearMatchesExactFolder",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
@@ -2538,6 +2615,30 @@ func TestPlan_ResolutionAware_ShowSuffix(t *testing.T) {
 	}
 	if got := filepath.Base(pl.DestMainPath); got != "Breaking Bad - S03E07 - 2160p.mkv" {
 		t.Fatalf("DestMainPath base = %q, want %q", got, "Breaking Bad - S03E07 - 2160p.mkv")
+	}
+}
+
+// TestPlan_ResolutionAware_ShowEpisodeRange confirms a multi-episode range
+// composes correctly with the resolution suffix: DestRadix carries both the
+// range and the resolution, while MetadataTitle stays resolution-free.
+func TestPlan_ResolutionAware_ShowEpisodeRange(t *testing.T) {
+	p := newTestProcessorResolutionAware(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Breaking.Bad.S03E07-E08.2160p.4K.UHD.WEB-DL.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Episode != 7 || pl.EpisodeEnd != 8 {
+		t.Fatalf("Episode/EpisodeEnd = %d/%d, want 7/8", pl.Episode, pl.EpisodeEnd)
+	}
+	if pl.DestRadix != "Breaking Bad - S03E07-E08 - 2160p" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Breaking Bad - S03E07-E08 - 2160p")
+	}
+	if pl.MetadataTitle != "Breaking Bad - S03E07-E08" {
+		t.Fatalf("MetadataTitle = %q, want %q", pl.MetadataTitle, "Breaking Bad - S03E07-E08")
 	}
 }
 
