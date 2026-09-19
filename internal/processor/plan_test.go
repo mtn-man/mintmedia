@@ -1076,17 +1076,16 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			// Note: the real-world motivating filename for this feature also
-			// carries a second parenthetical ("(US)") before the year, but that
-			// combination trips an unrelated pre-existing bug in
-			// parseShowFolderQualifier (internal/processor/show_resolver.go) --
-			// see conversation notes. This fixture isolates the range behavior
-			// from that separate issue.
+			// The exact real-world motivating filename for the episode-range
+			// feature, including the country-qualifier parenthetical ("(US)")
+			// before the year -- this combination used to trip a separate,
+			// now-fixed bug in parseShowFolderQualifier (show_resolver.go)
+			// that doubled the year in DestRadix.
 			name: "ShowFile_EpisodeRange_DashForm_MultiEpisode",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
 
-				name := "The Office (2005) - S03E12-E13 - Traveling Salesmen & The Return (1080p BluRay x265 Silence).mkv"
+				name := "The Office (US) (2005) - S03E12-E13 - Traveling Salesmen & The Return (1080p BluRay x265 Silence).mkv"
 				src := filepath.Join(p.cfg.DropFolder, name)
 				writeFile(t, src, "dummy")
 				return src
@@ -1100,8 +1099,8 @@ func TestPlan_TableDriven(t *testing.T) {
 				if pl.Category != CategoryShow {
 					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
 				}
-				if pl.ShowName != "The Office" {
-					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "The Office")
+				if pl.ShowName != "The Office (US)" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "The Office (US)")
 				}
 				if pl.ShowYear != "2005" {
 					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2005")
@@ -1109,11 +1108,53 @@ func TestPlan_TableDriven(t *testing.T) {
 				if pl.Season != 3 || pl.Episode != 12 || pl.EpisodeEnd != 13 {
 					t.Fatalf("Season/Episode/EpisodeEnd = %d/%d/%d, want 3/12/13", pl.Season, pl.Episode, pl.EpisodeEnd)
 				}
-				if pl.DestRadix != "The Office (2005) - S03E12-E13" {
-					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Office (2005) - S03E12-E13")
+				if pl.DestRadix != "The Office (US) (2005) - S03E12-E13" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Office (US) (2005) - S03E12-E13")
 				}
-				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (2005)")) {
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (US) (2005)")) {
 					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			// Regression test for the parseShowFolderQualifier fix: an
+			// existing "Name (Qualifier) (Year)" folder must be reused
+			// (Rule 2 exact-year match), not treated as unrelated and
+			// duplicated with a fresh sibling folder.
+			name: "ShowFile_DoubleQualifierFolder_ReusesExistingFolder",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "The Office (US) (2005)"))
+
+				name := "The Office (US) (2005) - S03E12.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.DestRadix != "The Office (US) (2005) - S03E12" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Office (US) (2005) - S03E12")
+				}
+				wantDir := filepath.Join(p.cfg.ShowsDir, "The Office (US) (2005)", "Season 03")
+				if pl.DestDir != wantDir {
+					t.Fatalf("DestDir = %q, want %q (existing folder must be reused, not duplicated)", pl.DestDir, wantDir)
+				}
+				entries, err := os.ReadDir(p.cfg.ShowsDir)
+				if err != nil {
+					t.Fatalf("ReadDir(ShowsDir): %v", err)
+				}
+				if len(entries) != 1 {
+					names := make([]string, len(entries))
+					for i, e := range entries {
+						names[i] = e.Name()
+					}
+					t.Fatalf("ShowsDir has %d entries, want 1 (no duplicate folder created): %v", len(entries), names)
 				}
 			},
 		},
@@ -2360,6 +2401,27 @@ func TestPlan_Duplicate_MovieFuzzyDiacritic(t *testing.T) {
 	wantMainPath := filepath.Join(wantMatch, "Amélie (2001).mkv")
 	if pl.DestMainPath != wantMainPath {
 		t.Fatalf("DestMainPath = %q, want %q", pl.DestMainPath, wantMainPath)
+	}
+}
+
+// TestPlan_Duplicate_MovieFuzzyDoubleQualifierFolder is a regression test for
+// the parseShowFolderQualifier fix: an existing library folder with a
+// non-year qualifier plus a year ("Movie (Director's Cut) (2020)") must still
+// be recognized as a fuzzy match, not silently excluded by a mis-split base.
+func TestPlan_Duplicate_MovieFuzzyDoubleQualifierFolder(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Movie.Directors.Cut.2020.1080p.BluRay.x264-GROUP.mkv")
+	writeFile(t, src, "dummy")
+
+	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Movie (Director's Cut) (2020)", "Movie (Director's Cut) (2020).mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true")
 	}
 }
 
