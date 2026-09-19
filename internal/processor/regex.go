@@ -17,6 +17,13 @@ var (
 	// tighter "S01E01" form.
 	reSeasonEpisode = regexp.MustCompile(`(?i)\bS(\d{1,2}) ?E(\d{1,3})\b`)
 
+	// Matches multi-episode range tokens, e.g. "S01E12-E13", "S01E12E13",
+	// "s1e2-e3". The dash is optional so both the hyphenated and concatenated
+	// forms match. Tried before reSeasonEpisode in the single-episode path so
+	// a range is captured whole rather than silently truncated to its first
+	// episode.
+	reSeasonEpisodeRange = regexp.MustCompile(`(?i)\bS(\d{1,2}) ?E(\d{1,3})-?E(\d{1,3})\b`)
+
 	// Matches season range tokens, e.g. "S01-S04", "S1-S4", "S01-04".
 	reSeasonRange = regexp.MustCompile(`(?i)\bS(\d{1,2})\s*-\s*S?(\d{1,2})\b`)
 

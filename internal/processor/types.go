@@ -90,10 +90,11 @@ type Plan struct {
 	// Parsed identity (one of Movie or Show fields will be populated based on Category)
 	MovieTitle string // e.g. "Get Smart (2008)"
 
-	ShowName string // e.g. "Stranger Things"
-	ShowYear string // e.g. "2016" or "" if unknown/not used
-	Season   int    // e.g. 5
-	Episode  int    // e.g. 8
+	ShowName   string // e.g. "Stranger Things"
+	ShowYear   string // e.g. "2016" or "" if unknown/not used
+	Season     int    // e.g. 5
+	Episode    int    // e.g. 8
+	EpisodeEnd int    // e.g. 9 for a "S05E08-E09" range; 0 when not a range
 
 	// Destination computation
 	DestDir      string // directory containing main file
@@ -140,6 +141,12 @@ const resolutionSuffixSep = " - "
 // Resolution != "" -- it has to confirm the suffix landed on DestRadix too.
 func (pl Plan) HasResolutionSuffix() bool {
 	return pl.Resolution != "" && strings.HasSuffix(pl.DestRadix, resolutionSuffixSep+pl.Resolution)
+}
+
+// IsEpisodeRange reports whether this plan covers a multi-episode file (e.g.
+// "S01E08-E09") rather than a single episode.
+func (pl Plan) IsEpisodeRange() bool {
+	return pl.EpisodeEnd > 0
 }
 
 // Result reports the outcome of applying a plan.

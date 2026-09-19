@@ -16,7 +16,7 @@ func FuzzParseShowFromName(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, baseName, fileName string) {
-		showName, _, season, episode, err := parseShowFromName(nil, baseName, fileName)
+		showName, _, season, episode, episodeEnd, err := parseShowFromName(nil, baseName, fileName)
 		if err != nil {
 			return
 		}
@@ -28,6 +28,12 @@ func FuzzParseShowFromName(f *testing.F) {
 		}
 		if episode < 0 {
 			t.Errorf("succeeded but returned negative episode %d (baseName=%q fileName=%q)", episode, baseName, fileName)
+		}
+		if episodeEnd < 0 {
+			t.Errorf("succeeded but returned negative episodeEnd %d (baseName=%q fileName=%q)", episodeEnd, baseName, fileName)
+		}
+		if episodeEnd != 0 && episodeEnd <= episode {
+			t.Errorf("succeeded but returned non-increasing range %d-%d (baseName=%q fileName=%q)", episode, episodeEnd, baseName, fileName)
 		}
 	})
 }

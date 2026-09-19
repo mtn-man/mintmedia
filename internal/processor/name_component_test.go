@@ -98,3 +98,44 @@ func TestParseEpisodeComponent(t *testing.T) {
 		})
 	}
 }
+
+func TestParseEpisodeRangeComponent(t *testing.T) {
+	tests := []struct {
+		name       string
+		raw        string
+		wantSeason int
+		wantStart  int
+		wantEnd    int
+		wantOK     bool
+		wantIdxOf  string
+	}{
+		{name: "DashForm", raw: "Show.S03E12-E13.Title.mkv", wantSeason: 3, wantStart: 12, wantEnd: 13, wantOK: true, wantIdxOf: "S03E12-E13"},
+		{name: "NoDashForm", raw: "Show.S03E12E13.Title.mkv", wantSeason: 3, wantStart: 12, wantEnd: 13, wantOK: true, wantIdxOf: "S03E12E13"},
+		{name: "LowercaseDashForm", raw: "show.s03e12-e13.title.mkv", wantSeason: 3, wantStart: 12, wantEnd: 13, wantOK: true, wantIdxOf: "s03e12-e13"},
+		{name: "SingleEpisode_NoRange", raw: "Show.S03E12.Title.mkv", wantOK: false},
+		{name: "ReversedRange_Refuses", raw: "Show.S03E13-E12.Title.mkv", wantOK: false},
+		{name: "EqualRange_Refuses", raw: "Show.S03E12-E12.Title.mkv", wantOK: false},
+		{name: "NoMatch", raw: "Show.Movie.Cut.mkv", wantOK: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			season, start, end, idx, ok := parseEpisodeRangeComponent(tc.raw)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if !tc.wantOK {
+				return
+			}
+			if season != tc.wantSeason || start != tc.wantStart || end != tc.wantEnd {
+				t.Errorf("season/start/end = %d/%d/%d, want %d/%d/%d", season, start, end, tc.wantSeason, tc.wantStart, tc.wantEnd)
+			}
+			if tc.wantIdxOf != "" {
+				wantIdx := strings.Index(tc.raw, tc.wantIdxOf)
+				if idx != wantIdx {
+					t.Errorf("idx = %d, want %d (start of %q)", idx, wantIdx, tc.wantIdxOf)
+				}
+			}
+		})
+	}
+}
