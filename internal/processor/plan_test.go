@@ -52,6 +52,40 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// A period between season and episode, no zero-padding -- a real
+			// release-naming variant reSeasonEpisode didn't tolerate before
+			// (only a space). Motivating example: "The Magicians" episodes
+			// shaped exactly like this.
+			name: "ShowFile_DotDelimitedSeasonEpisode_NoZeroPad",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Magicians - S5.E1 - Do Something Crazy.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "The Magicians" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "The Magicians")
+				}
+				if pl.Season != 5 || pl.Episode != 1 {
+					t.Fatalf("Season/Episode = %d/%d, want 5/1", pl.Season, pl.Episode)
+				}
+				if pl.DestRadix != "The Magicians - S05E01" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Magicians - S05E01")
+				}
+			},
+		},
+		{
 			name: "ShowFile_StrangerThings_S05E08_WithSubtitle",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
