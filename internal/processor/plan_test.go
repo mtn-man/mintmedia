@@ -1499,6 +1499,82 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// A title that itself embeds a year-looking number ("2049") must
+			// not shadow the real release year ("2017") that follows it --
+			// findYear must prefer the last 19xx/20xx-shaped match.
+			name: "MovieFile_YearInTitle_UsesLastYearMatch",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Blade.Runner.2049.2017.1080p.BluRay.x264-GROUP.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.MovieTitle != "Blade Runner 2049 (2017)" {
+					t.Fatalf("MovieTitle = %q, want %q", pl.MovieTitle, "Blade Runner 2049 (2017)")
+				}
+			},
+		},
+		{
+			// No year present at all, so nothing anchors title truncation --
+			// a bare (non-bracketed) release-group tag with nothing
+			// recognized to strip it must still be dropped once release
+			// metadata starts, not survive into the title.
+			name: "MovieFile_NoYear_BareReleaseGroupTruncated",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Captain.America.The.First.Avenger.1080p.BrRip.x264.YIFY.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.MovieTitle != "Captain America the First Avenger" {
+					t.Fatalf("MovieTitle = %q, want %q", pl.MovieTitle, "Captain America the First Avenger")
+				}
+			},
+		},
+		{
+			// A show literally titled after a year ("1994") with a real
+			// air-date year appended must keep the title year and use the
+			// later match as ShowYear -- same findYear fix as the movie case.
+			name: "ShowFile_YearNamedShow_UsesLastYearMatch",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "1994.2019.S01E01.1080p.NF.WEB-DL.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.ShowName != "1994" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "1994")
+				}
+				if pl.ShowYear != "2019" {
+					t.Fatalf("ShowYear = %q, want %q", pl.ShowYear, "2019")
+				}
+			},
+		},
+		{
 			name: "MovieFile_LowercaseSmallTitleWords",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()

@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -135,6 +136,68 @@ func TestParseEpisodeRangeComponent(t *testing.T) {
 				if idx != wantIdx {
 					t.Errorf("idx = %d, want %d (start of %q)", idx, wantIdx, tc.wantIdxOf)
 				}
+			}
+		})
+	}
+}
+
+func TestFindYear(t *testing.T) {
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{"Movie.2020.1080p", "2020"},
+		{"NoYearHere", ""},
+		{"Show.1999.S01E01", "1999"},
+		{
+			// The motivating case: a title that itself embeds a year-looking
+			// number ("2049") must not shadow the real release year ("2017")
+			// that follows it.
+			raw:  "Blade.Runner.2049.2017.1080p.BluRay.x264-[YTS.AG]",
+			want: "2017",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.raw, func(t *testing.T) {
+			if got := findYear(tc.raw); got != tc.want {
+				t.Errorf("findYear(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+func compileTestBlacklist(t *testing.T, patterns []string) []*regexp.Regexp {
+	t.Helper()
+	bl := make([]*regexp.Regexp, len(patterns))
+	for i, p := range patterns {
+		bl[i] = regexp.MustCompile("(?i)" + p)
+	}
+	return bl
+}
+
+func TestCleanReleaseName(t *testing.T) {
+	bl := compileTestBlacklist(t, []string{
+		"2160p", "1080p", "720p", "480p", "x265", "x264", "bluray", "brrip", "web[- ]?dl",
+	})
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{"Get.Smart.2008.1080p.BluRay", "Get Smart 2008"},
+		{"Spider-Man.Into.the.Spider-Verse", "Spider-Man Into the Spider-Verse"},
+		{"[EZTVx.to] Show.Name.720p.x264", "Show Name"},
+		{
+			// The motivating case: no year present to anchor truncation, so a
+			// bare (non-bracketed) release-group tag with nothing recognized
+			// to strip it must still be dropped once release metadata starts.
+			raw:  "Captain.America.The.First.Avenger.1080p.BrRip.x264.YIFY",
+			want: "Captain America The First Avenger",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.raw, func(t *testing.T) {
+			if got := cleanReleaseName(bl, tc.raw); got != tc.want {
+				t.Errorf("cleanReleaseName(%q) = %q, want %q", tc.raw, got, tc.want)
 			}
 		})
 	}

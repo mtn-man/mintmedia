@@ -491,6 +491,17 @@ func cleanReleaseName(blacklist []*regexp.Regexp, raw string) string {
 	s = strings.ReplaceAll(s, "-", " ")
 	s = strings.ReplaceAll(s, "\x00", "-")
 
+	// Once title text gives way to known quality/source/codec metadata,
+	// whatever follows is never real title content, whether or not it's
+	// itself a recognized tag -- so truncate at the last blacklist match,
+	// the same truncation the year already gets. Normally masked because a
+	// year truncates the title before this ever runs; without a year (the
+	// only case this matters for), a bare non-bracketed release-group tag
+	// (e.g. "YIFY") would otherwise survive into the title untouched.
+	if cut := lastBlacklistMatchEnd(blacklist, s); cut >= 0 {
+		s = s[:cut]
+	}
+
 	// Apply blacklist removals
 	for _, re := range blacklist {
 		s = re.ReplaceAllString(s, " ")
@@ -501,12 +512,39 @@ func cleanReleaseName(blacklist []*regexp.Regexp, raw string) string {
 	return s
 }
 
-func findYear(raw string) string {
-	m := reYear.FindStringSubmatch(raw)
-	if len(m) == 2 {
-		return m[1]
+// lastBlacklistMatchEnd returns the end index (in s) of whichever blacklist
+// pattern's match ends furthest to the right, or -1 if none match.
+func lastBlacklistMatchEnd(blacklist []*regexp.Regexp, s string) int {
+	end := -1
+	for _, re := range blacklist {
+		locs := re.FindAllStringIndex(s, -1)
+		if len(locs) == 0 {
+			continue
+		}
+		if last := locs[len(locs)-1][1]; last > end {
+			end = last
+		}
 	}
-	return ""
+	return end
+}
+
+// findYear returns the release year embedded in raw, preferring the *last*
+// 19xx/20xx-shaped match rather than the first. A title that itself embeds a
+// year-looking number (e.g. "Blade.Runner.2049.2017.1080p...") matches both
+// "2049" (part of the title) and "2017" (the real release year) -- since
+// callers truncate the title at the matched year's index, picking the first
+// match would both mis-assign the year and cut the real year (and everything
+// meant to be discarded after it) off the title. Release-naming convention
+// always places the true year immediately before the quality/source/codec
+// block, and that block never produces an isolated 19xx/20xx-shaped run (a
+// "2160p" token doesn't match -- the trailing "p" breaks \b), so the later
+// match is always the more trustworthy one.
+func findYear(raw string) string {
+	ms := reYear.FindAllStringSubmatch(raw, -1)
+	if len(ms) == 0 {
+		return ""
+	}
+	return ms[len(ms)-1][1]
 }
 
 // canonicalResolutions lists the resolution buckets detectResolution emits, in
