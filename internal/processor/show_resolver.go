@@ -11,7 +11,13 @@ import (
 )
 
 var (
-	reShowFolderQualifier = regexp.MustCompile(`^(?i)(.+?)\s*\((.+?)\)\s*$`)
+	// reShowFolderQualifier splits a folder name into its base title and a
+	// trailing "(...)" qualifier. Group 1 is greedy so a name with more than
+	// one parenthetical group (e.g. "The Office (US) (2005)") anchors on the
+	// LAST one as the qualifier -- the earlier "(US)" stays part of the base
+	// -- rather than a non-greedy first group being satisfied by an earlier,
+	// wrong split (it would otherwise swallow "US) (2005" as one qualifier).
+	reShowFolderQualifier = regexp.MustCompile(`^(?i)(.+)\s*\((.+?)\)\s*$`)
 	reFourDigitYear       = regexp.MustCompile(`^(19\d{2}|20\d{2})$`)
 )
 
