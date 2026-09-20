@@ -122,6 +122,10 @@ func TestParseEpisodeRangeComponent(t *testing.T) {
 		{name: "RepeatedTokenForm_DashSeparator", raw: "Show.Name - S03E12 - S03E13 - Title.mkv", wantSeason: 3, wantStart: 12, wantEnd: 13, wantOK: true, wantIdxOf: "S03E12 - S03E13"},
 		{name: "RepeatedTokenForm_MismatchedSeason_Refuses", raw: "Show.S03E12.S04E13.Title.mkv", wantOK: false},
 		{name: "RepeatedTokenForm_Reversed_Refuses", raw: "Show.S03E13.S03E12.Title.mkv", wantOK: false},
+		{name: "AmpersandPair", raw: "Show.S03E12 & S03E13.Title.mkv", wantSeason: 3, wantStart: 12, wantEnd: 13, wantOK: true, wantIdxOf: "S03E12 & S03E13"},
+		{name: "AndWordPair", raw: "Show.S03E12 and S03E13.Title.mkv", wantSeason: 3, wantStart: 12, wantEnd: 13, wantOK: true, wantIdxOf: "S03E12 and S03E13"},
+		{name: "AmpersandPair_NonConsecutive_Refuses", raw: "Show.S03E12 & S03E14.Title.mkv", wantOK: false},
+		{name: "AmpersandPair_MismatchedSeason_Refuses", raw: "Show.S03E12 & S04E13.Title.mkv", wantOK: false},
 		{name: "NoMatch", raw: "Show.Movie.Cut.mkv", wantOK: false},
 	}
 
@@ -157,6 +161,13 @@ func TestDetectRefusedMultiEpisode(t *testing.T) {
 		{name: "MatchedSeasonRepeatedTokens_NotRefused", raw: "Show.S03E12.S03E13.Title.mkv", want: false},
 		{name: "SingleEpisode_NotRefused", raw: "Show.S03E12.Title.mkv", want: false},
 		{name: "NoMatch_NotRefused", raw: "Show.Movie.Cut.mkv", want: false},
+		{name: "ConsecutiveAmpersandPair_NotRefused", raw: "Show.S03E12 & S03E13.Title.mkv", want: false},
+		{name: "ConsecutiveAndWordPair_NotRefused", raw: "Show.S03E12 and S03E13.Title.mkv", want: false},
+		{name: "NonConsecutiveAmpersandPair_Refused", raw: "Show.S03E12 & S03E14.Title.mkv", want: true},
+		{name: "MismatchedSeasonAmpersandPair_Refused", raw: "Show.S03E12 & S04E13.Title.mkv", want: true},
+		{name: "ThreeChain_DotSeparator_Refused", raw: "Show.S03E12.S03E13.S03E14.Title.mkv", want: true},
+		{name: "ThreeChain_Ampersand_Refused", raw: "Phineas.and.Ferb.S01E00 & S01E01 & S01E02.Title.mkv", want: true},
+		{name: "ThreeChain_AndWord_Refused", raw: "Phineas.and.Ferb.S01E00 and S01E01 and S01E02.Title.mkv", want: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
