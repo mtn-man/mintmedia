@@ -118,6 +118,10 @@ func TestParseEpisodeRangeComponent(t *testing.T) {
 		{name: "SingleEpisode_NoRange", raw: "Show.S03E12.Title.mkv", wantOK: false},
 		{name: "ReversedRange_Refuses", raw: "Show.S03E13-E12.Title.mkv", wantOK: false},
 		{name: "EqualRange_Refuses", raw: "Show.S03E12-E12.Title.mkv", wantOK: false},
+		{name: "RepeatedTokenForm", raw: "Show.S03E12.S03E13.Title.mkv", wantSeason: 3, wantStart: 12, wantEnd: 13, wantOK: true, wantIdxOf: "S03E12.S03E13"},
+		{name: "RepeatedTokenForm_DashSeparator", raw: "Show.Name - S03E12 - S03E13 - Title.mkv", wantSeason: 3, wantStart: 12, wantEnd: 13, wantOK: true, wantIdxOf: "S03E12 - S03E13"},
+		{name: "RepeatedTokenForm_MismatchedSeason_Refuses", raw: "Show.S03E12.S04E13.Title.mkv", wantOK: false},
+		{name: "RepeatedTokenForm_Reversed_Refuses", raw: "Show.S03E13.S03E12.Title.mkv", wantOK: false},
 		{name: "NoMatch", raw: "Show.Movie.Cut.mkv", wantOK: false},
 	}
 
