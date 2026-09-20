@@ -1893,6 +1893,84 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// Regression test for the Rule 2 qualifier-peeling enhancement:
+			// an existing folder carrying an extra qualifier the incoming
+			// filename doesn't repeat (e.g. no "(US)" of its own) must still
+			// be reused when the year agrees, not treated as unrelated.
+			name: "ShowFile_ExtraQualifierYearMatch",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Ghosts (US) (2021)"))
+
+				name := "Ghosts.2021.S03E01.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				wantDir := filepath.Join(p.cfg.ShowsDir, "Ghosts (US) (2021)", "Season 03")
+				if pl.DestDir != wantDir {
+					t.Fatalf("DestDir = %q, want %q (existing folder must be reused, not duplicated)", pl.DestDir, wantDir)
+				}
+			},
+		},
+		{
+			name: "ShowFile_ExtraQualifierYearMatch_Ambiguous",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Ghosts (US) (2021)"))
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Ghosts (UK) (2021)"))
+
+				name := "Ghosts.2021.S03E01.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, _ Plan, err error) {
+				t.Helper()
+
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !errors.Is(err, ErrAmbiguousShow) {
+					t.Fatalf("error = %v, want ErrAmbiguousShow", err)
+				}
+			},
+		},
+		{
+			// A folder whose extra qualifier's year does NOT match the input
+			// year is evidence of an unrelated folder, not a qualifier gap --
+			// must not match, must not error, falls through normally instead.
+			name: "ShowFile_ExtraQualifierYearMatch_YearMismatch_NotUsed",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Ghosts (US) (2021)"))
+
+				name := "Ghosts.2022.S03E01.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if strings.Contains(pl.DestDir, "Ghosts (US) (2021)") {
+					t.Fatalf("DestDir = %q, must not match a folder whose year disagrees with the input", pl.DestDir)
+				}
+			},
+		},
+		{
 			name: "ShowFolder_YearPack_WithExistingNoYearFolder_Rule1_DropsYear",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
