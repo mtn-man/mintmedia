@@ -36,6 +36,19 @@ var (
 	// episode.
 	reSeasonEpisodeRange = regexp.MustCompile(`(?i)\bS(\d{1,2}) ?E(\d{1,3})-?E(\d{1,3})\b`)
 
+	// Matches two full SxxEyy tokens in a row separated by release-name
+	// punctuation, e.g. "S01E02.S01E03", "S01E02 - S01E03" -- the shape a
+	// double-episode file gets when both season and episode are repeated in
+	// full rather than sharing a single "S01E12-E13" prefix. Go's RE2-based
+	// regexp package has no backreferences, so "same season on both sides"
+	// can't be expressed in the pattern itself -- both seasons are captured
+	// separately and compared in code (parseEpisodeRangeComponent), the same
+	// place the existing end<=start range is already rejected. The separator
+	// is deliberately bounded to punctuation/whitespace only (not arbitrary
+	// text), so this can't reach across real title or episode-name text to a
+	// later, unrelated SxxEyy token.
+	reSeasonEpisodeRepeatedRange = regexp.MustCompile(`(?i)\bS(\d{1,2})[ .]?E(\d{1,3})[\s._-]+S(\d{1,2})[ .]?E(\d{1,3})\b`)
+
 	// Matches season range tokens, e.g. "S01-S04", "S1-S4", "S01-04".
 	reSeasonRange = regexp.MustCompile(`(?i)\bS(\d{1,2})\s*-\s*S?(\d{1,2})\b`)
 

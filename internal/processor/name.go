@@ -399,21 +399,36 @@ func parseEpisodeComponent(raw string) (episode int, idx int, ok bool) {
 }
 
 // parseEpisodeRangeComponent matches a multi-episode token (e.g. "S01E12-E13",
-// "S01E12E13") in raw, returning the season and both episode numbers. Refuses
-// to guess (ok=false) when the second number doesn't exceed the first --
-// e.g. a malformed "S03E13-E12" -- rather than reporting a nonsensical range.
+// "S01E12E13", "S01E12.S01E13") in raw, returning the season and both episode
+// numbers. Refuses to guess (ok=false) when the second number doesn't exceed
+// the first -- e.g. a malformed "S03E13-E12" -- rather than reporting a
+// nonsensical range. For the repeated-token form (reSeasonEpisodeRepeatedRange),
+// also refuses when the two tokens' season numbers don't match -- e.g.
+// "S01E24.S02E01" is a season finale followed by the next season's premiere,
+// not a range -- since the pattern can't express that constraint itself (no
+// backreferences in RE2). A mismatched-season repeated pair falls through
+// to the single-token components, which is a known, separate gap.
 func parseEpisodeRangeComponent(raw string) (season, start, end, idx int, ok bool) {
-	idxs := reSeasonEpisodeRange.FindStringSubmatchIndex(raw)
-	if idxs == nil {
-		return 0, 0, 0, 0, false
+	if idxs := reSeasonEpisodeRange.FindStringSubmatchIndex(raw); idxs != nil {
+		season = atoiSafe(raw[idxs[2]:idxs[3]])
+		start = atoiSafe(raw[idxs[4]:idxs[5]])
+		end = atoiSafe(raw[idxs[6]:idxs[7]])
+		if end > start {
+			return season, start, end, idxs[0], true
+		}
 	}
-	season = atoiSafe(raw[idxs[2]:idxs[3]])
-	start = atoiSafe(raw[idxs[4]:idxs[5]])
-	end = atoiSafe(raw[idxs[6]:idxs[7]])
-	if end <= start {
-		return 0, 0, 0, 0, false
+
+	if idxs := reSeasonEpisodeRepeatedRange.FindStringSubmatchIndex(raw); idxs != nil {
+		season1 := atoiSafe(raw[idxs[2]:idxs[3]])
+		start = atoiSafe(raw[idxs[4]:idxs[5]])
+		season2 := atoiSafe(raw[idxs[6]:idxs[7]])
+		end = atoiSafe(raw[idxs[8]:idxs[9]])
+		if season1 == season2 && end > start {
+			return season1, start, end, idxs[0], true
+		}
 	}
-	return season, start, end, idxs[0], true
+
+	return 0, 0, 0, 0, false
 }
 
 func parseMovieFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (title string, year string, err error) {

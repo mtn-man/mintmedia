@@ -1151,6 +1151,41 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// Same double-episode shape as the case above, but with both
+			// season and episode repeated in full ("S03E12.S03E13") rather
+			// than sharing a single "S01E12-E13" prefix -- a separate release
+			// naming convention that should still resolve to the same
+			// canonical range in DestRadix.
+			name: "ShowFile_EpisodeRange_RepeatedTokenForm_MultiEpisode",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Office (US) (2005) - S03E12.S03E13 - Traveling Salesmen & The Return (1080p BluRay x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.Season != 3 || pl.Episode != 12 || pl.EpisodeEnd != 13 {
+					t.Fatalf("Season/Episode/EpisodeEnd = %d/%d/%d, want 3/12/13", pl.Season, pl.Episode, pl.EpisodeEnd)
+				}
+				if pl.DestRadix != "The Office (US) (2005) - S03E12-E13" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Office (US) (2005) - S03E12-E13")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (US) (2005)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
 			// Regression test for the parseShowFolderQualifier fix: an
 			// existing "Name (Qualifier) (Year)" folder must be reused
 			// (Rule 2 exact-year match), not treated as unrelated and
