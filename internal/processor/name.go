@@ -93,6 +93,13 @@ func determineCategoryFromNames(inputName, mainName string) Category {
 }
 
 func parseShowFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear string, season, episode, episodeEnd int, episodePart string, err error) {
+	// Checked once, up front, against both candidate strings -- covers all
+	// three strategies below (including parseShowCrossSeasonEpisode, which
+	// derives season/episode independently and would otherwise silently
+	// reconstruct a refused shape parseShowOnce just declined to guess at).
+	if detectRefusedMultiEpisode(baseName) || detectRefusedMultiEpisode(fileName) {
+		return "", "", 0, 0, 0, "", &ParseShowError{BaseName: baseName, FileName: fileName}
+	}
 	if sn, sy, s, e, ee, ep, ok := parseShowOnce(blacklist, baseName); ok {
 		return sn, sy, s, e, ee, ep, nil
 	}
@@ -153,6 +160,9 @@ func deriveShowHintFromFolder(blacklist []*regexp.Regexp, folderName string) (sh
 	return showName, showYear, season, seasonOK, true
 }
 
+// parseShowOnce is only ever called from parseShowFromName, which already
+// checks detectRefusedMultiEpisode against both candidate strings before
+// trying any strategy -- see that function's doc.
 func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear string, season, episode, episodeEnd int, episodePart string, ok bool) {
 	var seasonIdx, episodeIdx int
 	var seasonOK, episodeOK bool
@@ -281,6 +291,10 @@ func parseBareSeasonEpisode(hint showHint, fileName string) (season, episode int
 }
 
 func parseSeasonEpisode(raw string) (season, episode, episodeEnd int, episodePart string, ok bool) {
+	if detectRefusedMultiEpisode(raw) {
+		return 0, 0, 0, "", false
+	}
+
 	if s, start, end, _, rangeOK := parseEpisodeRangeComponent(raw); rangeOK {
 		return s, start, end, "", true
 	}
@@ -398,6 +412,29 @@ func parseEpisodeComponent(raw string) (episode int, idx int, ok bool) {
 	return matchComponent(raw, episodePatterns)
 }
 
+// detectRefusedMultiEpisode reports whether raw carries a multi-episode
+// token shape mintmedia deliberately declines to guess at, rather than
+// silently keeping only the first episode of a many-episode file (which the
+// single-component fallback in parseShowOnce/parseSeasonEpisode would
+// otherwise do). Both callers check this before attempting any other
+// parsing. Each clause here is a distinct known-bad shape; more may be added
+// over time as they're identified.
+func detectRefusedMultiEpisode(raw string) bool {
+	if idxs := reSeasonEpisodeRepeatedRange.FindStringSubmatchIndex(raw); idxs != nil {
+		season1 := atoiSafe(raw[idxs[2]:idxs[3]])
+		season2 := atoiSafe(raw[idxs[6]:idxs[7]])
+		if season1 != season2 {
+			// e.g. "S01E24.S02E01" -- a season finale immediately followed
+			// by the next season's premiere, not a range. The pattern can't
+			// express "same season" itself (no backreferences in RE2), so
+			// this is validated here, same as parseEpisodeRangeComponent's
+			// own end<=start check below.
+			return true
+		}
+	}
+	return false
+}
+
 // parseEpisodeRangeComponent matches a multi-episode token (e.g. "S01E12-E13",
 // "S01E12E13", "S01E12.S01E13") in raw, returning the season and both episode
 // numbers. Refuses to guess (ok=false) when the second number doesn't exceed
@@ -406,8 +443,9 @@ func parseEpisodeComponent(raw string) (episode int, idx int, ok bool) {
 // also refuses when the two tokens' season numbers don't match -- e.g.
 // "S01E24.S02E01" is a season finale followed by the next season's premiere,
 // not a range -- since the pattern can't express that constraint itself (no
-// backreferences in RE2). A mismatched-season repeated pair falls through
-// to the single-token components, which is a known, separate gap.
+// backreferences in RE2). Callers check detectRefusedMultiEpisode before
+// reaching here, so a mismatched-season repeated pair never falls through to
+// the single-token components.
 func parseEpisodeRangeComponent(raw string) (season, start, end, idx int, ok bool) {
 	if idxs := reSeasonEpisodeRange.FindStringSubmatchIndex(raw); idxs != nil {
 		season = atoiSafe(raw[idxs[2]:idxs[3]])
