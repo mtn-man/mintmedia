@@ -90,11 +90,12 @@ type Plan struct {
 	// Parsed identity (one of Movie or Show fields will be populated based on Category)
 	MovieTitle string // e.g. "Get Smart (2008)"
 
-	ShowName   string // e.g. "Stranger Things"
-	ShowYear   string // e.g. "2016" or "" if unknown/not used
-	Season     int    // e.g. 5
-	Episode    int    // e.g. 8
-	EpisodeEnd int    // e.g. 9 for a "S05E08-E09" range; 0 when not a range
+	ShowName    string // e.g. "Stranger Things"
+	ShowYear    string // e.g. "2016" or "" if unknown/not used
+	Season      int    // e.g. 5
+	Episode     int    // e.g. 8
+	EpisodeEnd  int    // e.g. 9 for a "S05E08-E09" range; 0 when not a range
+	EpisodePart string // e.g. "a" for a "S05E08a" split-part episode; "" otherwise
 
 	// Destination computation
 	DestDir      string // directory containing main file

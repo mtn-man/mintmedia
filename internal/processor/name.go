@@ -92,17 +92,17 @@ func determineCategoryFromNames(inputName, mainName string) Category {
 	return CategoryMovie
 }
 
-func parseShowFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear string, season, episode, episodeEnd int, err error) {
-	if sn, sy, s, e, ee, ok := parseShowOnce(blacklist, baseName); ok {
-		return sn, sy, s, e, ee, nil
+func parseShowFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear string, season, episode, episodeEnd int, episodePart string, err error) {
+	if sn, sy, s, e, ee, ep, ok := parseShowOnce(blacklist, baseName); ok {
+		return sn, sy, s, e, ee, ep, nil
 	}
-	if sn, sy, s, e, ee, ok := parseShowOnce(blacklist, fileName); ok {
-		return sn, sy, s, e, ee, nil
+	if sn, sy, s, e, ee, ep, ok := parseShowOnce(blacklist, fileName); ok {
+		return sn, sy, s, e, ee, ep, nil
 	}
 	if sn, sy, s, e, ok := parseShowCrossSeasonEpisode(blacklist, baseName, fileName); ok {
-		return sn, sy, s, e, 0, nil
+		return sn, sy, s, e, 0, "", nil
 	}
-	return "", "", 0, 0, 0, &ParseShowError{BaseName: baseName, FileName: fileName}
+	return "", "", 0, 0, 0, "", &ParseShowError{BaseName: baseName, FileName: fileName}
 }
 
 // deriveShowHintFromFolder attempts to extract a show name/year from a season-pack style folder.
@@ -153,7 +153,7 @@ func deriveShowHintFromFolder(blacklist []*regexp.Regexp, folderName string) (sh
 	return showName, showYear, season, seasonOK, true
 }
 
-func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear string, season, episode, episodeEnd int, ok bool) {
+func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear string, season, episode, episodeEnd int, episodePart string, ok bool) {
 	var seasonIdx, episodeIdx int
 	var seasonOK, episodeOK bool
 	if s, start, end, idx, rangeOK := parseEpisodeRangeComponent(raw); rangeOK {
@@ -163,19 +163,22 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 	} else {
 		season, seasonIdx, seasonOK = parseSeasonComponent(raw)
 		episode, episodeIdx, episodeOK = parseEpisodeComponent(raw)
+		if episodeOK {
+			episodePart = episodePartLetter(raw)
+		}
 	}
 	if !seasonOK || !episodeOK {
-		return "", "", 0, 0, 0, false
+		return "", "", 0, 0, 0, "", false
 	}
 
 	// Allow season 00 and episode 00 (both used for specials).
 	if season < 0 || episode < 0 {
-		return "", "", 0, 0, 0, false
+		return "", "", 0, 0, 0, "", false
 	}
 
 	titleCut := min(seasonIdx, episodeIdx)
 	if titleCut <= 0 || titleCut > len(raw) {
-		return "", "", 0, 0, 0, false
+		return "", "", 0, 0, 0, "", false
 	}
 
 	// Everything before the season/episode marker.
@@ -183,7 +186,7 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 	titlePart = cleanReleaseName(blacklist, titlePart)
 	titlePart = strings.TrimSpace(titlePart)
 	if titlePart == "" {
-		return "", "", 0, 0, 0, false
+		return "", "", 0, 0, 0, "", false
 	}
 
 	// If the title contains a year token, treat it as show year and remove it from the name.
@@ -195,11 +198,11 @@ func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear s
 	}
 
 	if titlePart == "" {
-		return "", "", 0, 0, 0, false
+		return "", "", 0, 0, 0, "", false
 	}
 
 	showName = titleCaseSimple(titlePart)
-	return showName, showYear, season, episode, episodeEnd, true
+	return showName, showYear, season, episode, episodeEnd, episodePart, true
 }
 
 // isLeadingBareToken reports whether fileName[:pos] contains nothing but release-noise --
@@ -277,22 +280,22 @@ func parseBareSeasonEpisode(hint showHint, fileName string) (season, episode int
 	return season, episode, found
 }
 
-func parseSeasonEpisode(raw string) (season, episode, episodeEnd int, ok bool) {
+func parseSeasonEpisode(raw string) (season, episode, episodeEnd int, episodePart string, ok bool) {
 	if s, start, end, _, rangeOK := parseEpisodeRangeComponent(raw); rangeOK {
-		return s, start, end, true
+		return s, start, end, "", true
 	}
 
 	season, _, seasonOK := parseSeasonComponent(raw)
 	episode, _, episodeOK := parseEpisodeComponent(raw)
 	if !seasonOK || !episodeOK {
-		return 0, 0, 0, false
+		return 0, 0, 0, "", false
 	}
 
 	if season < 0 || episode < 0 {
-		return 0, 0, 0, false
+		return 0, 0, 0, "", false
 	}
 
-	return season, episode, 0, true
+	return season, episode, 0, episodePartLetter(raw), true
 }
 
 // parseShowCrossSeasonEpisode is the fallback used when the season and
@@ -722,14 +725,32 @@ func padEpisode(ep int) string {
 	return fmt.Sprintf("%02d", ep)
 }
 
-// formatEpisodeTag renders the "E<nn>" (or "E<nn>-E<mm>" for a multi-episode
-// range) portion of a show's destination radix.
-func formatEpisodeTag(episode, episodeEnd int) string {
-	tag := "E" + padEpisode(episode)
+// formatEpisodeTag renders the "E<nn>" portion of a show's destination
+// radix -- "E<nn>-E<mm>" for a multi-episode range, or "E<nn><part>" for a
+// split-part episode (e.g. "E04a"). episodePart is always "" whenever
+// episodeEnd > 0 -- a range and a split part are mutually exclusive by
+// construction -- so the append order below is safe without a branch.
+func formatEpisodeTag(episode, episodeEnd int, episodePart string) string {
+	tag := "E" + padEpisode(episode) + episodePart
 	if episodeEnd > 0 {
 		tag += "-E" + padEpisode(episodeEnd)
 	}
 	return tag
+}
+
+// episodePartLetter returns the lowercase split-part letter captured by
+// reSeasonEpisode's third group (e.g. "a" in "S03E04a"), or "" when raw
+// carries no SxxExx token or no such suffix. Safe to call independently:
+// reSeasonEpisode is the highest-priority pattern in both seasonPatterns
+// and episodePatterns, so whenever it matches raw at all, it is also the
+// pattern that produced season and episode -- no risk of attributing a
+// part letter from an unrelated, lower-priority match.
+func episodePartLetter(raw string) string {
+	m := reSeasonEpisode.FindStringSubmatch(raw)
+	if m == nil || m[3] == "" {
+		return ""
+	}
+	return strings.ToLower(m[3])
 }
 
 func atoiSafe(s string) int {

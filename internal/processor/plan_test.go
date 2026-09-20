@@ -1228,6 +1228,65 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// Split-part episode: one episode released as two physical
+			// files, distinguished by a trailing letter with no separator.
+			// This fixture and the "_B" one below must resolve to distinct
+			// DestMainPaths -- the actual collision this closes (both used
+			// to parse as identical S03E04).
+			name: "ShowFile_SplitPartEpisode_A",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Regular Show - S03E04a.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Episode != 4 || pl.EpisodePart != "a" {
+					t.Fatalf("Episode/EpisodePart = %d/%q, want 4/%q", pl.Episode, pl.EpisodePart, "a")
+				}
+				if pl.DestRadix != "Regular Show - S03E04a" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Regular Show - S03E04a")
+				}
+				if !strings.HasSuffix(pl.DestMainPath, "Regular Show - S03E04a.mkv") {
+					t.Fatalf("DestMainPath = %q, want suffix %q", pl.DestMainPath, "Regular Show - S03E04a.mkv")
+				}
+			},
+		},
+		{
+			name: "ShowFile_SplitPartEpisode_B",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Regular Show - S03E04b.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Episode != 4 || pl.EpisodePart != "b" {
+					t.Fatalf("Episode/EpisodePart = %d/%q, want 4/%q", pl.Episode, pl.EpisodePart, "b")
+				}
+				if pl.DestRadix != "Regular Show - S03E04b" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Regular Show - S03E04b")
+				}
+				if !strings.HasSuffix(pl.DestMainPath, "Regular Show - S03E04b.mkv") {
+					t.Fatalf("DestMainPath = %q, want suffix %q", pl.DestMainPath, "Regular Show - S03E04b.mkv")
+				}
+			},
+		},
+		{
 			name: "ShowFile_Fallout_YearMatchesExactFolder",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()

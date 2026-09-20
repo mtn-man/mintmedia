@@ -143,6 +143,43 @@ func TestParseEpisodeRangeComponent(t *testing.T) {
 	}
 }
 
+func TestEpisodePartLetter(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "SplitPartA", raw: "Regular Show - S03E04a.mkv", want: "a"},
+		{name: "NoPartLetter", raw: "Show.S03E04.mkv", want: ""},
+		{name: "CaseInsensitiveInput_LowercaseOutput", raw: "show.s03e04A.mkv", want: "a"},
+		{
+			// False-positive guard: "and" isn't a split-part suffix -- \b
+			// fails after either backtrack position since a letter/digit is
+			// always a word character.
+			name: "TrailingWord_NotMistakenForPartLetter",
+			raw:  "Show.S03E04and.The.Rest.mkv",
+			want: "",
+		},
+		{
+			// Documents the multi-episode-pack ambiguity in isolation (the
+			// same shape reSeasonEpisodeRange resolves properly before this
+			// helper is ever reached in the real parsing flow).
+			name: "MultiEpisodePack_NotMistakenForPartLetter",
+			raw:  "Show.S02E01E02.mkv",
+			want: "",
+		},
+		{name: "NoMatch", raw: "Show.Movie.Cut.mkv", want: ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := episodePartLetter(tc.raw); got != tc.want {
+				t.Errorf("episodePartLetter(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestFindYear(t *testing.T) {
 	tests := []struct {
 		raw  string

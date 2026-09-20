@@ -16,8 +16,18 @@ var (
 	// (e.g. "S01 E01", "S5.E1"), both release-naming variants seen in the wild
 	// alongside the tighter "S01E01" form. The period case can't collide with
 	// reSeasonWord's "Season" match -- that requires digits immediately after
-	// a literal "S", so "Season.5" never reaches this pattern at all.
-	reSeasonEpisode = regexp.MustCompile(`(?i)\bS(\d{1,2})[ .]?E(\d{1,3})\b`)
+	// a literal "S", so "Season.5" never reaches this pattern at all. The
+	// third, optional group recognizes a single trailing split-part letter
+	// directly after the episode digits with no boundary of its own (e.g.
+	// "S03E04a" -- an episode released as two physical files). A following
+	// digit, or a second "E" (multi-episode packs, e.g. "S02E01E02"), is
+	// still rejected: (?i) makes [a-z] match "E"/"e" too, so it also (and
+	// correctly) tries to consume a second "E", which then fails its own
+	// trailing \b against the digit right after -- refusing to guess at
+	// multi-episode packs via this group rather than silently keeping only
+	// the first episode. reSeasonEpisodeRange, tried first, already handles
+	// that shape properly as a real range.
+	reSeasonEpisode = regexp.MustCompile(`(?i)\bS(\d{1,2})[ .]?E(\d{1,3})([a-z]?)\b`)
 
 	// Matches multi-episode range tokens, e.g. "S01E12-E13", "S01E12E13",
 	// "s1e2-e3". The dash is optional so both the hyphenated and concatenated
