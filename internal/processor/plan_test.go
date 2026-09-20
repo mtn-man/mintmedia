@@ -1290,6 +1290,86 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// The x-form's own concatenated-token convention ("3x12x13")
+			// for exactly two consecutive episodes -- same acceptance rule
+			// as the "&"/"and" pair, just a different release-naming
+			// notation for the same shape.
+			name: "ShowFile_EpisodeRange_XFormPair_MultiEpisode",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Office (US) (2005) - 3x12x13 - Traveling Salesmen & The Return (1080p BluRay x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.Season != 3 || pl.Episode != 12 || pl.EpisodeEnd != 13 {
+					t.Fatalf("Season/Episode/EpisodeEnd = %d/%d/%d, want 3/12/13", pl.Season, pl.Episode, pl.EpisodeEnd)
+				}
+				if pl.DestRadix != "The Office (US) (2005) - S03E12-E13" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Office (US) (2005) - S03E12-E13")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (US) (2005)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			// "3x12x14" skips episode 13 -- same strict-adjacency rule as
+			// the "&"/"and" pair, must be left for review rather than
+			// misrepresented as spanning the skipped episode.
+			name: "ShowFile_EpisodeRange_XFormPair_NonConsecutive_NeedsReview",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Office (US) (2005) - 3x12x14 - Two Unrelated Episodes (1080p BluRay x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				var pse *ParseShowError
+				if !errors.As(err, &pse) {
+					t.Fatalf("expected *ParseShowError, got %v (plan=%+v)", err, pl)
+				}
+			},
+		},
+		{
+			// The original real-world motivating case for the x-form chain
+			// guard: three episodes chained with no separator at all, the
+			// shape reMultiEpisodeXChain exists to catch -- must be refused
+			// rather than the second token being misread as a season number
+			// (see reMultiEpisodeXChain's doc for why ordering matters here).
+			name: "ShowFile_EpisodeRange_ThreeChainXForm_NeedsReview",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Show_Name.1x02x03x04.HDTV_XViD_Etc-Group.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				var pse *ParseShowError
+				if !errors.As(err, &pse) {
+					t.Fatalf("expected *ParseShowError, got %v (plan=%+v)", err, pl)
+				}
+			},
+		},
+		{
 			// Regression test for the parseShowFolderQualifier fix: an
 			// existing "Name (Qualifier) (Year)" folder must be reused
 			// (Rule 2 exact-year match), not treated as unrelated and

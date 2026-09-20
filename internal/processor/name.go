@@ -420,12 +420,15 @@ func parseEpisodeComponent(raw string) (episode int, idx int, ok bool) {
 // parsing. Each clause here is a distinct known-bad shape; more may be added
 // over time as they're identified.
 //
-// reMultiEpisodeChain is checked first, and must be: a 3+ chain's first two
-// tokens (e.g. "S01E00 & S01E01" out of "S01E00 & S01E01 & S01E02") would
-// otherwise read as a perfectly valid two-token pair to the clauses below,
-// silently dropping the third episode instead of refusing the whole thing.
+// reMultiEpisodeChain and reMultiEpisodeXChain are checked first, and must
+// be: a 3+ chain's first two tokens (e.g. "S01E00 & S01E01" out of
+// "S01E00 & S01E01 & S01E02", or "02x03" out of "1x02x03x04") would
+// otherwise read as a perfectly valid two-token pair to the clauses below --
+// for the x-form chain this is worse than just dropping an episode, since
+// the second token gets misread as the season number entirely (see
+// reMultiEpisodeXChain's doc).
 func detectRefusedMultiEpisode(raw string) bool {
-	if reMultiEpisodeChain.MatchString(raw) {
+	if reMultiEpisodeChain.MatchString(raw) || reMultiEpisodeXChain.MatchString(raw) {
 		return true
 	}
 
@@ -456,17 +459,27 @@ func detectRefusedMultiEpisode(raw string) bool {
 		}
 	}
 
+	if idxs := reSeasonEpisodeXPair.FindStringSubmatchIndex(raw); idxs != nil {
+		start := atoiSafe(raw[idxs[4]:idxs[5]])
+		end := atoiSafe(raw[idxs[6]:idxs[7]])
+		if end != start+1 {
+			// Same strict-adjacency rule as the "&"/"and" pair above --
+			// "1x02x04" skips episode 3.
+			return true
+		}
+	}
+
 	return false
 }
 
 // parseEpisodeRangeComponent matches a multi-episode token (e.g. "S01E12-E13",
-// "S01E12E13", "S01E12.S01E13", "S01E12 & S01E13") in raw, returning the
-// season and both episode numbers. Refuses to guess (ok=false) when the
-// second number doesn't exceed the first -- e.g. a malformed "S03E13-E12" --
-// rather than reporting a nonsensical range. Callers check
+// "S01E12E13", "S01E12.S01E13", "S01E12 & S01E13", "1x12x13") in raw,
+// returning the season and both episode numbers. Refuses to guess (ok=false)
+// when the second number doesn't exceed the first -- e.g. a malformed
+// "S03E13-E12" -- rather than reporting a nonsensical range. Callers check
 // detectRefusedMultiEpisode before reaching here, so none of the shapes it
-// refuses (mismatched-season pairs, non-consecutive "&"/"and" pairs, 3+
-// chains) ever fall through to the single-token components.
+// refuses (mismatched-season pairs, non-consecutive "&"/"and"/x-form pairs,
+// 3+ chains) ever fall through to the single-token components.
 func parseEpisodeRangeComponent(raw string) (season, start, end, idx int, ok bool) {
 	if idxs := reSeasonEpisodeRange.FindStringSubmatchIndex(raw); idxs != nil {
 		season = atoiSafe(raw[idxs[2]:idxs[3]])
@@ -494,6 +507,15 @@ func parseEpisodeRangeComponent(raw string) (season, start, end, idx int, ok boo
 		end = atoiSafe(raw[idxs[8]:idxs[9]])
 		if season1 == season2 && end == start+1 {
 			return season1, start, end, idxs[0], true
+		}
+	}
+
+	if idxs := reSeasonEpisodeXPair.FindStringSubmatchIndex(raw); idxs != nil {
+		season = atoiSafe(raw[idxs[2]:idxs[3]])
+		start = atoiSafe(raw[idxs[4]:idxs[5]])
+		end = atoiSafe(raw[idxs[6]:idxs[7]])
+		if end == start+1 {
+			return season, start, end, idxs[0], true
 		}
 	}
 

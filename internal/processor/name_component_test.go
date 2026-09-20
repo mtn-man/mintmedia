@@ -126,6 +126,8 @@ func TestParseEpisodeRangeComponent(t *testing.T) {
 		{name: "AndWordPair", raw: "Show.S03E12 and S03E13.Title.mkv", wantSeason: 3, wantStart: 12, wantEnd: 13, wantOK: true, wantIdxOf: "S03E12 and S03E13"},
 		{name: "AmpersandPair_NonConsecutive_Refuses", raw: "Show.S03E12 & S03E14.Title.mkv", wantOK: false},
 		{name: "AmpersandPair_MismatchedSeason_Refuses", raw: "Show.S03E12 & S04E13.Title.mkv", wantOK: false},
+		{name: "XFormPair", raw: "Show.Name.1x02x03.Title.mkv", wantSeason: 1, wantStart: 2, wantEnd: 3, wantOK: true},
+		{name: "XFormPair_NonConsecutive_Refuses", raw: "Show.Name.1x02x04.Title.mkv", wantOK: false},
 		{name: "NoMatch", raw: "Show.Movie.Cut.mkv", wantOK: false},
 	}
 
@@ -168,6 +170,9 @@ func TestDetectRefusedMultiEpisode(t *testing.T) {
 		{name: "ThreeChain_DotSeparator_Refused", raw: "Show.S03E12.S03E13.S03E14.Title.mkv", want: true},
 		{name: "ThreeChain_Ampersand_Refused", raw: "Phineas.and.Ferb.S01E00 & S01E01 & S01E02.Title.mkv", want: true},
 		{name: "ThreeChain_AndWord_Refused", raw: "Phineas.and.Ferb.S01E00 and S01E01 and S01E02.Title.mkv", want: true},
+		{name: "ConsecutiveXFormPair_NotRefused", raw: "Show.Name.1x02x03.Title.mkv", want: false},
+		{name: "NonConsecutiveXFormPair_Refused", raw: "Show.Name.1x02x04.Title.mkv", want: true},
+		{name: "ThreeChain_XForm_Refused", raw: "Show_Name.1x02x03x04.HDTV_XViD_Etc-Group.mkv", want: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

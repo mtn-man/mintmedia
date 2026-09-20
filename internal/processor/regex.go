@@ -70,6 +70,27 @@ var (
 	// iteration of a repeated capture group anyway.
 	reMultiEpisodeChain = regexp.MustCompile(`(?i)\bS\d{1,2}[ .]?E\d{1,3}(?:(?:[\s._-]+|\s*&\s*|\s+and\s+)S\d{1,2}[ .]?E\d{1,3}){2,}\b`)
 
+	// Matches exactly two chained NxNN episodes of the same season, e.g.
+	// "1x02x03" -- the x-form's own concatenated-token convention (there's
+	// only one season digit in the whole token, shared by both episodes, so
+	// unlike the SxxEyy forms above there's no separate "mismatched season"
+	// case to guard against here). Uses the same custom non-digit boundary
+	// as reSeasonEpisodeX rather than \b, for the same underscore-delimiter
+	// reason documented there. Same rule as reSeasonEpisodeAmpersandPair:
+	// parseEpisodeRangeComponent only accepts this when the two episodes
+	// are strictly consecutive -- "1x02x04" skips episode 3 and must be
+	// refused rather than misrepresented as a contiguous range.
+	reSeasonEpisodeXPair = regexp.MustCompile(`(?i)(?:^|[^0-9x])([0-9]{1,2})x([0-9]{2,3})x([0-9]{2,3})(?:[^0-9]|$)`)
+
+	// Matches a season followed by three-or-more chained "xNN" episode
+	// segments, e.g. "1x02x03x04". Checked before reSeasonEpisodeXPair is
+	// ever tried (detectRefusedMultiEpisode) -- without that ordering, a
+	// 4-token chain's tail would read as a valid two-episode pair starting
+	// from its second token ("02x03x04"), misreading an episode number as
+	// a season number rather than being refused. Purely structural, no
+	// captures needed, same reasoning as reMultiEpisodeChain.
+	reMultiEpisodeXChain = regexp.MustCompile(`(?i)(?:^|[^0-9x])[0-9]{1,2}(?:x[0-9]{2,3}){3,}(?:[^0-9]|$)`)
+
 	// Matches season range tokens, e.g. "S01-S04", "S1-S4", "S01-04".
 	reSeasonRange = regexp.MustCompile(`(?i)\bS(\d{1,2})\s*-\s*S?(\d{1,2})\b`)
 
