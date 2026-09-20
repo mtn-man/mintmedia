@@ -16,7 +16,7 @@ func FuzzParseShowFromName(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, baseName, fileName string) {
-		showName, _, season, episode, episodeEnd, err := parseShowFromName(nil, baseName, fileName)
+		showName, _, season, episode, episodeEnd, episodePart, err := parseShowFromName(nil, baseName, fileName)
 		if err != nil {
 			return
 		}
@@ -34,6 +34,12 @@ func FuzzParseShowFromName(f *testing.F) {
 		}
 		if episodeEnd != 0 && episodeEnd <= episode {
 			t.Errorf("succeeded but returned non-increasing range %d-%d (baseName=%q fileName=%q)", episode, episodeEnd, baseName, fileName)
+		}
+		if episodePart != "" && (len(episodePart) != 1 || episodePart[0] < 'a' || episodePart[0] > 'z') {
+			t.Errorf("succeeded but returned non-single-lowercase-letter episodePart %q (baseName=%q fileName=%q)", episodePart, baseName, fileName)
+		}
+		if episodePart != "" && episodeEnd != 0 {
+			t.Errorf("succeeded but returned both a range and a split-part letter (episodeEnd=%d episodePart=%q, baseName=%q fileName=%q)", episodeEnd, episodePart, baseName, fileName)
 		}
 	})
 }

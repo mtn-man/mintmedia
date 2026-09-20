@@ -115,7 +115,7 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 			names := make(map[string]struct{}, len(mainPaths))
 			years := make(map[string]struct{}, len(mainPaths))
 			for _, main := range mainPaths {
-				sn, sy, _, _, _, _, err := resolveShowIdentity(p, filepath.Base(abs), main, hint, true)
+				sn, sy, _, _, _, _, _, err := resolveShowIdentity(p, filepath.Base(abs), main, hint, true)
 				if err != nil {
 					continue
 				}
@@ -399,7 +399,7 @@ func planAssociatedMoves(ctx context.Context, p *processorImpl, pl Plan) ([]Move
 // directory) would still pick up a name from its literal parent directory --
 // reintroducing the folder context that single-file mode deliberately opts
 // out of.
-func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint showHint, dirMode bool) (showName, showYear string, season, episode, episodeEnd int, inputHadYear bool, err error) {
+func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint showHint, dirMode bool) (showName, showYear string, season, episode, episodeEnd int, episodePart string, inputHadYear bool, err error) {
 	mainBaseName := filepath.Base(mainPath)
 
 	effHint := hint
@@ -414,15 +414,16 @@ func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint
 		}
 	}
 
-	showName, showYear, season, episode, episodeEnd, err = parseShowFromName(p.blacklist, folderBaseName, mainBaseName)
+	showName, showYear, season, episode, episodeEnd, episodePart, err = parseShowFromName(p.blacklist, folderBaseName, mainBaseName)
 	inputHadYear = err == nil && showYear != ""
 	if err != nil && effHint.ok && effHint.name != "" {
-		if s, e, ee, ok := parseSeasonEpisode(mainBaseName); ok {
+		if s, e, ee, ep, ok := parseSeasonEpisode(mainBaseName); ok {
 			showName = effHint.name
 			showYear = effHint.year
 			season = s
 			episode = e
 			episodeEnd = ee
+			episodePart = ep
 			err = nil
 		} else if s, e, ok := parseBareSeasonEpisode(effHint, mainBaseName); ok {
 			showName = effHint.name
@@ -430,10 +431,11 @@ func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint
 			season = s
 			episode = e
 			episodeEnd = 0
+			episodePart = ""
 			err = nil
 		}
 	}
-	return showName, showYear, season, episode, episodeEnd, inputHadYear, err
+	return showName, showYear, season, episode, episodeEnd, episodePart, inputHadYear, err
 }
 
 func planForMain(
@@ -475,7 +477,7 @@ func planForMain(
 	switch pl.Category {
 	case CategoryShow:
 		// --- Phase: Resolve (show) -- parse identity, resolve show folder ---
-		showName, showYear, season, episode, episodeEnd, inputHadYear, err := resolveShowIdentity(p, filepath.Base(pl.InputPath), pl.MainSourcePath, bc.hint, dirMode)
+		showName, showYear, season, episode, episodeEnd, episodePart, inputHadYear, err := resolveShowIdentity(p, filepath.Base(pl.InputPath), pl.MainSourcePath, bc.hint, dirMode)
 		if err != nil {
 			return Plan{}, err
 		}
@@ -517,6 +519,7 @@ func planForMain(
 		pl.Season = season
 		pl.Episode = episode
 		pl.EpisodeEnd = episodeEnd
+		pl.EpisodePart = episodePart
 
 		seasonFolder := fmt.Sprintf("Season %02d", season)
 		canonicalShowName := canonicalShowNameFromFolder(showFolder, showName)
@@ -524,7 +527,7 @@ func planForMain(
 		if inputHadYear && resolvedYear != "" {
 			displayShowName = fmt.Sprintf("%s (%s)", canonicalShowName, resolvedYear)
 		}
-		pl.DestRadix = fmt.Sprintf("%s - S%02d%s", displayShowName, season, formatEpisodeTag(episode, episodeEnd))
+		pl.DestRadix = fmt.Sprintf("%s - S%02d%s", displayShowName, season, formatEpisodeTag(episode, episodeEnd, episodePart))
 		pl.MetadataTitle = pl.DestRadix
 		if p.cfg.ResolutionAware && pl.Resolution != "" {
 			pl.DestRadix += resolutionSuffixSep + pl.Resolution
