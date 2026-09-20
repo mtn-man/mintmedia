@@ -1210,6 +1210,86 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// "&"/"and" joining exactly two consecutive episodes is accepted
+			// the same as the dot/dash repeated-token form -- it should
+			// resolve to the same canonical range in DestRadix regardless of
+			// which separator convention the release used.
+			name: "ShowFile_EpisodeRange_AmpersandPair_MultiEpisode",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Office (US) (2005) - S03E12 & S03E13 - Traveling Salesmen & The Return (1080p BluRay x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.Season != 3 || pl.Episode != 12 || pl.EpisodeEnd != 13 {
+					t.Fatalf("Season/Episode/EpisodeEnd = %d/%d/%d, want 3/12/13", pl.Season, pl.Episode, pl.EpisodeEnd)
+				}
+				if pl.DestRadix != "The Office (US) (2005) - S03E12-E13" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "The Office (US) (2005) - S03E12-E13")
+				}
+				if !strings.Contains(pl.DestDir, filepath.Join(p.cfg.ShowsDir, "The Office (US) (2005)")) {
+					t.Fatalf("DestDir = %q, expected under shows dir %q", pl.DestDir, p.cfg.ShowsDir)
+				}
+			},
+		},
+		{
+			// "&" naming two specific episodes that aren't consecutive skips
+			// the episode in between -- unlike a dash range (an inclusive
+			// span), this can't be represented as "E01-E03" without falsely
+			// implying episode 2 is included, so it must be left for review.
+			name: "ShowFile_EpisodeRange_AmpersandPair_NonConsecutive_NeedsReview",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Office (US) (2005) - S03E01 & S03E03 - Two Unrelated Episodes (1080p BluRay x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				var pse *ParseShowError
+				if !errors.As(err, &pse) {
+					t.Fatalf("expected *ParseShowError, got %v (plan=%+v)", err, pl)
+				}
+			},
+		},
+		{
+			// The original real-world motivating case: three episodes,
+			// including a special (E00), chained with "&" -- a genuine list
+			// the episode/episodeEnd model can't represent, must be refused
+			// rather than silently collapsing to just the first episode.
+			name: "ShowFile_EpisodeRange_ThreeChainAmpersand_NeedsReview",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Phineas and Ferb S01E00 & S01E01 & S01E02 (1080p WEB-DL x264-GROUP).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				var pse *ParseShowError
+				if !errors.As(err, &pse) {
+					t.Fatalf("expected *ParseShowError, got %v (plan=%+v)", err, pl)
+				}
+			},
+		},
+		{
 			// Regression test for the parseShowFolderQualifier fix: an
 			// existing "Name (Qualifier) (Year)" folder must be reused
 			// (Rule 2 exact-year match), not treated as unrelated and

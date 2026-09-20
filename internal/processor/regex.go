@@ -49,6 +49,27 @@ var (
 	// later, unrelated SxxEyy token.
 	reSeasonEpisodeRepeatedRange = regexp.MustCompile(`(?i)\bS(\d{1,2})[ .]?E(\d{1,3})[\s._-]+S(\d{1,2})[ .]?E(\d{1,3})\b`)
 
+	// Matches exactly two full SxxEyy tokens joined by "&" or the word
+	// "and", e.g. "S01E01 & S01E02", "S01E01 and S01E02". Unlike the
+	// dash/dot form above (an inclusive span -- "E12-E15" means episodes 12
+	// through 15 even though only the endpoints are written), "&"/"and"
+	// names two specific episodes, so parseEpisodeRangeComponent only
+	// accepts this when they're strictly consecutive -- "S01E01 & S01E03"
+	// skips episode 2 and must be refused (see detectRefusedMultiEpisode)
+	// rather than misrepresented as spanning it.
+	reSeasonEpisodeAmpersandPair = regexp.MustCompile(`(?i)\bS(\d{1,2})[ .]?E(\d{1,3})\s*(?:&|and)\s*S(\d{1,2})[ .]?E(\d{1,3})\b`)
+
+	// Matches three-or-more full SxxEyy tokens chained together, joined by
+	// any separator family the two-token forms above recognize (whitespace/
+	// dot/dash/underscore, or "&"/"and"). A real episode list, not a range
+	// -- the episode/episodeEnd model only has two endpoints, so this is
+	// always refused (detectRefusedMultiEpisode) regardless of whether the
+	// chain happens to be contiguous. Deliberately has no captures inside
+	// the repeating group: this is a purely structural "does a chain of 3+
+	// exist" check, not a value extraction, and RE2 only keeps the last
+	// iteration of a repeated capture group anyway.
+	reMultiEpisodeChain = regexp.MustCompile(`(?i)\bS\d{1,2}[ .]?E\d{1,3}(?:(?:[\s._-]+|\s*&\s*|\s+and\s+)S\d{1,2}[ .]?E\d{1,3}){2,}\b`)
+
 	// Matches season range tokens, e.g. "S01-S04", "S1-S4", "S01-04".
 	reSeasonRange = regexp.MustCompile(`(?i)\bS(\d{1,2})\s*-\s*S?(\d{1,2})\b`)
 
