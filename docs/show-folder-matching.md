@@ -22,8 +22,10 @@ resolves to either a confident match or an explicit skip.
 |---|---|---|
 | 1 | A folder with just the show name already exists (no year, no qualifier) | Uses it, regardless of any year in the filename |
 | 2 | The filename has a year, and a `Show Name (YYYY)` folder with that exact year exists | Uses that folder |
-| 2 (fallback) | The filename has a year, no exact-year folder exists, but exactly one folder exists with some other qualifier (e.g. `Show Name (UK)`) | Uses it as a best-effort match and reports it, in case the guess was wrong |
-| 2 (fallback, ambiguous) | The filename has a year, no exact-year folder exists, and *multiple* other-qualifier folders exist | Skips the file and reports it -- won't guess which one is right |
+| 2 (qualifier match) | The filename has a year, no exact-year folder exists, but exactly one folder exists whose name is `Show Name (Qualifier) (YYYY)` -- an extra qualifier the filename's own parsed name doesn't carry -- and that folder's year matches the filename's year | Uses it as a best-effort match and reports it, in case the extra qualifier means something else |
+| 2 (qualifier match, ambiguous) | Same shape, but *multiple* such folders exist (e.g. `Show Name (UK) (YYYY)` and `Show Name (US) (YYYY)`) | Skips the file and reports it -- won't guess which one is right |
+| 2 (fallback) | The filename has a year, no exact-year or qualifier-match folder exists, but exactly one folder exists with some other qualifier (e.g. `Show Name (UK)`) | Uses it as a best-effort match and reports it, in case the guess was wrong |
+| 2 (fallback, ambiguous) | The filename has a year, no exact-year or qualifier-match folder exists, and *multiple* other-qualifier folders exist | Skips the file and reports it -- won't guess which one is right |
 | 2 (create) | The filename has a year, and none of the above matched | Creates a new `Show Name (YYYY)` folder using the filename's year |
 | 3 | The filename has no year, and exactly one `Show Name (YYYY)` folder exists | Uses that folder |
 | 3 (ambiguous) | The filename has no year, and *multiple* `Show Name (YYYY)` folders exist | Skips the file and reports it -- won't guess which year is right |
@@ -73,6 +75,13 @@ completely untouched by this check.
 - Shows has `The Office (UK)/` and `The Office (US)/`. A file parses as
   `The Office` with no year. → Skipped and reported (rule 4, ambiguous case:
   multiple qualified folders, can't tell which one is right).
+- Shows has `Ghosts (US) (2021)/`. A file parses as `Ghosts (2021)` -- its
+  own filename never mentions `(US)`. → Routed to `Ghosts (US) (2021)/`
+  (rule 2, qualifier match: no exact-year folder exists under the bare name,
+  but the existing folder matches once its own extra `(US)` qualifier is set
+  aside, and its year agrees), reported so you can confirm the guess. A
+  second folder `Ghosts (UK) (2021)/` alongside it would make this
+  ambiguous instead -- skipped and reported rather than guessing.
 - Shows is empty. A file parses as `Fringe (2008)`. → Creates
   `Fringe (2008)/` (rule 2, create case: the filename has a year and nothing
   matched, so the new folder keeps that year rather than falling back to a

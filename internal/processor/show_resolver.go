@@ -44,11 +44,12 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 	}
 
 	var (
-		noYearFolder          string
-		exactYearFolder       string
-		yearFolders           []showFolderMatch
-		matchedYearFolder     []string
-		otherQualifiedFolders []string
+		noYearFolder              string
+		exactYearFolder           string
+		yearFolders               []showFolderMatch
+		matchedYearFolder         []string
+		otherQualifiedFolders     []string
+		extraQualifierYearFolders []string
 	)
 
 	for _, entry := range entries {
@@ -73,6 +74,21 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 			continue
 		}
 		if normalizeFolderKey(base) != showKey {
+			// The folder's own base doesn't match, but it may carry an extra
+			// qualifier this file's parsed name doesn't repeat (e.g.
+			// "Ghosts (US) (2021)" when the file is just "Ghosts (2021)",
+			// missing "(US)"). Peel one more layer; if the inner base
+			// matches and the outer qualifier is exactly the input's year,
+			// it's a same-confidence candidate as an exact year match, just
+			// missing a qualifier -- not a name mismatch worth flagging as
+			// a possible duplicate. A folder whose outer qualifier is a
+			// different year is evidence of an unrelated show/reboot, not a
+			// missing qualifier, and must never match here.
+			if innerBase, _, iok := parseShowFolderQualifier(base); iok &&
+				normalizeFolderKey(innerBase) == showKey &&
+				showYear != "" && strings.EqualFold(qualifier, showYear) {
+				extraQualifierYearFolders = append(extraQualifierYearFolders, name)
+			}
 			continue
 		}
 
@@ -100,6 +116,21 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 	if showYear != "" {
 		if exactYearFolder != "" {
 			return exactYearFolder, showYear, nil
+		}
+		if len(extraQualifierYearFolders) == 1 {
+			folder := extraQualifierYearFolders[0]
+			logWarn(p, logging.EventProcessorShowFolderExtraQualifierMatch,
+				fmt.Sprintf("WARNING  using best-effort match for %q: existing folder %q carries a qualifier this file's name doesn't include", showName, folder),
+				nil, logging.Fields{"path": showsDir, "show": showName, "folder": folder})
+			return folder, showYear, nil
+		}
+		if len(extraQualifierYearFolders) > 1 {
+			msg := fmt.Sprintf("WARNING  multiple show folders match %q with a missing qualifier: %s; skipping", showName, strings.Join(extraQualifierYearFolders, ", "))
+			logConsoleWarn(p, logging.EventProcessorInputSkippedParseError, msg, ErrAmbiguousShow, logging.Fields{
+				"path":   showsDir,
+				"reason": ErrAmbiguousShow.Error(),
+			})
+			return "", "", ErrAmbiguousShow
 		}
 		if folder, ok, err := tryQualifiedFallback(p, showsDir, showName, otherQualifiedFolders); ok {
 			return folder, "", err
