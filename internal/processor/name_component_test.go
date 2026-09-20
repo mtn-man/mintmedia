@@ -147,6 +147,26 @@ func TestParseEpisodeRangeComponent(t *testing.T) {
 	}
 }
 
+func TestDetectRefusedMultiEpisode(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{name: "MismatchedSeasonRepeatedTokens_Refused", raw: "Show.S01E24.S02E01.Title.mkv", want: true},
+		{name: "MatchedSeasonRepeatedTokens_NotRefused", raw: "Show.S03E12.S03E13.Title.mkv", want: false},
+		{name: "SingleEpisode_NotRefused", raw: "Show.S03E12.Title.mkv", want: false},
+		{name: "NoMatch_NotRefused", raw: "Show.Movie.Cut.mkv", want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := detectRefusedMultiEpisode(tc.raw); got != tc.want {
+				t.Errorf("detectRefusedMultiEpisode(%q) = %v, want %v", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestEpisodePartLetter(t *testing.T) {
 	tests := []struct {
 		name string

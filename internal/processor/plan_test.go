@@ -1186,6 +1186,30 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// Repeated-token shape, but the two seasons don't match -- a
+			// season finale immediately followed by the next season's
+			// premiere ("S01E24.S02E01"), not a range. Without a guard this
+			// would silently parse as just "S01E24," discarding the second
+			// season/episode entirely -- must be left for review instead.
+			name: "ShowFile_EpisodeRange_RepeatedTokenForm_MismatchedSeason_NeedsReview",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Office (US) (2005) - S01E24.S02E01 - Finale and Premiere (1080p BluRay x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				var pse *ParseShowError
+				if !errors.As(err, &pse) {
+					t.Fatalf("expected *ParseShowError, got %v (plan=%+v)", err, pl)
+				}
+			},
+		},
+		{
 			// Regression test for the parseShowFolderQualifier fix: an
 			// existing "Name (Qualifier) (Year)" folder must be reused
 			// (Rule 2 exact-year match), not treated as unrelated and
