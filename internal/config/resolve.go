@@ -49,6 +49,18 @@ var defaultMediaTagBlacklist = []string{
 	"truehd",
 	"hdr10?",
 	"dolby[ .]?vision",
+	"proper",
+	"repack",
+	"rerip",
+	"remux",
+	"extended",
+	"limited",
+	"uncut",
+	"unrated",
+	"restored",
+	"remastered",
+	"theatrical",
+	"deluxe",
 }
 
 // resolveMediaTagBlacklist merges the built-in defaults with any

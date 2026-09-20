@@ -217,6 +217,8 @@ func compileTestBlacklist(t *testing.T, patterns []string) []*regexp.Regexp {
 func TestCleanReleaseName(t *testing.T) {
 	bl := compileTestBlacklist(t, []string{
 		"2160p", "1080p", "720p", "480p", "x265", "x264", "bluray", "brrip", "web[- ]?dl",
+		"proper", "repack", "rerip", "remux", "extended", "limited", "uncut", "unrated",
+		"restored", "remastered", "theatrical", "deluxe",
 	})
 	tests := []struct {
 		raw  string
@@ -231,6 +233,17 @@ func TestCleanReleaseName(t *testing.T) {
 			// to strip it must still be dropped once release metadata starts.
 			raw:  "Captain.America.The.First.Avenger.1080p.BrRip.x264.YIFY",
 			want: "Captain America The First Avenger",
+		},
+		{
+			// PROPER/REPACK sit before any resolution/codec tag the old list
+			// recognized, so with no year to truncate at, they used to survive
+			// into the title untouched.
+			raw:  "Movie.Name.PROPER.REPACK.BluRay.x264-GROUP",
+			want: "Movie Name",
+		},
+		{
+			raw:  "Movie.Name.EXTENDED.UNRATED.REMUX.x264-GROUP",
+			want: "Movie Name",
 		},
 	}
 	for _, tc := range tests {
