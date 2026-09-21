@@ -45,14 +45,14 @@ const (
 	DuplicateNone DuplicateKind = iota
 	// DuplicateExact means an existing library entry matches; Apply must skip.
 	DuplicateExact
-	// DuplicateReviewHold applies to resolution_aware movies only -- an
-	// untagged release whose target folder already holds a resolution-tagged
-	// copy. Skipped, but surfaced as a WARNING/NeedsReview hold, not a
-	// silent skip.
+	// DuplicateReviewHold applies under resolution_aware, for movies and
+	// shows alike -- an untagged release whose target folder/identity already
+	// holds a resolution-tagged copy. Skipped, but surfaced as a
+	// WARNING/NeedsReview hold, not a silent skip.
 	DuplicateReviewHold
-	// DuplicateSortAlong applies to resolution_aware movies only -- not a
-	// skip; sorts in beside an existing copy of the same film at a
-	// different resolution.
+	// DuplicateSortAlong applies under resolution_aware, for movies and shows
+	// alike -- not a skip; sorts in beside an existing copy of the same
+	// film/episode at a different resolution.
 	DuplicateSortAlong
 )
 
@@ -114,11 +114,11 @@ type Plan struct {
 	// this field existed; Apply falls back to DestRadix then.
 	//
 	// For shows this deliberately never includes EpisodeTitle: it also
-	// doubles as the identity string checkDuplicateWithResolution compares
-	// on, and folding the episode title in would break that comparison for
-	// an already-sorted episode that predates PreserveEpisodeTitles being
-	// enabled. Apply appends EpisodeTitle on top of this when building the
-	// actual embedded tag value.
+	// doubles as the identity string scanShowFolderForResolution/
+	// showIdentityMatch compare on, and folding the episode title in would
+	// break that comparison for an already-sorted episode whose title text
+	// differs (or is absent). Apply appends EpisodeTitle on top of this when
+	// building the actual embedded tag value.
 	MetadataTitle string
 
 	// EpisodeTitle is an already-clean trailing episode title recognized on
@@ -133,8 +133,8 @@ type Plan struct {
 
 	// DupVerdict is the outcome of duplicate/sort-alongside detection for
 	// this plan. The zero value (DuplicateNone) means "not a duplicate."
-	// ReviewHold and SortAlong are only ever produced for CategoryMovie when
-	// Config.ResolutionAware is true.
+	// ReviewHold and SortAlong are only ever produced when Config.ResolutionAware
+	// is true, for either category.
 	DupVerdict DuplicateVerdict
 
 	// Cleanup intent (optional; not all Apply implementations will honor this initially)

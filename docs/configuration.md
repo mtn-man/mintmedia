@@ -50,23 +50,34 @@ with its contents, or choosing between two same-resolution copies, is left to
 you; filename parsing alone can't resolve it cleanly, and real stream probing
 is out of scope for this tool.
 
-### Resolution as movie identity
+### Resolution as identity (movies and shows)
 
-With `resolution_aware = true`, the resolution also becomes part of a **movie's**
-identity for duplicate detection, so you can keep more than one resolution of a
-film in the same folder:
+With `resolution_aware = true`, the resolution also becomes part of a title's
+or episode's identity for duplicate detection, so you can keep more than one
+resolution of the same content:
 
-| Incoming file | The movie's folder already holds | Result |
+| Incoming file | The library already holds | Result |
 | --- | --- | --- |
 | `… - 2160p` | a `… - 2160p` file (exact match) | skipped as a duplicate |
 | `… - 2160p` | only `… - 1080p` / `… - 720p` etc. | sorted in alongside; `--plan` shows an `Alongside:` line, and the completed sort logs an INFO naming the resolution already there |
-| `… - 2160p` | an untagged `Movie (Year).mkv`, no `… - 2160p` | sorted in, with a WARNING |
-| no resolution detected | an untagged `Movie (Year).mkv` | skipped as a duplicate |
+| `… - 2160p` | an untagged copy, no `… - 2160p` | sorted in, with a WARNING |
+| no resolution detected | an untagged copy | skipped as a duplicate |
 | no resolution detected | only resolution-tagged files | **left in the drop folder for review** (a WARNING, no move -- an untagged release can't be named safely next to a tagged copy) |
-| no resolution detected | nothing for that title | sorted in as `Movie (Year).mkv` |
+| no resolution detected | nothing for that title/episode | sorted in as an untagged name |
 
 mintmedia only ever **adds** resolutions -- it never deletes or replaces a file
 already in the library, so pruning an older/lower resolution is left to you.
+
+For a movie, "the library already holds" means the movie's own folder, since a
+movie folder holds exactly one film. For a show, it means the season folder
+filtered down to files matching the same show + `SxxEyy` -- a season folder
+holds many episodes, so only the matching one is ever compared. That
+per-episode identity match is also what `preserve_episode_titles` needs to
+stay correct: it ignores any episode-title text a library file happens to
+carry (or not), matching a `Show - S01E06 - Bad Optics.mkv` against a
+`Show - S01E06.mkv` re-download just as readily as against an identically
+titled one -- which specific title text a copy carries has no bearing on
+whether it's the same episode.
 
 ## Keeping already-clean episode titles
 
@@ -103,20 +114,24 @@ adopted for the new filename **and**, if metadata tagging is on, the embedded
 title tag -- deliberately, so every file in the folder agrees on how the title
 is written.
 
-**Shows are unchanged** -- a different-resolution episode re-download is still
-skipped as a duplicate. The one addition: when the skipped episode is at a
-different resolution than the library copy, a non-blocking WARNING names both
-(so a higher-quality season pack bouncing off the library isn't silent).
+**Shows follow the same table above**, scoped to the season folder's matching
+episode rather than a whole folder. Their own duplicate detection also
+applies with `resolution_aware = false` (the default): a season folder is
+still scanned for a file matching the incoming episode's show + `SxxEyy`, and
+any match at all is treated as a duplicate -- resolution, container format,
+and episode title text are all irrelevant to identity when the toggle is off.
 
 Two edge cases stay unhandled, both involving files mintmedia did not sort
 itself (its own output is always canonically named):
 
 - A library file hand-named with a non-canonical resolution tag
   (`Movie (2020) - 4K.mkv` or `- UHD.mkv` instead of `- 2160p`) isn't seen as
-  resolution-tagged, so an incoming copy of that movie isn't compared against
-  it: a genuine duplicate can sort in beside it, and an untagged incoming file
-  skips the review hold. The folder-level fuzzy match doesn't cover this -- it
-  keys on folder names, not files inside an already-canonical folder.
+  resolution-tagged, so an incoming copy isn't compared against it: a genuine
+  duplicate can sort in beside it, and an untagged incoming file skips the
+  review hold. Applies equally to a show episode named this way. The
+  folder-level fuzzy match doesn't cover the movie case -- it keys on folder
+  names, not files inside an already-canonical folder.
 - A diacritic/punctuation-variant *filename* inside a folder reached by the
   fuzzy match (`Amelie (2001).mkv` inside `Amélie (2001)/`) isn't matched by the
-  in-folder check and can get a canonically-named sibling.
+  in-folder check and can get a canonically-named sibling. Movies only -- shows
+  have no equivalent folder-level fuzzy match feeding into this per-episode scan.

@@ -3359,7 +3359,9 @@ func TestPlan_ResolutionAware_Movie_UntaggedIncoming_UntaggedExisting_Duplicate(
 }
 
 // TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution mirrors the
-// movie different-resolution case for the show branch.
+// movie different-resolution case for the show branch: a re-download at a
+// different resolution is no longer a duplicate skip -- it sorts in
+// alongside the existing episode, same as movies.
 func TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution(t *testing.T) {
 	p := newTestProcessorResolutionAware(t)
 
@@ -3372,8 +3374,11 @@ func TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.DupVerdict.Skip() {
-		t.Fatalf("DupVerdict.Skip() = false, want true")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (different resolution sorts alongside)")
+	}
+	if pl.DupVerdict.Kind != DuplicateSortAlong {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateSortAlong", pl.DupVerdict.Kind)
 	}
 	if pl.DupVerdict.Path != existing {
 		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
@@ -3381,11 +3386,11 @@ func TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution(t *testing.T) {
 }
 
 // TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution_CrossContainer
-// reproduces the real-world case that surfaced this bug: an existing episode
-// in one container (.mkv) must still be recognized as the same episode as an
-// incoming re-download in a different container (.mp4) -- container format
-// was never part of a show's identity, but the scan used to filter out any
-// existing file whose extension didn't exactly equal the incoming file's.
+// reproduces the real-world case that surfaced the cross-extension bug: an
+// existing episode in one container (.mkv) must still be recognized as the
+// same episode as an incoming re-download in a different container (.mp4) --
+// container format was never part of a show's identity. At different
+// resolutions, that recognition now means sorting in alongside, not skipping.
 func TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution_CrossContainer(t *testing.T) {
 	p := newTestProcessorResolutionAware(t)
 
@@ -3398,8 +3403,11 @@ func TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution_CrossContainer(t
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.DupVerdict.Skip() {
-		t.Fatalf("DupVerdict.Skip() = false, want true (cross-container match must still be recognized)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false (cross-container, different resolution sorts alongside)")
+	}
+	if pl.DupVerdict.Kind != DuplicateSortAlong {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateSortAlong", pl.DupVerdict.Kind)
 	}
 	if pl.DupVerdict.Path != existing {
 		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
@@ -3423,6 +3431,153 @@ func TestPlan_ResolutionAware_Duplicate_ShowSameResolution_CrossContainer(t *tes
 	}
 	if !pl.DupVerdict.Skip() {
 		t.Fatalf("DupVerdict.Skip() = false, want true (same-resolution cross-container match)")
+	}
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
+	}
+}
+
+// TestPlan_ResolutionAware_Show_UntaggedSibling_NoAlongsidePath mirrors
+// TestPlan_ResolutionAware_Movie_UntaggedSibling_NoAlongsidePath for the show
+// branch: an untagged sibling sort emits its own WARNING rather than
+// recording a DupVerdict.Path.
+func TestPlan_ResolutionAware_Show_UntaggedSibling_NoAlongsidePath(t *testing.T) {
+	p, logs := newTestProcessorResolutionAwareWithLog(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.2160p.BluRay.mkv")
+	writeFile(t, src, "dummy")
+	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01.mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.DupVerdict.Path != "" {
+		t.Fatalf("DupVerdict.Path = %q, want empty for an untagged-sibling sort", pl.DupVerdict.Path)
+	}
+	if s := logs.String(); strings.Contains(s, "alongside existing") {
+		t.Fatalf("did not expect the multi-resolution INFO for an untagged-sibling sort; log:\n%s", s)
+	}
+}
+
+// TestPlan_ResolutionAware_Show_UntaggedExisting_TaggedIncoming_SortsWithWarning
+// mirrors the movie case: a library episode with no resolution suffix no
+// longer blocks an incoming tagged copy -- it sorts in as a distinct file,
+// with a non-blocking possible-duplicate WARNING.
+func TestPlan_ResolutionAware_Show_UntaggedExisting_TaggedIncoming_SortsWithWarning(t *testing.T) {
+	p := newTestProcessorResolutionAware(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.1080p.BluRay.mkv")
+	writeFile(t, src, "dummy")
+	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01.mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false")
+	}
+	if got := filepath.Base(pl.DestMainPath); got != "Deadwood - S01E01 - 1080p.mkv" {
+		t.Fatalf("DestMainPath base = %q, want %q", got, "Deadwood - S01E01 - 1080p.mkv")
+	}
+}
+
+// TestPlan_ResolutionAware_Show_UntaggedIncoming_TaggedExisting_HeldForReview
+// mirrors the movie case: an incoming episode with no detectable resolution
+// that collides with a resolution-tagged library copy can't be named safely
+// alongside it, so the plan is a review hold.
+func TestPlan_ResolutionAware_Show_UntaggedIncoming_TaggedExisting_HeldForReview(t *testing.T) {
+	p := newTestProcessorResolutionAware(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.BluRay.mkv") // no resolution token
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01 - 1080p.mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.Resolution != "" {
+		t.Fatalf("Resolution = %q, want empty (test needs an untagged incoming file)", pl.Resolution)
+	}
+	if pl.DupVerdict.Kind != DuplicateReviewHold {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateReviewHold", pl.DupVerdict.Kind)
+	}
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
+	}
+}
+
+// TestPlan_ResolutionAware_Show_UntaggedIncoming_UntaggedExisting_Duplicate
+// mirrors the movie case: an untagged incoming episode that exactly matches
+// an untagged library episode is still a plain duplicate skip.
+func TestPlan_ResolutionAware_Show_UntaggedIncoming_UntaggedExisting_Duplicate(t *testing.T) {
+	p := newTestProcessorResolutionAware(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.BluRay.mkv")
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01.mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.DupVerdict.Kind != DuplicateExact {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateExact", pl.DupVerdict.Kind)
+	}
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
+	}
+}
+
+// TestPlan_ResolutionAware_Off_Show_IdentityMatchIgnoresResolution is the new
+// off-path rule: with resolution_aware = false, resolution is not part of a
+// show's identity at all, so a match at *any* resolution (or none) is still a
+// duplicate -- unlike the resolution_aware = true table's sort-alongside
+// behavior for a genuine resolution difference.
+func TestPlan_ResolutionAware_Off_Show_IdentityMatchIgnoresResolution(t *testing.T) {
+	p := newTestProcessor(t) // ResolutionAware not set
+
+	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.2160p.BluRay.mkv")
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01 - 1080p.mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true (identity match regardless of resolution)")
+	}
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
+	}
+}
+
+// TestPlan_PreserveEpisodeTitles_ResolutionAware_DedupIgnoresExistingTitleText
+// is the regression this whole change exists to fix: a library episode that
+// *already carries a title* (different text than what would be freshly
+// parsed today, or none at all) must still be recognized as the same episode
+// as a re-download. showIdentityMatch's prefix check, not a flat equality
+// against pl.MetadataTitle, is what makes this work.
+func TestPlan_PreserveEpisodeTitles_ResolutionAware_DedupIgnoresExistingTitleText(t *testing.T) {
+	p := newTestProcessorPreserveEpisodeTitlesAndResolutionAware(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Lanterns - S01E06 - Bad Optics.mkv")
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.ShowsDir, "Lanterns", "Season 01", "Lanterns - S01E06 - A Totally Different Title.mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true (title text must not defeat identity match)")
 	}
 	if pl.DupVerdict.Path != existing {
 		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
@@ -3567,9 +3722,11 @@ func TestPlan_PreserveEpisodeTitles_WithResolutionAware_TitleThenResolution(t *t
 // is the correctness-critical case from the design doc: an episode already
 // sorted into the library *without* a title (e.g. from before this feature
 // was enabled) must still be recognized as a duplicate of a titled
-// re-download of the *same* episode -- checkDuplicateWithResolution compares
-// on the title-free MetadataTitle, so the title difference must not defeat
-// dedup.
+// re-download of the *same* episode -- showIdentityMatch compares on the
+// title-free MetadataTitle (permitting an optional title suffix on either
+// side), so the title difference must not defeat dedup. See also
+// TestPlan_PreserveEpisodeTitles_ResolutionAware_DedupIgnoresExistingTitleText
+// for the companion case where the *library* file is the one with a title.
 func TestPlan_PreserveEpisodeTitles_ResolutionAware_DedupIgnoresTitleDifference(t *testing.T) {
 	p := newTestProcessorPreserveEpisodeTitlesAndResolutionAware(t)
 
@@ -3639,7 +3796,7 @@ func TestScanMovieFolderForResolution(t *testing.T) {
 	// for a variant just because the ext-equality-to-incoming filter is gone.
 	mainExtSet := map[string]struct{}{".mkv": {}, ".mp4": {}}
 
-	cls := func(sc movieResScan) string {
+	cls := func(sc resScan) string {
 		switch {
 		case sc.exactMatchPath != "":
 			return "exact"
@@ -3705,10 +3862,10 @@ func TestScanMovieFolderForResolution_MissingDir(t *testing.T) {
 	}
 }
 
-func TestDecideMovieResolutionDuplicate(t *testing.T) {
+func TestDecideResolutionDuplicate(t *testing.T) {
 	cases := []struct {
 		name        string
-		sc          movieResScan
+		sc          resScan
 		tagged      bool
 		wantVerdict DuplicateKind
 		wantMatch   string
@@ -3716,27 +3873,27 @@ func TestDecideMovieResolutionDuplicate(t *testing.T) {
 	}{
 		{
 			name:        "exact match wins regardless of tagged",
-			sc:          movieResScan{exactMatchPath: "/lib/M - 2160p.mkv", variantPath: "/lib/M - 1080p.mkv"},
+			sc:          resScan{exactMatchPath: "/lib/M - 2160p.mkv", variantPath: "/lib/M - 1080p.mkv"},
 			tagged:      true,
 			wantVerdict: DuplicateExact,
 			wantMatch:   "/lib/M - 2160p.mkv",
 		},
 		{
 			name:        "tagged + different-res variant -> sort along, no warn",
-			sc:          movieResScan{variantPath: "/lib/M - 1080p.mkv"},
+			sc:          resScan{variantPath: "/lib/M - 1080p.mkv"},
 			tagged:      true,
 			wantVerdict: DuplicateSortAlong,
 		},
 		{
 			name:        "tagged + untagged sibling -> sort along, with warn",
-			sc:          movieResScan{untaggedSiblingPath: "/lib/M.mkv"},
+			sc:          resScan{untaggedSiblingPath: "/lib/M.mkv"},
 			tagged:      true,
 			wantVerdict: DuplicateSortAlong,
 			wantWarn:    true,
 		},
 		{
 			name:        "untagged incoming + tagged variant -> review, with warn",
-			sc:          movieResScan{variantPath: "/lib/M - 1080p.mkv"},
+			sc:          resScan{variantPath: "/lib/M - 1080p.mkv"},
 			tagged:      false,
 			wantVerdict: DuplicateReviewHold,
 			wantMatch:   "/lib/M - 1080p.mkv",
@@ -3744,13 +3901,13 @@ func TestDecideMovieResolutionDuplicate(t *testing.T) {
 		},
 		{
 			name:        "nothing in folder -> none",
-			sc:          movieResScan{},
+			sc:          resScan{},
 			tagged:      true,
 			wantVerdict: DuplicateNone,
 		},
 		{
 			name:        "untagged incoming + untagged sibling only -> none (exact would have caught a real match)",
-			sc:          movieResScan{untaggedSiblingPath: "/lib/M.mkv"},
+			sc:          resScan{untaggedSiblingPath: "/lib/M.mkv"},
 			tagged:      false,
 			wantVerdict: DuplicateNone,
 		},
@@ -3758,7 +3915,7 @@ func TestDecideMovieResolutionDuplicate(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			v, match, warn := decideMovieResolutionDuplicate(c.sc, c.tagged)
+			v, match, warn := decideResolutionDuplicate(c.sc, c.tagged)
 			if v != c.wantVerdict {
 				t.Fatalf("verdict = %d, want %d", v, c.wantVerdict)
 			}
@@ -4090,27 +4247,33 @@ func TestPlan_ResolutionAware_MovieFuzzy_Tier2_UnchangedWarnOnly(t *testing.T) {
 	}
 }
 
-// --- resolution_aware: show different-resolution skip is warned ----------
+// --- resolution_aware: show different-resolution sorts in alongside ------
 
-func TestPlan_ResolutionAware_Show_DifferentResolution_WarnsOnSkip(t *testing.T) {
+// TestPlan_ResolutionAware_Show_DifferentResolution_RecordsAlongsidePath
+// mirrors TestPlan_ResolutionAware_Movie_DifferentResolution_RecordsAlongsidePath:
+// a different-resolution re-drop is no longer a skip, and Plan (unlike Apply)
+// never emits the "alongside existing" INFO -- that line is logged only once
+// the move actually lands, so it must never appear during a preview.
+func TestPlan_ResolutionAware_Show_DifferentResolution_RecordsAlongsidePath(t *testing.T) {
 	p, logs := newTestProcessorResolutionAwareWithLog(t)
 
 	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.2160p.HEVC.x265.mkv")
 	writeFile(t, src, "dummy")
-	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01 - 1080p.mkv"), "already here")
+	existing := filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01 - 1080p.mkv")
+	writeFile(t, existing, "already here")
 
 	pl, err := planOne(t, p, src)
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.DupVerdict.Skip() {
-		t.Fatalf("DupVerdict.Skip() = false, want true (shows still skip a different-resolution re-drop)")
+	if pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = true, want false")
 	}
-	got := logs.String()
-	for _, want := range []string{"Deadwood - S01E01 - 2160p", "Deadwood - S01E01 - 1080p"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("WARNING missing %q; log was:\n%s", want, got)
-		}
+	if got := filepath.Base(pl.DupVerdict.Path); got != "Deadwood - S01E01 - 1080p.mkv" {
+		t.Fatalf("DupVerdict.Path base = %q, want %q", got, "Deadwood - S01E01 - 1080p.mkv")
+	}
+	if strings.Contains(logs.String(), "alongside existing") {
+		t.Fatalf("Plan must not emit the 'alongside existing' INFO (it's Apply's); log:\n%s", logs.String())
 	}
 }
 
@@ -4133,23 +4296,30 @@ func TestPlan_ResolutionAware_Show_SameResolution_NoWarn(t *testing.T) {
 	}
 }
 
+// TestPlan_ResolutionAware_Show_UntaggedIncoming_WarnsOnSkip pins the exact
+// review-hold WARNING wording for the show branch -- an untagged incoming
+// episode can't be safely named alongside a resolution-tagged existing copy,
+// so it's held for review (DuplicateReviewHold), same table as movies.
 func TestPlan_ResolutionAware_Show_UntaggedIncoming_WarnsOnSkip(t *testing.T) {
 	p, logs := newTestProcessorResolutionAwareWithLog(t)
 
 	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.HEVC.x265.mkv") // no resolution token
 	writeFile(t, src, "dummy")
-	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01 - 1080p.mkv"), "already here")
+	existing := filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01 - 1080p.mkv")
+	writeFile(t, existing, "already here")
 
 	pl, err := planOne(t, p, src)
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if !pl.DupVerdict.Skip() {
-		t.Fatalf("DupVerdict.Skip() = false, want true")
+	if pl.DupVerdict.Kind != DuplicateReviewHold {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateReviewHold", pl.DupVerdict.Kind)
+	}
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
 	}
 	got := logs.String()
-	// Untagged incoming: its radix has no " - <res>" suffix; the library side does.
-	if !strings.Contains(got, "skipping Deadwood - S01E01: library already has Deadwood - S01E01 - 1080p") {
+	if !strings.Contains(got, "untagged release: folder already holds a resolution-tagged copy (Deadwood - S01E01 - 1080p.mkv) -- left for human review") {
 		t.Fatalf("WARNING wording unexpected; log was:\n%s", got)
 	}
 }
