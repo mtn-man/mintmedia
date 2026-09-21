@@ -97,6 +97,13 @@ type Plan struct {
 	EpisodeEnd  int    // e.g. 9 for a "S05E08-E09" range; 0 when not a range
 	EpisodePart string // e.g. "a" for a "S05E08a" split-part episode; "" otherwise
 
+	// EpisodeDate is the canonical "YYYY-MM-DD" air date for a date-
+	// identified episode (the daily/talk-show naming convention -- no SxxEyy
+	// token at all, e.g. "The Daily Show.July.30.2021..."), or "" otherwise.
+	// When set, Season/Episode/EpisodeEnd/EpisodePart are always their zero
+	// values -- see parseDatedShowFromName/resolveShowIdentity.
+	EpisodeDate string
+
 	// Destination computation
 	DestDir      string // directory containing main file
 	DestRadix    string // base filename without extension used for main and associated files
@@ -162,6 +169,12 @@ func (pl Plan) HasResolutionSuffix() bool {
 // "S01E08-E09") rather than a single episode.
 func (pl Plan) IsEpisodeRange() bool {
 	return pl.EpisodeEnd > 0
+}
+
+// IsDatedEpisode reports whether this plan identifies its episode by air
+// date (the daily/talk-show convention) rather than a season/episode number.
+func (pl Plan) IsDatedEpisode() bool {
+	return pl.EpisodeDate != ""
 }
 
 // Result reports the outcome of applying a plan.

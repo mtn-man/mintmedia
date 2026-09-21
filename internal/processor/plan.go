@@ -115,7 +115,7 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 			names := make(map[string]struct{}, len(mainPaths))
 			years := make(map[string]struct{}, len(mainPaths))
 			for _, main := range mainPaths {
-				sn, sy, _, _, _, _, _, err := resolveShowIdentity(p, filepath.Base(abs), main, hint, true)
+				sn, sy, _, _, _, _, _, _, err := resolveShowIdentity(p, filepath.Base(abs), main, hint, true)
 				if err != nil {
 					continue
 				}
@@ -399,7 +399,7 @@ func planAssociatedMoves(ctx context.Context, p *processorImpl, pl Plan) ([]Move
 // directory) would still pick up a name from its literal parent directory --
 // reintroducing the folder context that single-file mode deliberately opts
 // out of.
-func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint showHint, dirMode bool) (showName, showYear string, season, episode, episodeEnd int, episodePart string, inputHadYear bool, err error) {
+func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint showHint, dirMode bool) (showName, showYear string, season, episode, episodeEnd int, episodePart string, episodeDate string, inputHadYear bool, err error) {
 	mainBaseName := filepath.Base(mainPath)
 
 	effHint := hint
@@ -416,26 +416,38 @@ func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint
 
 	showName, showYear, season, episode, episodeEnd, episodePart, err = parseShowFromName(p.blacklist, folderBaseName, mainBaseName)
 	inputHadYear = err == nil && showYear != ""
-	if err != nil && effHint.ok && effHint.name != "" {
-		if s, e, ee, ep, _, ok := parseSeasonEpisode(mainBaseName); ok {
-			showName = effHint.name
-			showYear = effHint.year
-			season = s
-			episode = e
-			episodeEnd = ee
-			episodePart = ep
+	if err != nil {
+		// A date-based episode identifier (no SxxEyy token at all -- see
+		// parseDatedShowFromName) is tried before the hint fallback below:
+		// the two are mutually exclusive in practice, since the hint
+		// fallback only ever succeeds when a real numeric season/episode
+		// token is still present somewhere in the filename.
+		if sn, sy, dt, dok := parseDatedShowFromName(p.blacklist, folderBaseName, mainBaseName); dok {
+			showName, showYear, episodeDate = sn, sy, dt
+			season, episode, episodeEnd, episodePart = 0, 0, 0, ""
+			inputHadYear = sy != ""
 			err = nil
-		} else if s, e, ok := parseBareSeasonEpisode(effHint, mainBaseName); ok {
-			showName = effHint.name
-			showYear = effHint.year
-			season = s
-			episode = e
-			episodeEnd = 0
-			episodePart = ""
-			err = nil
+		} else if effHint.ok && effHint.name != "" {
+			if s, e, ee, ep, _, ok := parseSeasonEpisode(mainBaseName); ok {
+				showName = effHint.name
+				showYear = effHint.year
+				season = s
+				episode = e
+				episodeEnd = ee
+				episodePart = ep
+				err = nil
+			} else if s, e, ok := parseBareSeasonEpisode(effHint, mainBaseName); ok {
+				showName = effHint.name
+				showYear = effHint.year
+				season = s
+				episode = e
+				episodeEnd = 0
+				episodePart = ""
+				err = nil
+			}
 		}
 	}
-	return showName, showYear, season, episode, episodeEnd, episodePart, inputHadYear, err
+	return showName, showYear, season, episode, episodeEnd, episodePart, episodeDate, inputHadYear, err
 }
 
 func planForMain(
@@ -477,7 +489,7 @@ func planForMain(
 	switch pl.Category {
 	case CategoryShow:
 		// --- Phase: Resolve (show) -- parse identity, resolve show folder ---
-		showName, showYear, season, episode, episodeEnd, episodePart, inputHadYear, err := resolveShowIdentity(p, filepath.Base(pl.InputPath), pl.MainSourcePath, bc.hint, dirMode)
+		showName, showYear, season, episode, episodeEnd, episodePart, episodeDate, inputHadYear, err := resolveShowIdentity(p, filepath.Base(pl.InputPath), pl.MainSourcePath, bc.hint, dirMode)
 		if err != nil {
 			return Plan{}, err
 		}
@@ -520,16 +532,36 @@ func planForMain(
 		pl.Episode = episode
 		pl.EpisodeEnd = episodeEnd
 		pl.EpisodePart = episodePart
+		pl.EpisodeDate = episodeDate
 
-		seasonFolder := fmt.Sprintf("Season %02d", season)
 		canonicalShowName := canonicalShowNameFromFolder(showFolder, showName)
 		displayShowName := canonicalShowName
 		if inputHadYear && resolvedYear != "" {
 			displayShowName = fmt.Sprintf("%s (%s)", canonicalShowName, resolvedYear)
 		}
-		pl.DestRadix = fmt.Sprintf("%s - S%02d%s", displayShowName, season, formatEpisodeTag(episode, episodeEnd, episodePart))
+
+		var seasonFolder string
+		if pl.IsDatedEpisode() {
+			// Sonarr/Plex/Jellyfin convention for a daily/talk-show episode
+			// identified by air date rather than SxxEyy: the season folder
+			// is the air date's own calendar year, four digits -- not the
+			// usual two-digit "Season %02d", since there's no numeric season
+			// to pad. EpisodeDate is always canonical "YYYY-MM-DD"
+			// (parseAirDate's only output shape), so slicing the first 4
+			// bytes is safe without re-parsing.
+			seasonFolder = fmt.Sprintf("Season %s", pl.EpisodeDate[:4])
+			pl.DestRadix = fmt.Sprintf("%s - %s", displayShowName, pl.EpisodeDate)
+		} else {
+			seasonFolder = fmt.Sprintf("Season %02d", season)
+			pl.DestRadix = fmt.Sprintf("%s - S%02d%s", displayShowName, season, formatEpisodeTag(episode, episodeEnd, episodePart))
+		}
 		pl.MetadataTitle = pl.DestRadix
 		if p.cfg.PreserveEpisodeTitles {
+			// For a dated plan, season/episode are always 0 and the source
+			// filename carries no SxxEyy token, so extractShowEpisodeTitle's
+			// internal parseSeasonEpisode(stem) call never matches -- this is
+			// a silent no-op rather than a wrong title, not a bug. Episode-
+			// title extraction just doesn't apply to dated episodes yet.
 			stem := strings.TrimSuffix(pl.MainBaseName, pl.MainExt)
 			if title, ok := extractShowEpisodeTitle(p.blacklist, p.cfg.ResolutionAware, pl.Resolution, stem, season, episode, episodeEnd, episodePart); ok {
 				pl.EpisodeTitle = title

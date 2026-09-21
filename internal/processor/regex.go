@@ -128,6 +128,30 @@ var (
 	// "Season201.avi" or "720p".
 	reBareSeasonEpisode = regexp.MustCompile(`(?:^|[^0-9A-Za-z])([1-9])(\d{2})(?:[^0-9A-Za-z]|$)`)
 
+	// Matches an ISO-style air date for a date-identified episode (the
+	// daily/talk-show naming convention -- no SxxEyy token at all, e.g.
+	// "The Daily Show.2021-07-30..."): "2021-07-30", "2021.07.30",
+	// "2021 07 30". Month/day are constrained to real ranges directly in the
+	// pattern (01-12 / 01-31), the same validated-range approach reResolution
+	// uses, so an arbitrary digit run (a bitrate, a catalog number) can't
+	// false-match as a date. See parseAirDate.
+	reDateISO = regexp.MustCompile(`\b(19\d{2}|20\d{2})[-. ](0[1-9]|1[0-2])[-. ](0[1-9]|[12]\d|3[01])\b`)
+
+	// Matches a European/scene-style air date, e.g. "Panorama.15-05-2018...":
+	// "15-05-2018", "15.05.2018". Deliberately does NOT match US-style
+	// "MM-DD-YYYY" -- Plex's own naming docs only document YYYY-MM-DD and
+	// DD-MM-YYYY as real date-based-episode conventions, and excluding the US
+	// form means any "NN-NN-YYYY" shape unambiguously reads as DD-MM-YYYY
+	// with no runtime disambiguation needed. See parseAirDate.
+	reDateEuropean = regexp.MustCompile(`\b(0[1-9]|[12]\d|3[01])[-.](0[1-9]|1[0-2])[-.](19\d{2}|20\d{2})\b`)
+
+	// Matches a month-name air date, e.g. "Show.Name.July.30.2021...":
+	// "July.30.2021", "Jul 3 2021" -- full or 3-letter month names, dot/space
+	// separated only (no dash form observed in the wild for this shape). Day
+	// accepts a single digit ("July.3.2021") since parseAirDate zero-pads it
+	// on output. See parseAirDate.
+	reDateMonthName = regexp.MustCompile(`(?i)\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[. ](0?[1-9]|[12]\d|3[01])[. ](19\d{2}|20\d{2})\b`)
+
 	// Removes bracketed tags like "[EZTVx.to]" or "[YTS]".
 	reBracketedTag = regexp.MustCompile(`\[[^\]]*\]`)
 
