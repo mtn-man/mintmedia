@@ -38,16 +38,23 @@ func planOne(t *testing.T, p *processorImpl, inputPath string) (Plan, error) {
 		t.Fatalf("expected 1 plan, got %d", len(plans))
 	}
 	pl := plans[0]
-	// MetadataTitle is meant to always be DestRadix's resolution-free form for
-	// any plan that will actually reach Apply's move (a Skip()==true plan's
-	// DestRadix can legitimately diverge from it -- e.g. the non-resolution_aware
-	// fuzzy-match branch overwrites DestRadix with an adopted folder's on-disk
-	// spelling without updating MetadataTitle, since that plan's move never
-	// happens and MetadataTitle is never read for it). Checked here, once, so
-	// every one of this helper's callers guards the invariant for free.
+	// MetadataTitle is meant to always be DestRadix's resolution-free,
+	// episode-title-free form for any plan that will actually reach Apply's
+	// move (a Skip()==true plan's DestRadix can legitimately diverge from it
+	// -- e.g. the non-resolution_aware fuzzy-match branch overwrites DestRadix
+	// with an adopted folder's on-disk spelling without updating
+	// MetadataTitle, since that plan's move never happens and MetadataTitle
+	// is never read for it). EpisodeTitle is deliberately kept out of
+	// MetadataTitle (see Plan.MetadataTitle's doc), so it's stripped back off
+	// here before comparing. Checked here, once, so every one of this
+	// helper's callers guards the invariant for free.
 	if !pl.DupVerdict.Skip() {
-		if want := stripTrailingResolution(pl.DestRadix); pl.MetadataTitle != want {
-			t.Fatalf("MetadataTitle = %q, want %q (stripTrailingResolution(DestRadix)) for a non-skipped plan", pl.MetadataTitle, want)
+		want := stripTrailingResolution(pl.DestRadix)
+		if pl.EpisodeTitle != "" {
+			want = strings.TrimSuffix(want, resolutionSuffixSep+pl.EpisodeTitle)
+		}
+		if pl.MetadataTitle != want {
+			t.Fatalf("MetadataTitle = %q, want %q (DestRadix minus resolution/episode-title) for a non-skipped plan", pl.MetadataTitle, want)
 		}
 	}
 	return pl, nil
@@ -132,6 +139,26 @@ func resolutionAwareTestConfig(t *testing.T) Config {
 	}
 }
 
+// preserveEpisodeTitlesTestConfig mirrors newTestProcessor's Config but with
+// PreserveEpisodeTitles enabled, so tests exercise the episode-title path.
+func preserveEpisodeTitlesTestConfig(t *testing.T) Config {
+	t.Helper()
+	cfg := resolutionAwareTestConfig(t)
+	cfg.ResolutionAware = false
+	cfg.PreserveEpisodeTitles = true
+	return cfg
+}
+
+// preserveEpisodeTitlesAndResolutionAwareTestConfig combines both toggles, for
+// tests covering their interaction (episode title plus resolution suffix, and
+// the dedup-identity guarantee across both being on at once).
+func preserveEpisodeTitlesAndResolutionAwareTestConfig(t *testing.T) Config {
+	t.Helper()
+	cfg := resolutionAwareTestConfig(t)
+	cfg.PreserveEpisodeTitles = true
+	return cfg
+}
+
 func mustProcessorImpl(t *testing.T, cfg Config, logger logging.Logger) *processorImpl {
 	t.Helper()
 	pr, err := New(cfg, nil, nil, logger)
@@ -150,6 +177,20 @@ func mustProcessorImpl(t *testing.T, cfg Config, logger logging.Logger) *process
 func newTestProcessorResolutionAware(t *testing.T) *processorImpl {
 	t.Helper()
 	return mustProcessorImpl(t, resolutionAwareTestConfig(t), nil)
+}
+
+// newTestProcessorPreserveEpisodeTitles mirrors newTestProcessor but with
+// PreserveEpisodeTitles enabled (ResolutionAware left off).
+func newTestProcessorPreserveEpisodeTitles(t *testing.T) *processorImpl {
+	t.Helper()
+	return mustProcessorImpl(t, preserveEpisodeTitlesTestConfig(t), nil)
+}
+
+// newTestProcessorPreserveEpisodeTitlesAndResolutionAware enables both
+// toggles together.
+func newTestProcessorPreserveEpisodeTitlesAndResolutionAware(t *testing.T) *processorImpl {
+	t.Helper()
+	return mustProcessorImpl(t, preserveEpisodeTitlesAndResolutionAwareTestConfig(t), nil)
 }
 
 // newTestProcessorResolutionAwareWithLog is newTestProcessorResolutionAware

@@ -315,6 +315,7 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		MediaTagBlacklist:            resolveMediaTagBlacklist(cfg.Naming.MediaTagBlacklist),
 		CustomMediaTagBlacklistCount: len(cfg.Naming.MediaTagBlacklist),
 		ResolutionAware:              cfg.Naming.ResolutionAware,
+		PreserveEpisodeTitles:        cfg.Naming.PreserveEpisodeTitles,
 
 		AutoCleanupCompletedTorrents: cfg.Torrent.AutoCleanupCompletedTorrents,
 

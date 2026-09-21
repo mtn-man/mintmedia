@@ -1297,6 +1297,81 @@ resolution_aware = true
 	}
 }
 
+func TestLoad_PreserveEpisodeTitles_DefaultsFalse(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, res, _, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if res.PreserveEpisodeTitles {
+		t.Fatalf("PreserveEpisodeTitles = true, want false when naming.preserve_episode_titles is omitted")
+	}
+}
+
+func TestLoad_PreserveEpisodeTitles_CanBeEnabled(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[features]
+enable_processing = true
+
+[system]
+auto_create_missing_dirs = true
+
+[media]
+main_media_extensions = [".mkv"]
+
+[naming]
+preserve_episode_titles = true
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, res, _, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !res.PreserveEpisodeTitles {
+		t.Fatalf("PreserveEpisodeTitles = false, want true")
+	}
+}
+
 // TestPlatformDefaultsSameKeys guards against structural drift between the two
 // embedded platform defaults. If a new key is added to one file but not the
 // other it will be caught here before reaching users.

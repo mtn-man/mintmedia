@@ -3400,6 +3400,143 @@ func TestPlan_ResolutionAware_Duplicate_DifferentEpisodeNotFlagged(t *testing.T)
 	}
 }
 
+// TestPlan_PreserveEpisodeTitles_CleanTitleKept covers the motivating case:
+// an already-clean dash-separated episode title is kept in DestRadix instead
+// of discarded, while MetadataTitle stays title-free (the identity string).
+func TestPlan_PreserveEpisodeTitles_CleanTitleKept(t *testing.T) {
+	p := newTestProcessorPreserveEpisodeTitles(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Lanterns - S01E06 - Bad Optics.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.EpisodeTitle != "Bad Optics" {
+		t.Fatalf("EpisodeTitle = %q, want %q", pl.EpisodeTitle, "Bad Optics")
+	}
+	if pl.DestRadix != "Lanterns - S01E06 - Bad Optics" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Lanterns - S01E06 - Bad Optics")
+	}
+	if pl.MetadataTitle != "Lanterns - S01E06" {
+		t.Fatalf("MetadataTitle = %q, want %q (title-free identity string)", pl.MetadataTitle, "Lanterns - S01E06")
+	}
+	if got := filepath.Base(pl.DestMainPath); got != "Lanterns - S01E06 - Bad Optics.mkv" {
+		t.Fatalf("DestMainPath base = %q, want %q", got, "Lanterns - S01E06 - Bad Optics.mkv")
+	}
+}
+
+// TestPlan_PreserveEpisodeTitles_JunkyTitleDropped confirms a dash-separated
+// trailing title that still carries recognized release-tag junk falls back to
+// today's no-title behavior exactly -- no partial salvage.
+func TestPlan_PreserveEpisodeTitles_JunkyTitleDropped(t *testing.T) {
+	p := newTestProcessorPreserveEpisodeTitles(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Lanterns - S01E06 - Bad Optics WEB-DL.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.EpisodeTitle != "" {
+		t.Fatalf("EpisodeTitle = %q, want empty (junky trailing text)", pl.EpisodeTitle)
+	}
+	if pl.DestRadix != "Lanterns - S01E06" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Lanterns - S01E06")
+	}
+}
+
+// TestPlan_PreserveEpisodeTitles_DotSeparatedTitleDropped confirms a scene-
+// style dot-separated trailing title -- even one with no junk at all -- does
+// not qualify, per the dash-convention-only scoping decision.
+func TestPlan_PreserveEpisodeTitles_DotSeparatedTitleDropped(t *testing.T) {
+	p := newTestProcessorPreserveEpisodeTitles(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Lanterns.S01E06.Bad.Optics.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.EpisodeTitle != "" {
+		t.Fatalf("EpisodeTitle = %q, want empty (dot-separated source)", pl.EpisodeTitle)
+	}
+	if pl.DestRadix != "Lanterns - S01E06" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Lanterns - S01E06")
+	}
+}
+
+// TestPlan_PreserveEpisodeTitles_OffLeavesNameUnchanged confirms the toggle
+// gates the whole feature -- an otherwise-qualifying clean title is still
+// discarded when preserve_episode_titles is off.
+func TestPlan_PreserveEpisodeTitles_OffLeavesNameUnchanged(t *testing.T) {
+	p := newTestProcessor(t) // PreserveEpisodeTitles not set
+
+	src := filepath.Join(p.cfg.DropFolder, "Lanterns - S01E06 - Bad Optics.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.EpisodeTitle != "" {
+		t.Fatalf("EpisodeTitle = %q, want empty (feature off)", pl.EpisodeTitle)
+	}
+	if pl.DestRadix != "Lanterns - S01E06" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Lanterns - S01E06")
+	}
+}
+
+// TestPlan_PreserveEpisodeTitles_WithResolutionAware_TitleThenResolution
+// confirms the requested output shape when both toggles are on: the title is
+// kept, the resolution qualifier still lands after it.
+func TestPlan_PreserveEpisodeTitles_WithResolutionAware_TitleThenResolution(t *testing.T) {
+	p := newTestProcessorPreserveEpisodeTitlesAndResolutionAware(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Lanterns - S01E06 - Bad Optics - 1080p.mkv")
+	writeFile(t, src, "dummy")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.EpisodeTitle != "Bad Optics" {
+		t.Fatalf("EpisodeTitle = %q, want %q", pl.EpisodeTitle, "Bad Optics")
+	}
+	if pl.DestRadix != "Lanterns - S01E06 - Bad Optics - 1080p" {
+		t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Lanterns - S01E06 - Bad Optics - 1080p")
+	}
+	if pl.MetadataTitle != "Lanterns - S01E06" {
+		t.Fatalf("MetadataTitle = %q, want %q (title- and resolution-free identity string)", pl.MetadataTitle, "Lanterns - S01E06")
+	}
+}
+
+// TestPlan_PreserveEpisodeTitles_ResolutionAware_DedupIgnoresTitleDifference
+// is the correctness-critical case from the design doc: an episode already
+// sorted into the library *without* a title (e.g. from before this feature
+// was enabled) must still be recognized as a duplicate of a titled
+// re-download of the *same* episode -- checkDuplicateWithResolution compares
+// on the title-free MetadataTitle, so the title difference must not defeat
+// dedup.
+func TestPlan_PreserveEpisodeTitles_ResolutionAware_DedupIgnoresTitleDifference(t *testing.T) {
+	p := newTestProcessorPreserveEpisodeTitlesAndResolutionAware(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Lanterns - S01E06 - Bad Optics.mkv")
+	writeFile(t, src, "dummy")
+	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Lanterns", "Season 01", "Lanterns - S01E06.mkv"), "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true (same episode, title-presence difference must not defeat dedup)")
+	}
+}
+
 func TestPlan_HasResolutionSuffix(t *testing.T) {
 	cases := []struct {
 		name       string
