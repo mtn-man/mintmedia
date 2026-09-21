@@ -92,11 +92,15 @@ func warnPossibleDuplicateMovieFolder(p *processorImpl, moviesDir, movieTitle st
 		nil, logging.Fields{"movies_dir": moviesDir, "incoming": movieTitle, "candidates": strings.Join(folders, ", ")})
 }
 
-// movieResScan is the single-ReadDir view of a target movie folder used by
-// resolution_aware duplicate detection. At most one field per existing file is
-// populated; when several files fall in the same class the first by name wins
-// (os.ReadDir returns entries sorted), so the result is deterministic.
-type movieResScan struct {
+// resScan is the single-ReadDir view of a target folder used by
+// resolution_aware duplicate detection -- shared by movies (scanned via
+// scanMovieFolderForResolution, where the whole folder is one identity) and
+// shows (scanned via scanShowFolderForResolution, where a season folder holds
+// many episodes and matching entries are filtered by identity first). At most
+// one field per existing file is populated; when several files fall in the
+// same class the first by name wins (os.ReadDir returns entries sorted), so
+// the result is deterministic.
+type resScan struct {
 	dirExists bool
 
 	// exactMatchPath: an existing file whose full stem (including any
@@ -124,21 +128,23 @@ type movieResScan struct {
 // an incoming ".mp4") is still recognized as the same identity; container
 // format was never part of a movie's identity. A non-media sidecar (a
 // "-thumb.jpg", a ".srt") is still excluded, since it isn't in the set
-// either way. A missing dir is not an error -- movieResScan{dirExists:false}
-// is returned. Error handling mirrors checkDuplicateWithResolution.
-func scanMovieFolderForResolution(dir string, pl *Plan, mainExtSet map[string]struct{}) (movieResScan, error) {
+// either way. A missing dir is not an error -- resScan{dirExists:false} is
+// returned. A movie folder holds only one movie, so unlike
+// scanShowFolderForResolution every same-extension file in dir is a
+// candidate -- there's no separate identity pre-filter to apply.
+func scanMovieFolderForResolution(dir string, pl *Plan, mainExtSet map[string]struct{}) (resScan, error) {
 	ents, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return movieResScan{}, nil
+			return resScan{}, nil
 		}
 		if transfer.IsDestinationUnavailable(err) {
-			return movieResScan{}, &DestinationUnavailableError{Category: pl.Category, Err: err}
+			return resScan{}, &DestinationUnavailableError{Category: pl.Category, Err: err}
 		}
-		return movieResScan{}, fmt.Errorf("readdir destination: %w", err)
+		return resScan{}, fmt.Errorf("readdir destination: %w", err)
 	}
 
-	sc := movieResScan{dirExists: true}
+	sc := resScan{dirExists: true}
 	for _, ent := range ents {
 		if ent.IsDir() {
 			continue
@@ -170,12 +176,12 @@ func scanMovieFolderForResolution(dir string, pl *Plan, mainExtSet map[string]st
 	return sc, nil
 }
 
-// decideMovieResolutionDuplicate applies the resolution_aware movie decision
-// table to a folder scan. incomingTagged is (pl.Resolution != ""). warn is a
-// fully formatted, ready-to-log message, or "" when there is nothing to warn
-// about. matchPath is the existing-library file the verdict points at, or ""
-// for DuplicateNone / DuplicateSortAlong.
-func decideMovieResolutionDuplicate(sc movieResScan, incomingTagged bool) (v DuplicateKind, matchPath, warn string) {
+// decideResolutionDuplicate applies the shared resolution_aware decision
+// table (movies and shows alike) to a folder scan. incomingTagged is
+// (pl.Resolution != ""). warn is a fully formatted, ready-to-log message, or
+// "" when there is nothing to warn about. matchPath is the existing-library
+// file the verdict points at, or "" for DuplicateNone / DuplicateSortAlong.
+func decideResolutionDuplicate(sc resScan, incomingTagged bool) (v DuplicateKind, matchPath, warn string) {
 	switch {
 	case sc.exactMatchPath != "":
 		return DuplicateExact, sc.exactMatchPath, ""

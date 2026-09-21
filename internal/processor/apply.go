@@ -191,15 +191,16 @@ func applyOne(ctx context.Context, p *processorImpl, pl Plan, assocFailedByInput
 
 	if pl.DupVerdict.Kind == DuplicateSortAlong {
 		// resolution_aware different-resolution add: the move landed next to an
-		// existing copy of this film at another resolution. mintmedia keeps
-		// both -- surface it (now, past tense, because the move happened) so the
-		// user can prune if they'd rather not. Plan sets DupVerdict; --plan
-		// shows it there without reaching this Apply-only line.
+		// existing copy of this title/episode at another resolution. mintmedia
+		// keeps both -- surface it (now, past tense, because the move happened)
+		// so the user can prune if they'd rather not. Plan sets DupVerdict;
+		// --plan shows it there without reaching this Apply-only line.
 		existing := pathStem(pl.DupVerdict.Path)
-		logInfo(p, logging.EventProcessorMovieDuplicateNotice,
+		event, dirField, dirValue := resolutionDupNoticeEvent(p, &pl)
+		logInfo(p, event,
 			fmt.Sprintf("INFO     sorted %s alongside existing %s", pl.DestRadix, existing),
 			logging.Fields{
-				"movies_dir":   p.cfg.MoviesDir,
+				dirField:       dirValue,
 				"incoming":     pl.DestRadix,
 				"folder":       pl.DestDir,
 				"existing":     existing,

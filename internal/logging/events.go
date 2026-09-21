@@ -46,6 +46,7 @@ const (
 	EventProcessorShowFolderExtraQualifierMatch   Event = "processor.show.folder.extra.qualifier.match"
 	EventProcessorShowPossibleDuplicateFolder     Event = "processor.show.folder.duplicate.possible"
 	EventProcessorShowDuplicateResolutionMismatch Event = "processor.show.duplicate.resolution.mismatch"
+	EventProcessorShowDuplicateNotice             Event = "processor.show.duplicate.notice"
 	EventProcessorShowFileSkipUnparseable         Event = "processor.show.file.skip.unparseable"
 	EventProcessorMetadataTitleWriteStarted       Event = "processor.metadata.title.write.started"
 	EventProcessorMetadataTitleWriteApplied       Event = "processor.metadata.title.write.applied"
@@ -93,6 +94,7 @@ func AllOperationalEvents() []Event {
 		EventProcessorShowFolderExtraQualifierMatch,
 		EventProcessorShowPossibleDuplicateFolder,
 		EventProcessorShowDuplicateResolutionMismatch,
+		EventProcessorShowDuplicateNotice,
 		EventProcessorShowFileSkipUnparseable,
 		EventProcessorMetadataTitleWriteStarted,
 		EventProcessorMetadataTitleWriteApplied,

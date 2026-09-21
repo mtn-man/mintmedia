@@ -106,15 +106,15 @@ media_tag_blacklist = []
 # When true, re-append the resolution detected from the source filename to the
 # sorted name as a " - <res>" suffix, e.g. "Movie (2020) - 1080p.mkv" /
 # "Show (2020) - S01E02 - 1080p.mkv" (the folder name is left unchanged), and
-# treat the resolution as part of a *movie's* identity for duplicate detection:
-#   - a different resolution of a movie already in the library sorts in
-#     alongside it (keep 1080p and 2160p side by side)
+# treat the resolution as part of identity for duplicate detection, for both
+# movies and shows:
+#   - a different resolution of a title/episode already in the library sorts
+#     in alongside it (keep 1080p and 2160p side by side)
 #   - only an exact match including the resolution is skipped as a duplicate
-#   - an incoming movie with no detectable resolution that collides with a
+#   - an incoming file with no detectable resolution that collides with a
 #     resolution-tagged copy is left in the drop folder for review, not sorted
-# Shows are unchanged -- a different-resolution episode re-download is still
-# skipped as a duplicate. The resolution is read from the release name only,
-# not the video stream. Off by default.
+# The resolution is read from the release name only, not the video stream.
+# Off by default.
 resolution_aware = false
 
 # Keep an already-clean trailing episode title instead of discarding it. Off by default; see docs/configuration.md.

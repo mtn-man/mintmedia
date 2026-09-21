@@ -651,7 +651,7 @@ func planMovieResolutionAware(p *processorImpl, pl *Plan, title, year string) er
 		return err
 	}
 	if sc.dirExists {
-		applyMovieDupVerdict(p, pl, sc)
+		applyResolutionDupVerdict(p, pl, sc)
 		return nil
 	}
 
@@ -676,20 +676,33 @@ func planMovieResolutionAware(p *processorImpl, pl *Plan, title, year string) er
 		if err != nil {
 			return err
 		}
-		applyMovieDupVerdict(p, pl, sc2)
+		applyResolutionDupVerdict(p, pl, sc2)
 		return nil
 	}
 	warnPossibleDuplicateMovieFolder(p, p.cfg.MoviesDir, pl.MovieTitle, tier2)
 	return nil
 }
 
-// applyMovieDupVerdict maps a folder scan onto pl.DupVerdict (Apply skips the
-// move when its Kind is Exact or ReviewHold), and emits a non-blocking
-// WARNING when the verdict carries one. DuplicateNone / DuplicateSortAlong
-// (without a variant to report) leave pl.DupVerdict at its zero value -- the
-// incoming file sorts in at pl.DestMainPath.
-func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
-	v, matchPath, warn := decideMovieResolutionDuplicate(sc, pl.Resolution != "")
+// resolutionDupNoticeEvent returns the logging event and dir field/value to
+// use for a resolution_aware duplicate notice (WARNING or sort-along INFO) --
+// the only piece of this machinery that actually differs between movies and
+// shows.
+func resolutionDupNoticeEvent(p *processorImpl, pl *Plan) (event logging.Event, dirField, dirValue string) {
+	if pl.Category == CategoryShow {
+		return logging.EventProcessorShowDuplicateNotice, "shows_dir", p.cfg.ShowsDir
+	}
+	return logging.EventProcessorMovieDuplicateNotice, "movies_dir", p.cfg.MoviesDir
+}
+
+// applyResolutionDupVerdict maps a folder scan onto pl.DupVerdict (Apply
+// skips the move when its Kind is Exact or ReviewHold), and emits a
+// non-blocking WARNING when the verdict carries one. DuplicateNone /
+// DuplicateSortAlong (without a variant to report) leave pl.DupVerdict at its
+// zero value -- the incoming file sorts in at pl.DestMainPath. Shared by
+// movies and shows; the only category-specific bit is which dir field/event
+// the WARNING logs under.
+func applyResolutionDupVerdict(p *processorImpl, pl *Plan, sc resScan) {
+	v, matchPath, warn := decideResolutionDuplicate(sc, pl.Resolution != "")
 	switch v {
 	case DuplicateExact:
 		pl.DupVerdict = DuplicateVerdict{Kind: DuplicateExact, Path: matchPath}
@@ -734,8 +747,9 @@ func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 	// Stem, not basename: "existing" pairs with "incoming" (pl.DestRadix), and
 	// both sides of that pair are in sorted-name form.
 	existingStem := pathStem(existing)
-	logWarn(p, logging.EventProcessorMovieDuplicateNotice, "WARNING  "+warn, nil, logging.Fields{
-		"movies_dir":      p.cfg.MoviesDir,
+	event, dirField, dirValue := resolutionDupNoticeEvent(p, pl)
+	logWarn(p, event, "WARNING  "+warn, nil, logging.Fields{
+		dirField:          dirValue,
 		"incoming":        pl.DestRadix,
 		"folder":          pl.DestDir,
 		"existing":        existingStem,
@@ -744,79 +758,117 @@ func applyMovieDupVerdict(p *processorImpl, pl *Plan, sc movieResScan) {
 }
 
 // checkShowDuplicate runs the show-branch duplicate check for pl's
-// destination. With resolution_aware off it is the plain exact-path stat;
-// with it on it is the resolution-aware directory scan, which compares on
-// pl.MetadataTitle -- the resolution-free radix. Movies never call this --
-// they dispatch directly to planMovieResolutionAware or checkExactDuplicate
-// from planForMain, since resolution_aware is part of a movie's identity
-// rather than a same-file-or-not toggle.
+// destination: one scan of the season folder for files matching this
+// episode's identity (show + SxxEyy, regardless of any episode title text --
+// see showIdentityMatch), then:
+//
+//   - resolution_aware off: identity alone decides it. Any matching file is a
+//     duplicate, full stop -- resolution isn't part of a show's identity when
+//     the toggle is off, so a match at any resolution (or none) skips.
+//   - resolution_aware on: the same shared decision table movies use
+//     (decideResolutionDuplicate) -- same identity + same resolution
+//     (including both untagged) is a duplicate; different resolution sorts in
+//     alongside; the untagged/tagged asymmetry cases hold for review or warn,
+//     exactly as they do for movies.
 func checkShowDuplicate(p *processorImpl, pl *Plan) error {
-	if p.cfg.ResolutionAware {
-		return checkDuplicateWithResolution(p, pl)
+	sc, err := scanShowFolderForResolution(pl.DestDir, pl, p.mainExtSet)
+	if err != nil {
+		return err
 	}
-	return checkExactDuplicate(pl)
+	if !p.cfg.ResolutionAware {
+		if path := firstNonEmpty(sc.exactMatchPath, sc.untaggedSiblingPath, sc.variantPath); path != "" {
+			pl.DupVerdict = DuplicateVerdict{Kind: DuplicateExact, Path: path}
+		}
+		return nil
+	}
+	applyResolutionDupVerdict(p, pl, sc)
+	return nil
 }
 
-// checkDuplicateWithResolution is the resolution_aware counterpart to
-// checkExactDuplicate for the show branch. It scans pl.DestDir for an existing
-// file belonging to the same episode as pl, ignoring any " - <res>" qualifier
-// on either side, and sets pl.DupVerdict to DuplicateExact (with Path the real
-// on-disk path) on a hit. Comparing against pl.MetadataTitle (the
-// resolution-free radix) rather than the resolution-qualified DestMainPath is
-// what makes a re-download at a *different* resolution -- or an untagged copy
-// of an already-tagged file -- still register as a duplicate. One directory
-// read covers all three cases (same-res re-drop, different-res re-drop,
-// pre-toggle untagged file). (Movies deliberately diverge -- see
-// planMovieResolutionAware -- keeping multiple resolutions instead.)
-//
-// When the match is at a *different* resolution than the incoming file, the
-// skip is still silent to the SORTED/SKIPPED line but a non-blocking WARNING
-// names both resolutions, so a higher-quality re-download bouncing off the
-// library copy isn't invisible.
-func checkDuplicateWithResolution(p *processorImpl, pl *Plan) error {
-	ents, err := os.ReadDir(pl.DestDir)
+// firstNonEmpty returns the first non-empty string among paths, or "".
+func firstNonEmpty(paths ...string) string {
+	for _, p := range paths {
+		if p != "" {
+			return p
+		}
+	}
+	return ""
+}
+
+// showIdentityMatch reports whether strippedStem -- an existing library
+// file's stem with any trailing resolution qualifier already removed --
+// identifies the same episode as pl.MetadataTitle: equal to it, or that plus
+// a trailing " - <title>" segment. A flat equality check isn't enough once a
+// library file can itself carry an episode title (PreserveEpisodeTitles) --
+// which specific title text it carries is irrelevant to whether it's the
+// same episode, so any trailing text introduced by the same " - " separator
+// counts, not just an exact string match.
+func showIdentityMatch(strippedStem string, pl *Plan) bool {
+	if strings.EqualFold(strippedStem, pl.MetadataTitle) {
+		return true
+	}
+	prefix := pl.MetadataTitle + resolutionSuffixSep
+	return len(strippedStem) > len(prefix) && strings.EqualFold(strippedStem[:len(prefix)], prefix)
+}
+
+// scanShowFolderForResolution reads dir (the season folder, which holds many
+// episodes -- unlike a movie folder, which is one identity) once and
+// classifies the main-media files that identify as the same episode as pl
+// (showIdentityMatch), into the same exact/untagged/variant shape
+// scanMovieFolderForResolution uses for movies. Classification compares
+// detected resolutions directly (not raw stem equality) so that an episode
+// title-text difference between the incoming file and an existing library
+// file -- irrelevant to identity -- never gets misread as a resolution
+// difference. A missing dir is not an error -- resScan{dirExists:false} is
+// returned.
+func scanShowFolderForResolution(dir string, pl *Plan, mainExtSet map[string]struct{}) (resScan, error) {
+	ents, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return resScan{}, nil
 		}
 		if transfer.IsDestinationUnavailable(err) {
-			return &DestinationUnavailableError{Category: pl.Category, Err: err}
+			return resScan{}, &DestinationUnavailableError{Category: pl.Category, Err: err}
 		}
-		return fmt.Errorf("readdir destination: %w", err)
+		return resScan{}, fmt.Errorf("readdir destination: %w", err)
 	}
 
+	sc := resScan{dirExists: true}
 	for _, ent := range ents {
 		if ent.IsDir() {
 			continue
 		}
 		name := ent.Name()
 		ext := filepath.Ext(name)
-		if !isExtInSet(ext, p.mainExtSet) {
+		if !isExtInSet(ext, mainExtSet) {
 			continue
 		}
 		rawStem := strings.TrimSuffix(name, ext)
-		if strings.EqualFold(stripTrailingResolution(rawStem), pl.MetadataTitle) {
-			pl.DupVerdict = DuplicateVerdict{Kind: DuplicateExact, Path: filepath.Join(pl.DestDir, name)}
-
-			matchRes := detectResolution(name)
-			if !strings.EqualFold(pl.Resolution, matchRes) {
-				// Both sides in sorted-name form (no extension): the incoming
-				// file's would-be radix vs the library file's actual stem.
-				logWarn(p, logging.EventProcessorShowDuplicateResolutionMismatch,
-					fmt.Sprintf("WARNING  skipping %s: library already has %s", pl.DestRadix, rawStem),
-					nil, logging.Fields{
-						"dest_dir":     pl.DestDir,
-						"episode":      pl.MetadataTitle,
-						"incoming":     pl.DestRadix,
-						"incoming_res": pl.Resolution,
-						"library_file": name,
-						"library_res":  matchRes,
-					})
+		stripped := stripTrailingResolution(rawStem)
+		if !showIdentityMatch(stripped, pl) {
+			continue
+		}
+		full := filepath.Join(dir, name)
+		libRes := detectResolution(name)
+		switch {
+		case strings.EqualFold(libRes, pl.Resolution):
+			// Same identity, same resolution status (including both
+			// untagged) -- an exact duplicate regardless of any
+			// episode-title-text difference.
+			if sc.exactMatchPath == "" {
+				sc.exactMatchPath = full
 			}
-			return nil
+		case libRes == "":
+			if sc.untaggedSiblingPath == "" {
+				sc.untaggedSiblingPath = full
+			}
+		default:
+			if sc.variantPath == "" {
+				sc.variantPath = full
+			}
 		}
 	}
-	return nil
+	return sc, nil
 }
 
 // checkExactDuplicate stats pl.DestMainPath and sets pl.DupVerdict on a
