@@ -646,7 +646,7 @@ func planForMain(
 // under these rules would wrongly flag every different-resolution add as a
 // duplicate.
 func planMovieResolutionAware(p *processorImpl, pl *Plan, title, year string) error {
-	sc, err := scanMovieFolderForResolution(pl.DestDir, pl)
+	sc, err := scanMovieFolderForResolution(pl.DestDir, pl, p.mainExtSet)
 	if err != nil {
 		return err
 	}
@@ -672,7 +672,7 @@ func planMovieResolutionAware(p *processorImpl, pl *Plan, title, year string) er
 		}
 		pl.DestMainPath = filepath.Join(pl.DestDir, pl.DestRadix+pl.MainExt)
 
-		sc2, err := scanMovieFolderForResolution(pl.DestDir, pl)
+		sc2, err := scanMovieFolderForResolution(pl.DestDir, pl, p.mainExtSet)
 		if err != nil {
 			return err
 		}
@@ -791,7 +791,7 @@ func checkDuplicateWithResolution(p *processorImpl, pl *Plan) error {
 		}
 		name := ent.Name()
 		ext := filepath.Ext(name)
-		if !strings.EqualFold(ext, pl.MainExt) {
+		if !isExtInSet(ext, p.mainExtSet) {
 			continue
 		}
 		rawStem := strings.TrimSuffix(name, ext)

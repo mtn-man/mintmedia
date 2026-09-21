@@ -116,11 +116,17 @@ type movieResScan struct {
 	variantPath string
 }
 
-// scanMovieFolderForResolution reads dir once and classifies the
-// same-extension files it holds relative to pl (pl.DestRadix, pl.MetadataTitle,
-// pl.MainExt). A missing dir is not an error -- movieResScan{dirExists:false}
+// scanMovieFolderForResolution reads dir once and classifies the main-media
+// files it holds relative to pl (pl.DestRadix, pl.MetadataTitle). mainExtSet
+// is the configured main-media extension set (p.mainExtSet) -- membership in
+// it, not equality with pl.MainExt, is what qualifies a file as a candidate,
+// so a same movie in a different container (e.g. an existing ".mkv" against
+// an incoming ".mp4") is still recognized as the same identity; container
+// format was never part of a movie's identity. A non-media sidecar (a
+// "-thumb.jpg", a ".srt") is still excluded, since it isn't in the set
+// either way. A missing dir is not an error -- movieResScan{dirExists:false}
 // is returned. Error handling mirrors checkDuplicateWithResolution.
-func scanMovieFolderForResolution(dir string, pl *Plan) (movieResScan, error) {
+func scanMovieFolderForResolution(dir string, pl *Plan, mainExtSet map[string]struct{}) (movieResScan, error) {
 	ents, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -139,7 +145,7 @@ func scanMovieFolderForResolution(dir string, pl *Plan) (movieResScan, error) {
 		}
 		name := ent.Name()
 		ext := filepath.Ext(name)
-		if !strings.EqualFold(ext, pl.MainExt) {
+		if !isExtInSet(ext, mainExtSet) {
 			continue
 		}
 		rawStem := strings.TrimSuffix(name, ext)
