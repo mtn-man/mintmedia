@@ -2638,6 +2638,158 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// The real Panorama repro: a European DD-MM-YYYY air date, no
+			// SxxEyy token at all. Season folder is the air date's own
+			// calendar year, not a numbered season.
+			name: "ShowFile_Panorama_EuropeanDate_DailyShowNaming",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Panorama.15-05-2018.Web-DL.540p.H264.AAC.Subs.mp4"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Panorama" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Panorama")
+				}
+				if pl.EpisodeDate != "2018-05-15" {
+					t.Fatalf("EpisodeDate = %q, want %q", pl.EpisodeDate, "2018-05-15")
+				}
+				if pl.Season != 0 || pl.Episode != 0 {
+					t.Fatalf("Season/Episode = %d/%d, want 0/0", pl.Season, pl.Episode)
+				}
+				if pl.DestRadix != "Panorama - 2018-05-15" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Panorama - 2018-05-15")
+				}
+				if got := filepath.Base(pl.DestDir); got != "Season 2018" {
+					t.Fatalf("season folder = %q, want %q", got, "Season 2018")
+				}
+			},
+		},
+		{
+			// The real "Show.Name.July.30.2021..." repro: month-name air date.
+			name: "ShowFile_DailyShow_MonthNameDate",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Show.Name.July.30.2021.1080p.WEB-DL.x264-GRP.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "Show Name" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "Show Name")
+				}
+				if pl.EpisodeDate != "2021-07-30" {
+					t.Fatalf("EpisodeDate = %q, want %q", pl.EpisodeDate, "2021-07-30")
+				}
+				if pl.DestRadix != "Show Name - 2021-07-30" {
+					t.Fatalf("DestRadix = %q, want %q", pl.DestRadix, "Show Name - 2021-07-30")
+				}
+				if got := filepath.Base(pl.DestDir); got != "Season 2021" {
+					t.Fatalf("season folder = %q, want %q", got, "Season 2021")
+				}
+			},
+		},
+		{
+			name: "ShowFile_DatedEpisode_ISOForm",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Nightly Report.2021-07-30.720p.WEB.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.EpisodeDate != "2021-07-30" {
+					t.Fatalf("EpisodeDate = %q, want %q", pl.EpisodeDate, "2021-07-30")
+				}
+			},
+		},
+		{
+			// Negative control: an ordinary movie with a plain release year
+			// must not be misdetected as a dated episode.
+			name: "MovieFile_PlainYear_NotMisdetectedAsDated",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Interstellar.2014.1080p.BluRay.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryMovie {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryMovie)
+				}
+				if pl.EpisodeDate != "" {
+					t.Fatalf("EpisodeDate = %q, want empty", pl.EpisodeDate)
+				}
+			},
+		},
+		{
+			// Priority control: a real SxxEyy token always wins over an
+			// incidental date-like substring elsewhere in the filename.
+			name: "ShowFile_SxxEyy_WithIncidentalDateSubstring_ParsesAsOrdinaryShow",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "Show.Name.S01E05.Uploaded.07.15.2021.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.Season != 1 || pl.Episode != 5 {
+					t.Fatalf("Season/Episode = %d/%d, want 1/5", pl.Season, pl.Episode)
+				}
+				if pl.EpisodeDate != "" {
+					t.Fatalf("EpisodeDate = %q, want empty", pl.EpisodeDate)
+				}
+			},
+		},
+		{
 			name: "NotMedia_ReturnsErrNotMedia",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
@@ -3338,6 +3490,31 @@ func TestPlan_ResolutionAware_Movie_UntaggedIncoming_TaggedExisting_HeldForRevie
 // TestPlan_ResolutionAware_Movie_UntaggedIncoming_UntaggedExisting_Duplicate:
 // an untagged incoming file that exactly matches an untagged library file is
 // still a plain duplicate skip.
+// TestPlan_DatedEpisode_DuplicateDetection proves checkShowDuplicate needs no
+// changes for a date-identified episode: identity is keyed on
+// pl.MetadataTitle as an opaque string ("<ShowName> - <YYYY-MM-DD>"), so the
+// same exact-duplicate scan that already works for SxxEyy-named episodes
+// works here too.
+func TestPlan_DatedEpisode_DuplicateDetection(t *testing.T) {
+	p := newTestProcessor(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Panorama.15-05-2018.Web-DL.540p.mp4")
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.ShowsDir, "Panorama", "Season 2018", "Panorama - 2018-05-15.mp4")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if pl.DupVerdict.Kind != DuplicateExact {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateExact", pl.DupVerdict.Kind)
+	}
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
+	}
+}
+
 func TestPlan_ResolutionAware_Movie_UntaggedIncoming_UntaggedExisting_Duplicate(t *testing.T) {
 	p := newTestProcessorResolutionAware(t)
 

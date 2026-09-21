@@ -411,3 +411,159 @@ func TestExtractShowEpisodeTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestParseAirDate(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      string
+		wantDate string
+		wantOK   bool
+	}{
+		{name: "ISODash", raw: "Show.2021-07-30.mkv", wantDate: "2021-07-30", wantOK: true},
+		{name: "ISODot", raw: "Show.2021.07.30.mkv", wantDate: "2021-07-30", wantOK: true},
+		{name: "ISOSpace", raw: "Show 2021 07 30.mkv", wantDate: "2021-07-30", wantOK: true},
+		{
+			name:     "EuropeanDash_PanoramaRepro",
+			raw:      "Panorama.15-05-2018.Web-DL.540p.H264.AAC.Subs.mp4",
+			wantDate: "2018-05-15",
+			wantOK:   true,
+		},
+		{name: "EuropeanDot", raw: "Show.15.05.2018.mkv", wantDate: "2018-05-15", wantOK: true},
+		{
+			name:     "MonthNameFullDot_DailyShowRepro",
+			raw:      "Show.Name.July.30.2021.1080p.WEB-DL.x264-GRP.mkv",
+			wantDate: "2021-07-30",
+			wantOK:   true,
+		},
+		{
+			// Single-digit day zero-padded on output.
+			name:     "MonthNameAbbreviatedSingleDigitDay",
+			raw:      "Nightly News.Jul.3.2021.mkv",
+			wantDate: "2021-07-03",
+			wantOK:   true,
+		},
+		{name: "MonthNameSpaceSeparated", raw: "Show July 3 2021.mkv", wantDate: "2021-07-03", wantOK: true},
+		{name: "InvalidDay", raw: "Show.2021-07-32.mkv", wantOK: false},
+		{name: "InvalidMonth", raw: "Show.2021-13-01.mkv", wantOK: false},
+		{name: "UnrelatedDigitRun_PlainYear", raw: "Movie.2021.1080p.mkv", wantOK: false},
+		{name: "UnrelatedDigitRun_ResolutionDims", raw: "Show.1920x1080.mkv", wantOK: false},
+		{
+			// US-style MM-DD-YYYY is deliberately not an accepted shape (see
+			// reDateEuropean's doc comment): day=07 is a valid day, but the
+			// second group "30" fails the European pattern's month range
+			// (01-12), so this correctly falls through to no match under any
+			// accepted pattern -- not a gap, a deliberate exclusion.
+			name:   "USFormatDeliberatelyExcluded",
+			raw:    "Show.07-30-2021.mkv",
+			wantOK: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, _, ok := parseAirDate(tc.raw)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if ok && got != tc.wantDate {
+				t.Errorf("parseAirDate(%q) = %q, want %q", tc.raw, got, tc.wantDate)
+			}
+		})
+	}
+}
+
+func TestHasDatedEpisodeSignal(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{name: "EuropeanDate_PanoramaRepro", raw: "Panorama.15-05-2018.Web-DL.540p.H264.AAC.Subs.mp4", want: true},
+		{name: "MonthNameDate_DailyShowRepro", raw: "Show.Name.July.30.2021.1080p.WEB-DL.x264-GRP.mkv", want: true},
+		{name: "OrdinaryMovieWithPlainYear", raw: "Interstellar.2014.1080p.BluRay.mkv", want: false},
+		{name: "OrdinaryShowSxxEyy", raw: "Fallout.S02E07.1080p.mkv", want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasDatedEpisodeSignal(tc.raw); got != tc.want {
+				t.Errorf("hasDatedEpisodeSignal(%q) = %v, want %v", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseDatedShowFromName(t *testing.T) {
+	bl := compileTestBlacklist(t, []string{
+		"2160p", "1080p", "720p", "480p", "x265", "x264", "bluray", "web[- ]?dl", "h264", "aac",
+	})
+
+	tests := []struct {
+		name         string
+		baseName     string
+		fileName     string
+		wantShowName string
+		wantDate     string
+		wantOK       bool
+	}{
+		{
+			name:         "PanoramaRepro",
+			baseName:     "drop",
+			fileName:     "Panorama.15-05-2018.Web-DL.540p.H264.AAC.Subs.mp4",
+			wantShowName: "Panorama",
+			wantDate:     "2018-05-15",
+			wantOK:       true,
+		},
+		{
+			name:         "DailyShowMonthNameRepro",
+			baseName:     "drop",
+			fileName:     "Show.Name.July.30.2021.1080p.WEB-DL.x264-GRP.mkv",
+			wantShowName: "Show Name",
+			wantDate:     "2021-07-30",
+			wantOK:       true,
+		},
+		{
+			// A real SxxEyy token takes priority -- parseShowFromName
+			// succeeds directly, so resolveShowIdentity never reaches
+			// parseDatedShowFromName in production for this shape. Verified
+			// here at the parseDatedShowFromName level in isolation: even if
+			// called directly, the incidental date-like substring doesn't
+			// stop it from still finding a (different, wrong-for-this-case)
+			// date match -- the real priority guarantee lives in
+			// resolveShowIdentity's err != nil gate, exercised at the Plan
+			// level in plan_test.go instead.
+			name:         "OrdinaryMovie_NoDate",
+			baseName:     "drop",
+			fileName:     "Interstellar.2014.1080p.BluRay.mkv",
+			wantShowName: "",
+			wantDate:     "",
+			wantOK:       false,
+		},
+		{
+			// A refused multi-episode SxxEyy chain must not be silently
+			// reinterpreted as a dated episode just because the filename
+			// also happens to contain a date-like substring.
+			name:         "RefusedMultiEpisodeChain_NotReinterpretedAsDated",
+			baseName:     "drop",
+			fileName:     "Show.S01E01.S01E02.S01E03.July.30.2021.mkv",
+			wantShowName: "",
+			wantDate:     "",
+			wantOK:       false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			showName, _, airDate, ok := parseDatedShowFromName(bl, tc.baseName, tc.fileName)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if !ok {
+				return
+			}
+			if showName != tc.wantShowName {
+				t.Errorf("showName = %q, want %q", showName, tc.wantShowName)
+			}
+			if airDate != tc.wantDate {
+				t.Errorf("airDate = %q, want %q", airDate, tc.wantDate)
+			}
+		})
+	}
+}

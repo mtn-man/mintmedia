@@ -26,6 +26,12 @@ type sortKey struct {
 	title   string
 	season  int
 	episode int
+	// dateStr is the canonical "YYYY-MM-DD" air date for a date-identified
+	// episode (see parseAirDate), "" otherwise. Compared after season/episode
+	// in less() so same-show dated episodes sort chronologically instead of
+	// by raw source-path text, which doesn't sort chronologically (e.g.
+	// "August..." sorts before "July..." alphabetically).
+	dateStr string
 	path    string
 }
 
@@ -51,6 +57,9 @@ func (a sortKey) less(b sortKey) bool {
 		if a.episode != b.episode {
 			return a.episode < b.episode
 		}
+		if a.dateStr != b.dateStr {
+			return a.dateStr < b.dateStr
+		}
 	default:
 		ap, bp := strings.ToLower(a.path), strings.ToLower(b.path)
 		if ap != bp {
@@ -69,6 +78,9 @@ func parseSortKey(blacklist []*regexp.Regexp, path string) (sortKey, error) {
 	case CategoryShow:
 		showName, _, season, episode, _, _, err := parseShowFromName(blacklist, name, name)
 		if err != nil {
+			if sn, _, dt, ok := parseDatedShowFromName(blacklist, name, name); ok {
+				return sortKey{tier: tierShow, title: sn, dateStr: dt, path: path}, nil
+			}
 			return sortKey{}, err
 		}
 		return sortKey{tier: tierShow, title: showName, season: season, episode: episode, path: path}, nil

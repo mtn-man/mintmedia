@@ -51,10 +51,30 @@ var lowerTitleWords = map[string]struct{}{
 	"with": {},
 }
 
+// monthNameToNumber maps full and 3-letter month names (lowercase) to their
+// calendar number, for parseAirDate's month-name date shape.
+var monthNameToNumber = map[string]int{
+	"jan": 1, "january": 1,
+	"feb": 2, "february": 2,
+	"mar": 3, "march": 3,
+	"apr": 4, "april": 4,
+	"may": 5,
+	"jun": 6, "june": 6,
+	"jul": 7, "july": 7,
+	"aug": 8, "august": 8,
+	"sep": 9, "september": 9,
+	"oct": 10, "october": 10,
+	"nov": 11, "november": 11,
+	"dec": 12, "december": 12,
+}
+
 // --- categorization ---------------------------------------------------------
 
 func determineCategoryFromName(name string) Category {
 	if hasShowSeasonSignal(name) && hasShowEpisodeSignal(name) {
+		return CategoryShow
+	}
+	if hasDatedEpisodeSignal(name) {
 		return CategoryShow
 	}
 	return CategoryMovie
@@ -74,6 +94,71 @@ func hasShowEpisodeSignal(name string) bool {
 		reSeasonEpisodeRange.MatchString(name) ||
 		reSeasonEpisodeX.MatchString(name) ||
 		reEpisodeWord.MatchString(name)
+}
+
+// hasDatedEpisodeSignal reports whether name carries a date-based episode
+// identifier (see parseAirDate) -- the daily/talk-show naming convention,
+// e.g. "The Daily Show.July.30.2021...". Counted in determineCategoryFromName
+// as satisfying both the season and episode signal requirements at once,
+// since a dated episode has no separate season/episode tokens to check.
+func hasDatedEpisodeSignal(name string) bool {
+	_, _, ok := parseAirDate(name)
+	return ok
+}
+
+// airDatePattern pairs a date regex with a function that pulls year/month/day
+// (as strings) out of its submatches, so parseAirDate can try several
+// accepted input shapes uniformly.
+type airDatePattern struct {
+	re      *regexp.Regexp
+	extract func(m []string) (year, month, day string, ok bool)
+}
+
+var airDatePatterns = []airDatePattern{
+	{reDateISO, func(m []string) (string, string, string, bool) { return m[1], m[2], m[3], true }},
+	{reDateEuropean, func(m []string) (string, string, string, bool) { return m[3], m[2], m[1], true }},
+	{reDateMonthName, func(m []string) (string, string, string, bool) {
+		month, ok := monthNameToNumber[strings.ToLower(m[1])]
+		if !ok {
+			return "", "", "", false
+		}
+		return m[3], fmt.Sprintf("%d", month), m[2], true
+	}},
+}
+
+// parseAirDate locates a date-based episode identifier in raw and returns it
+// normalized to canonical "YYYY-MM-DD", regardless of which accepted input
+// shape (ISO, European/scene, or month-name) matched -- see reDateISO/
+// reDateEuropean/reDateMonthName. idx is the match start (mirroring
+// parseSeasonComponent/parseEpisodeComponent's contract), used by
+// parseDatedShowOnce to slice the show title off before it. ok is false when
+// no accepted shape matches, or the matched digits don't validate to a real
+// day (1-31) / month (1-12) -- mostly redundant with the regexes' own
+// enumerated ranges, kept as the same belt-and-suspenders check
+// parseEpisodeRangeComponent already applies on top of its own captures.
+func parseAirDate(raw string) (dateStr string, idx int, ok bool) {
+	for _, p := range airDatePatterns {
+		idxs := p.re.FindStringSubmatchIndex(raw)
+		if idxs == nil {
+			continue
+		}
+		m := make([]string, len(idxs)/2)
+		for i := range m {
+			if idxs[2*i] >= 0 {
+				m[i] = raw[idxs[2*i]:idxs[2*i+1]]
+			}
+		}
+		year, month, day, extractOK := p.extract(m)
+		if !extractOK {
+			continue
+		}
+		y, mo, d := atoiSafe(year), atoiSafe(month), atoiSafe(day)
+		if y == 0 || mo < 1 || mo > 12 || d < 1 || d > 31 {
+			continue
+		}
+		return fmt.Sprintf("%04d-%02d-%02d", y, mo, d), idxs[0], true
+	}
+	return "", 0, false
 }
 
 func determineCategoryFromNames(inputName, mainName string) Category {
@@ -418,6 +503,65 @@ func parseShowCrossSeasonEpisode(blacklist []*regexp.Regexp, baseName string, fi
 	}
 
 	return showName, showYear, season, episode, true
+}
+
+// parseDatedShowOnce mirrors parseShowOnce's slice/clean/year-extract/
+// title-case pipeline for a single candidate string, but keys the split on a
+// date-based episode identifier (parseAirDate) instead of season/episode
+// markers -- there is no season/episode to extract here, only a show name
+// and a canonical air date.
+func parseDatedShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear, airDate string, ok bool) {
+	dateStr, idx, dateOK := parseAirDate(raw)
+	if !dateOK || idx <= 0 || idx > len(raw) {
+		return "", "", "", false
+	}
+
+	titlePart := raw[:idx]
+	titlePart = cleanReleaseName(blacklist, titlePart)
+	titlePart = strings.TrimSpace(titlePart)
+	if titlePart == "" {
+		return "", "", "", false
+	}
+
+	// The date token (and its own year) is already sliced out of titlePart
+	// above, so any year still found here is a genuine second marker (e.g.
+	// an unrelated upload-year tag) -- not the air date's year. findYear
+	// returns the *last* 19xx/20xx match in its input, so this ordering
+	// matters: running it on the raw string before slicing out the date
+	// would instead misread the date's own year as the show year.
+	if y := findYear(titlePart); y != "" {
+		showYear = y
+		titlePart = removeYearToken(titlePart, y)
+		titlePart = strings.TrimSpace(titlePart)
+	}
+	if titlePart == "" {
+		return "", "", "", false
+	}
+
+	showName = titleCaseSimple(titlePart)
+	if showName == "" {
+		return "", "", "", false
+	}
+	return showName, showYear, dateStr, true
+}
+
+// parseDatedShowFromName is the date-identified counterpart to
+// parseShowFromName: baseName then fileName, tried in the same order as
+// parseShowFromName's own direct strategies. There is no cross-file fallback
+// analogous to parseShowCrossSeasonEpisode -- a date token is self-sufficient
+// within one filename and never needs anchoring from a sibling folder/file
+// the way an ambiguous bare season/episode does.
+func parseDatedShowFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear, airDate string, ok bool) {
+	if detectRefusedMultiEpisode(baseName) || detectRefusedMultiEpisode(fileName) {
+		return "", "", "", false
+	}
+	if sn, sy, dt, dok := parseDatedShowOnce(blacklist, baseName); dok {
+		return sn, sy, dt, true
+	}
+	if sn, sy, dt, dok := parseDatedShowOnce(blacklist, fileName); dok {
+		return sn, sy, dt, true
+	}
+	return "", "", "", false
 }
 
 // componentPattern pairs a regex with the 1-based capture group that holds
