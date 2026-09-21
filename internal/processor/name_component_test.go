@@ -36,7 +36,7 @@ func TestParseSeasonComponent(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			season, idx, ok := parseSeasonComponent(tc.raw)
+			season, idx, _, ok := parseSeasonComponent(tc.raw)
 			if ok != tc.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
 			}
@@ -82,7 +82,7 @@ func TestParseEpisodeComponent(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			episode, idx, ok := parseEpisodeComponent(tc.raw)
+			episode, idx, _, ok := parseEpisodeComponent(tc.raw)
 			if ok != tc.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
 			}
@@ -133,7 +133,7 @@ func TestParseEpisodeRangeComponent(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			season, start, end, idx, ok := parseEpisodeRangeComponent(tc.raw)
+			season, start, end, idx, _, ok := parseEpisodeRangeComponent(tc.raw)
 			if ok != tc.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
 			}
@@ -290,6 +290,123 @@ func TestCleanReleaseName(t *testing.T) {
 		t.Run(tc.raw, func(t *testing.T) {
 			if got := cleanReleaseName(bl, tc.raw); got != tc.want {
 				t.Errorf("cleanReleaseName(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExtractShowEpisodeTitle(t *testing.T) {
+	bl := compileTestBlacklist(t, []string{
+		"2160p", "1080p", "720p", "480p", "x265", "x264", "bluray", "brrip", "web[- ]?dl",
+		"proper", "repack", "rerip", "remux", "extended", "limited", "uncut", "unrated",
+		"restored", "remastered", "theatrical", "deluxe",
+	})
+
+	tests := []struct {
+		name            string
+		stem            string
+		resolutionAware bool
+		resolution      string
+		season, episode int
+		episodeEnd      int
+		episodePart     string
+		wantTitle       string
+		wantOK          bool
+	}{
+		{
+			name:      "CleanDashTitle",
+			stem:      "Lanterns - S01E06 - Bad Optics",
+			season:    1,
+			episode:   6,
+			wantTitle: "Bad Optics",
+			wantOK:    true,
+		},
+		{
+			name:            "CleanDashTitleWithResolution",
+			stem:            "Lanterns - S01E06 - Bad Optics - 1080p",
+			resolutionAware: true,
+			resolution:      "1080p",
+			season:          1,
+			episode:         6,
+			wantTitle:       "Bad Optics",
+			wantOK:          true,
+		},
+		{
+			// resolution_aware is off, so the trailing "1080p" is never set
+			// aside -- it's just another blacklisted token, and the whole
+			// candidate is disqualified along with it.
+			name:      "ResolutionTagWithoutResolutionAware_Fallback",
+			stem:      "Lanterns - S01E06 - Bad Optics - 1080p",
+			season:    1,
+			episode:   6,
+			wantTitle: "",
+			wantOK:    false,
+		},
+		{
+			name:      "JunkyTail_Fallback",
+			stem:      "Show - S01E06 - Bad Optics PROPER",
+			season:    1,
+			episode:   6,
+			wantTitle: "",
+			wantOK:    false,
+		},
+		{
+			name:      "EmptyTail_Fallback",
+			stem:      "Show - S01E06",
+			season:    1,
+			episode:   6,
+			wantTitle: "",
+			wantOK:    false,
+		},
+		{
+			name:      "DotSeparatedTail_Fallback",
+			stem:      "Show.S01E06.Bad.Optics",
+			season:    1,
+			episode:   6,
+			wantTitle: "",
+			wantOK:    false,
+		},
+		{
+			name:       "MultiEpisodeRange_OneOpaqueTitle",
+			stem:       "Show - S01E12-E13 - Double Feature",
+			season:     1,
+			episode:    12,
+			episodeEnd: 13,
+			wantTitle:  "Double Feature",
+			wantOK:     true,
+		},
+		{
+			// Simulates a folder-hint/reconciled-batch resolution: the file's
+			// own name doesn't parse to a season/episode at all, so there's no
+			// tail to read from it.
+			name:      "FileNameDoesNotParse_Fallback",
+			stem:      "video",
+			season:    1,
+			episode:   6,
+			wantTitle: "",
+			wantOK:    false,
+		},
+		{
+			// The file's own name parses, but to a *different* episode than
+			// what was actually resolved (e.g. a forced batch-hint name) --
+			// no tail is trusted in that case either.
+			name:      "FileNameParsesToDifferentEpisode_Fallback",
+			stem:      "Show - S01E07 - Something",
+			season:    1,
+			episode:   6,
+			wantTitle: "",
+			wantOK:    false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			title, ok := extractShowEpisodeTitle(bl, tc.resolutionAware, tc.resolution, tc.stem, tc.season, tc.episode, tc.episodeEnd, tc.episodePart)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if title != tc.wantTitle {
+				t.Errorf("title = %q, want %q", title, tc.wantTitle)
 			}
 		})
 	}

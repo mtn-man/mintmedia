@@ -101,6 +101,17 @@ type Naming struct {
 	// from the source filename to the final sorted name as a " - <res>" suffix
 	// (e.g. "Movie (2020) - 1080p.mkv"). Off by default.
 	ResolutionAware bool `toml:"resolution_aware"`
+
+	// PreserveEpisodeTitles, when true, recognizes an already-clean episode
+	// title trailing the season/episode token in a show's source filename
+	// (e.g. "Bad Optics" in "Lanterns - S01E06 - Bad Optics.mkv") and keeps
+	// it in the sorted name and embedded metadata tag instead of discarding
+	// it. Only a filename that already uses the " - " separator (the
+	// Plex/Jellyfin-recommended naming convention) with no other release-tag
+	// text qualifies -- a dot/underscore-style scene name, or one with any
+	// other release-tag junk trailing the title, is left exactly as today
+	// (no title kept). Off by default.
+	PreserveEpisodeTitles bool `toml:"preserve_episode_titles"`
 }
 
 // Resolved contains normalized, validated, and parsed forms other packages should use.
@@ -137,6 +148,9 @@ type Resolved struct {
 
 	// ResolutionAware mirrors naming.resolution_aware.
 	ResolutionAware bool
+
+	// PreserveEpisodeTitles mirrors naming.preserve_episode_titles.
+	PreserveEpisodeTitles bool
 
 	// Directories that didn't exist before this Load call and were created
 	// because auto_create_missing_dirs is true. Empty when nothing was created.

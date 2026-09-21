@@ -98,6 +98,8 @@ Stranger.Things.S04E07.en.srt  →  Stranger Things - S04E07.en.srt
 
 Set `resolution_aware = true` under `[naming]` to keep the release resolution in the sorted name as a ` - <res>` suffix (`Interstellar (2014) - 1080p.mkv`, `Breaking Bad - S03E07 - 1080p.mkv`). Off by default; see [Configuration](docs/configuration.md#keeping-the-resolution-in-the-filename).
 
+Set `preserve_episode_titles = true` under `[naming]` to keep an already-clean episode title instead of discarding it (`Show Name - S01E06 - Episode Title.mkv` sorts in as-is). Off by default; see [Configuration](docs/configuration.md#keeping-already-clean-episode-titles).
+
 ### Library awareness
 
 mintmedia scans your existing library before choosing a destination. For shows, a new episode that parses as `Survivor` is routed to an existing `Survivor (2000)` folder instead of creating a duplicate -- see [Show folder matching](docs/show-folder-matching.md) for the exact rules. For movies, spelling and punctuation variants of a title already in your library (e.g. `Leon` vs. an existing `Léon (1994)` folder) are recognized as the same movie, not filed as a new one. Either way, if mintmedia is ever unsure, it won't guess -- it skips the file and reports it so you can sort it manually.

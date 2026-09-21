@@ -166,13 +166,13 @@ func deriveShowHintFromFolder(blacklist []*regexp.Regexp, folderName string) (sh
 func parseShowOnce(blacklist []*regexp.Regexp, raw string) (showName, showYear string, season, episode, episodeEnd int, episodePart string, ok bool) {
 	var seasonIdx, episodeIdx int
 	var seasonOK, episodeOK bool
-	if s, start, end, idx, rangeOK := parseEpisodeRangeComponent(raw); rangeOK {
+	if s, start, end, idx, _, rangeOK := parseEpisodeRangeComponent(raw); rangeOK {
 		season, episode, episodeEnd = s, start, end
 		seasonIdx, episodeIdx = idx, idx
 		seasonOK, episodeOK = true, true
 	} else {
-		season, seasonIdx, seasonOK = parseSeasonComponent(raw)
-		episode, episodeIdx, episodeOK = parseEpisodeComponent(raw)
+		season, seasonIdx, _, seasonOK = parseSeasonComponent(raw)
+		episode, episodeIdx, _, episodeOK = parseEpisodeComponent(raw)
 		if episodeOK {
 			episodePart = episodePartLetter(raw)
 		}
@@ -290,26 +290,86 @@ func parseBareSeasonEpisode(hint showHint, fileName string) (season, episode int
 	return season, episode, found
 }
 
-func parseSeasonEpisode(raw string) (season, episode, episodeEnd int, episodePart string, ok bool) {
+// tokenEnd is the end of whichever episode-token match was used -- the end-
+// side counterpart to the title-cut logic elsewhere (which uses the token's
+// *start*), letting a caller read whatever text trails the token, e.g. an
+// already-clean embedded episode title. Named distinctly from episodeEnd
+// (the range's end *episode number*) to avoid confusing the two.
+func parseSeasonEpisode(raw string) (season, episode, episodeEnd int, episodePart string, tokenEnd int, ok bool) {
 	if detectRefusedMultiEpisode(raw) {
-		return 0, 0, 0, "", false
+		return 0, 0, 0, "", 0, false
 	}
 
-	if s, start, end, _, rangeOK := parseEpisodeRangeComponent(raw); rangeOK {
-		return s, start, end, "", true
+	if s, start, end, _, matchEnd, rangeOK := parseEpisodeRangeComponent(raw); rangeOK {
+		return s, start, end, "", matchEnd, true
 	}
 
-	season, _, seasonOK := parseSeasonComponent(raw)
-	episode, _, episodeOK := parseEpisodeComponent(raw)
+	season, _, seasonEnd, seasonOK := parseSeasonComponent(raw)
+	episode, _, episodeCompEnd, episodeOK := parseEpisodeComponent(raw)
 	if !seasonOK || !episodeOK {
-		return 0, 0, 0, "", false
+		return 0, 0, 0, "", 0, false
 	}
 
 	if season < 0 || episode < 0 {
-		return 0, 0, 0, "", false
+		return 0, 0, 0, "", 0, false
 	}
 
-	return season, episode, 0, episodePartLetter(raw), true
+	return season, episode, 0, episodePartLetter(raw), max(seasonEnd, episodeCompEnd), true
+}
+
+// extractShowEpisodeTitle recognizes an already-clean trailing episode title
+// on a show filename, e.g. "Bad Optics" from
+// "Lanterns - S01E06 - Bad Optics.mkv", and returns it verbatim -- never
+// re-cased, unlike showName. stem is the main file's basename with its
+// extension already trimmed off.
+//
+// It re-parses stem independently of however season/episode/episodeEnd/
+// episodePart were actually resolved (a folder hint, the cross-season
+// fallback, or a bare-digit token all bypass the file's own name entirely):
+// if stem's own parse doesn't produce an exact match against the values
+// already resolved for pl, there is no title tail to read from this file's
+// name, and ok is false.
+//
+// Deliberately strict rather than attempting general release-tag salvage:
+// the tail must open with the " - " separator (the Plex/Jellyfin-recommended
+// naming convention, which mintmedia's own output already follows -- a
+// dot/underscore-style scene name like "S01E06.Bad.Optics.mkv" does not
+// qualify), and once any resolution qualifier is set aside, it must contain
+// no recognized release-tag junk at all -- any junk anywhere in it means ok
+// is false rather than an attempted partial salvage.
+func extractShowEpisodeTitle(
+	blacklist []*regexp.Regexp,
+	resolutionAware bool,
+	resolution string,
+	stem string,
+	season, episode, episodeEnd int,
+	episodePart string,
+) (title string, ok bool) {
+	s, e, ee, ep, tokenEnd, parseOK := parseSeasonEpisode(stem)
+	if !parseOK || s != season || e != episode || ee != episodeEnd || ep != episodePart {
+		return "", false
+	}
+
+	tail := stem[tokenEnd:]
+	if !strings.HasPrefix(tail, resolutionSuffixSep) {
+		return "", false
+	}
+	candidate := strings.TrimPrefix(tail, resolutionSuffixSep)
+
+	if resolutionAware && resolution != "" {
+		candidate = stripTrailingResolution(candidate)
+	}
+
+	if lastBlacklistMatchEnd(blacklist, candidate) >= 0 {
+		return "", false
+	}
+
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return "", false
+	}
+
+	return candidate, true
 }
 
 // parseShowCrossSeasonEpisode is the fallback used when the season and
@@ -319,14 +379,14 @@ func parseSeasonEpisode(raw string) (season, episode, episodeEnd int, episodePar
 // all (season comes from the folder), so reSeasonEpisodeRange wouldn't match
 // it anyway. Accepted gap, same as parseBareSeasonEpisode's documented gaps.
 func parseShowCrossSeasonEpisode(blacklist []*regexp.Regexp, baseName string, fileName string) (showName, showYear string, season, episode int, ok bool) {
-	episode, episodeIdx, episodeOK := parseEpisodeComponent(fileName)
+	episode, episodeIdx, _, episodeOK := parseEpisodeComponent(fileName)
 	if !episodeOK {
 		return "", "", 0, 0, false
 	}
 
-	season, _, seasonOK := parseSeasonComponent(baseName)
+	season, _, _, seasonOK := parseSeasonComponent(baseName)
 	if !seasonOK {
-		season, _, seasonOK = parseSeasonComponent(fileName)
+		season, _, _, seasonOK = parseSeasonComponent(fileName)
 	}
 	if !seasonOK {
 		return "", "", 0, 0, false
@@ -387,9 +447,10 @@ var (
 
 // matchComponent tries each pattern in order, returning the digit value of
 // the first pattern whose capture group parses to a valid (non-negative)
-// number. idx is the start of the whole match (not the capture group),
-// since callers use it to slice the show title off before the marker.
-func matchComponent(raw string, patterns []componentPattern) (value int, idx int, ok bool) {
+// number. idx is the start of the whole match (not the capture group), since
+// callers use it to slice the show title off before the marker; end is the
+// match's end, used to find where a trailing episode title would begin.
+func matchComponent(raw string, patterns []componentPattern) (value int, idx int, end int, ok bool) {
 	for _, p := range patterns {
 		idxs := p.re.FindStringSubmatchIndex(raw)
 		gi := p.group * 2
@@ -398,17 +459,17 @@ func matchComponent(raw string, patterns []componentPattern) (value int, idx int
 		}
 		value = atoiSafe(raw[idxs[gi]:idxs[gi+1]])
 		if value >= 0 {
-			return value, idxs[0], true
+			return value, idxs[0], idxs[1], true
 		}
 	}
-	return 0, 0, false
+	return 0, 0, 0, false
 }
 
-func parseSeasonComponent(raw string) (season int, idx int, ok bool) {
+func parseSeasonComponent(raw string) (season int, idx int, end int, ok bool) {
 	return matchComponent(raw, seasonPatterns)
 }
 
-func parseEpisodeComponent(raw string) (episode int, idx int, ok bool) {
+func parseEpisodeComponent(raw string) (episode int, idx int, end int, ok bool) {
 	return matchComponent(raw, episodePatterns)
 }
 
@@ -480,13 +541,16 @@ func detectRefusedMultiEpisode(raw string) bool {
 // detectRefusedMultiEpisode before reaching here, so none of the shapes it
 // refuses (mismatched-season pairs, non-consecutive "&"/"and"/x-form pairs,
 // 3+ chains) ever fall through to the single-token components.
-func parseEpisodeRangeComponent(raw string) (season, start, end, idx int, ok bool) {
+// matchEnd is the end of the whole match (distinct from end, the range's end
+// *episode number* -- naming these the same would be a real trap for a
+// caller trying to slice a trailing episode title off after the token).
+func parseEpisodeRangeComponent(raw string) (season, start, end, idx, matchEnd int, ok bool) {
 	if idxs := reSeasonEpisodeRange.FindStringSubmatchIndex(raw); idxs != nil {
 		season = atoiSafe(raw[idxs[2]:idxs[3]])
 		start = atoiSafe(raw[idxs[4]:idxs[5]])
 		end = atoiSafe(raw[idxs[6]:idxs[7]])
 		if end > start {
-			return season, start, end, idxs[0], true
+			return season, start, end, idxs[0], idxs[1], true
 		}
 	}
 
@@ -496,7 +560,7 @@ func parseEpisodeRangeComponent(raw string) (season, start, end, idx int, ok boo
 		season2 := atoiSafe(raw[idxs[6]:idxs[7]])
 		end = atoiSafe(raw[idxs[8]:idxs[9]])
 		if season1 == season2 && end > start {
-			return season1, start, end, idxs[0], true
+			return season1, start, end, idxs[0], idxs[1], true
 		}
 	}
 
@@ -506,7 +570,7 @@ func parseEpisodeRangeComponent(raw string) (season, start, end, idx int, ok boo
 		season2 := atoiSafe(raw[idxs[6]:idxs[7]])
 		end = atoiSafe(raw[idxs[8]:idxs[9]])
 		if season1 == season2 && end == start+1 {
-			return season1, start, end, idxs[0], true
+			return season1, start, end, idxs[0], idxs[1], true
 		}
 	}
 
@@ -515,11 +579,11 @@ func parseEpisodeRangeComponent(raw string) (season, start, end, idx int, ok boo
 		start = atoiSafe(raw[idxs[4]:idxs[5]])
 		end = atoiSafe(raw[idxs[6]:idxs[7]])
 		if end == start+1 {
-			return season, start, end, idxs[0], true
+			return season, start, end, idxs[0], idxs[1], true
 		}
 	}
 
-	return 0, 0, 0, 0, false
+	return 0, 0, 0, 0, 0, false
 }
 
 func parseMovieFromName(blacklist []*regexp.Regexp, baseName string, fileName string) (title string, year string, err error) {

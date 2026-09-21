@@ -117,6 +117,9 @@ media_tag_blacklist = []
 # not the video stream. Off by default.
 resolution_aware = false
 
+# Keep an already-clean trailing episode title instead of discarding it. Off by default; see docs/configuration.md.
+preserve_episode_titles = false
+
 [torrent]
 # Keep the section present for discoverability, but default it OFF.
 enabled = false

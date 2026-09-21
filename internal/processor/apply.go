@@ -94,6 +94,12 @@ func tagForMove(ctx context.Context, p *processorImpl, pl Plan) (mainSource stri
 	if titleTag == "" {
 		titleTag = pl.DestRadix
 	}
+	// EpisodeTitle is deliberately kept out of MetadataTitle itself (see
+	// Plan.MetadataTitle's doc) so it's folded into the embedded tag here,
+	// after the identity-comparison value is already settled.
+	if pl.EpisodeTitle != "" {
+		titleTag += resolutionSuffixSep + pl.EpisodeTitle
+	}
 
 	logConsoleInfo(p, logging.EventProcessorMetadataTitleWriteStarted,
 		fmt.Sprintf("TAGGING  metadata title for %s (might take a moment)...", filepath.Base(pl.MainSourcePath)),

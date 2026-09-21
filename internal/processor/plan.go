@@ -417,7 +417,7 @@ func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint
 	showName, showYear, season, episode, episodeEnd, episodePart, err = parseShowFromName(p.blacklist, folderBaseName, mainBaseName)
 	inputHadYear = err == nil && showYear != ""
 	if err != nil && effHint.ok && effHint.name != "" {
-		if s, e, ee, ep, ok := parseSeasonEpisode(mainBaseName); ok {
+		if s, e, ee, ep, _, ok := parseSeasonEpisode(mainBaseName); ok {
 			showName = effHint.name
 			showYear = effHint.year
 			season = s
@@ -529,6 +529,13 @@ func planForMain(
 		}
 		pl.DestRadix = fmt.Sprintf("%s - S%02d%s", displayShowName, season, formatEpisodeTag(episode, episodeEnd, episodePart))
 		pl.MetadataTitle = pl.DestRadix
+		if p.cfg.PreserveEpisodeTitles {
+			stem := strings.TrimSuffix(pl.MainBaseName, pl.MainExt)
+			if title, ok := extractShowEpisodeTitle(p.blacklist, p.cfg.ResolutionAware, pl.Resolution, stem, season, episode, episodeEnd, episodePart); ok {
+				pl.EpisodeTitle = title
+				pl.DestRadix += resolutionSuffixSep + title
+			}
+		}
 		if p.cfg.ResolutionAware && pl.Resolution != "" {
 			pl.DestRadix += resolutionSuffixSep + pl.Resolution
 		}

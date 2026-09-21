@@ -68,6 +68,30 @@ film in the same folder:
 mintmedia only ever **adds** resolutions -- it never deletes or replaces a file
 already in the library, so pruning an older/lower resolution is left to you.
 
+## Keeping already-clean episode titles
+
+`preserve_episode_titles = false` (the default) discards any text trailing the
+season/episode token in a show's filename. Set `preserve_episode_titles =
+true` to keep it when it's already clean:
+
+```
+Show Name - S01E06 - Episode Title.mkv        -> Show Name - S01E06 - Episode Title.mkv
+Show Name - S01E06 - Episode Title - 1080p.mkv -> Show Name - S01E06 - Episode Title - 1080p.mkv (with resolution_aware also on)
+```
+
+This is deliberately strict, not a general release-tag cleanup: the trailing
+text must use the `" - "` separator (the naming convention Plex and Jellyfin
+themselves recommend, and the one mintmedia's own output already follows),
+and it must contain none of the release-tag junk mintmedia already strips
+elsewhere (resolution, codec, source, `PROPER`/`REPACK`, etc.). A dot- or
+underscore-separated scene name
+(`Show.Name.S01E06.Episode.Title.mkv`), or a trailing title with any junk
+still attached, is left exactly as it is today -- no title kept, no partial
+guess. When combined with `resolution_aware`, the title is inserted before
+the resolution suffix, and duplicate detection still matches on season and
+episode alone, so a title-free episode already in your library is still
+recognized as the same episode as a newly-titled re-download of it.
+
 Once a movie's canonically-named folder (`Title (Year)/`) exists, new resolutions
 route into it directly; mintmedia won't reconcile it against a differently-spelled
 folder (`Amelie (2001)/` vs `Amélie (2001)/`) of the same film that already

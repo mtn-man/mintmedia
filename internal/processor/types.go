@@ -112,7 +112,21 @@ type Plan struct {
 	// embedded container "title" tag, so an enabled ResolutionAware doesn't
 	// push a "- 1080p" suffix into file metadata. Empty on plans built before
 	// this field existed; Apply falls back to DestRadix then.
+	//
+	// For shows this deliberately never includes EpisodeTitle: it also
+	// doubles as the identity string checkDuplicateWithResolution compares
+	// on, and folding the episode title in would break that comparison for
+	// an already-sorted episode that predates PreserveEpisodeTitles being
+	// enabled. Apply appends EpisodeTitle on top of this when building the
+	// actual embedded tag value.
 	MetadataTitle string
+
+	// EpisodeTitle is an already-clean trailing episode title recognized on
+	// the source filename (e.g. "Bad Optics"), only ever set for
+	// CategoryShow when Config.PreserveEpisodeTitles is on. Empty when the
+	// feature is off or no clean title was found -- see
+	// extractShowEpisodeTitle.
+	EpisodeTitle string
 
 	// Associated files to move (if any)
 	Associated []Move
@@ -264,6 +278,11 @@ type Config struct {
 	// sorted filename radix as a " - <res>" suffix (e.g. "Movie (2020) - 1080p").
 	// Off by default; see naming.resolution_aware.
 	ResolutionAware bool
+
+	// PreserveEpisodeTitles, when true, keeps an already-clean episode title
+	// trailing the season/episode token in a show's source filename instead
+	// of discarding it. Off by default; see naming.preserve_episode_titles.
+	PreserveEpisodeTitles bool
 }
 
 // NoMainMediaFoundError wraps ErrNoMainMediaFound and carries depth context.
