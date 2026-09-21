@@ -3380,6 +3380,55 @@ func TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution(t *testing.T) {
 	}
 }
 
+// TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution_CrossContainer
+// reproduces the real-world case that surfaced this bug: an existing episode
+// in one container (.mkv) must still be recognized as the same episode as an
+// incoming re-download in a different container (.mp4) -- container format
+// was never part of a show's identity, but the scan used to filter out any
+// existing file whose extension didn't exactly equal the incoming file's.
+func TestPlan_ResolutionAware_Duplicate_ShowDifferentResolution_CrossContainer(t *testing.T) {
+	p := newTestProcessorResolutionAware(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Lanterns.S01E06.2160p.AMZN.WEB-DL.DV.HDR10+[Ben The Men].mp4")
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.ShowsDir, "Lanterns", "Season 01", "Lanterns - S01E06 - 1080p.mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true (cross-container match must still be recognized)")
+	}
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
+	}
+}
+
+// TestPlan_ResolutionAware_Duplicate_ShowSameResolution_CrossContainer is the
+// same-resolution counterpart: a same-resolution re-download in a different
+// container is still an exact duplicate, not just a resolution-mismatch skip.
+func TestPlan_ResolutionAware_Duplicate_ShowSameResolution_CrossContainer(t *testing.T) {
+	p := newTestProcessorResolutionAware(t)
+
+	src := filepath.Join(p.cfg.DropFolder, "Lanterns.S01E06.1080p.AMZN.WEB-DL.mp4")
+	writeFile(t, src, "dummy")
+	existing := filepath.Join(p.cfg.ShowsDir, "Lanterns", "Season 01", "Lanterns - S01E06 - 1080p.mkv")
+	writeFile(t, existing, "already here")
+
+	pl, err := planOne(t, p, src)
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if !pl.DupVerdict.Skip() {
+		t.Fatalf("DupVerdict.Skip() = false, want true (same-resolution cross-container match)")
+	}
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
+	}
+}
+
 // TestPlan_ResolutionAware_Duplicate_DifferentEpisodeNotFlagged ensures the
 // directory scan doesn't false-positive against an unrelated sibling. Uses
 // the show branch, which (unlike movies) has no fuzzy folder-name fallback to
@@ -3586,6 +3635,9 @@ func TestScanMovieFolderForResolution(t *testing.T) {
 		DestRadix:     "Movie (2020)",
 		MetadataTitle: "Movie (2020)",
 	}
+	// .srt/.jpg are deliberately absent -- a sidecar must never be mistaken
+	// for a variant just because the ext-equality-to-incoming filter is gone.
+	mainExtSet := map[string]struct{}{".mkv": {}, ".mp4": {}}
 
 	cls := func(sc movieResScan) string {
 		switch {
@@ -3610,7 +3662,12 @@ func TestScanMovieFolderForResolution(t *testing.T) {
 		{"tagged: different-res only", plTagged, []string{"Movie (2020) - 1080p.mkv"}, "variant"},
 		{"tagged: untagged sibling", plTagged, []string{"Movie (2020).mkv"}, "untagged"},
 		{"tagged: case-insensitive exact", plTagged, []string{"movie (2020) - 2160p.mkv"}, "exact"},
-		{"tagged: wrong extension ignored", plTagged, []string{"Movie (2020) - 1080p.mp4"}, "none"},
+		// Container format isn't part of a movie's identity -- a same-resolution
+		// copy in a different container is still an exact match, and a
+		// different-resolution copy in a different container is still a variant.
+		{"tagged: same res, different container is still exact", plTagged, []string{"Movie (2020) - 2160p.mp4"}, "exact"},
+		{"tagged: different res, different container is still a variant", plTagged, []string{"Movie (2020) - 1080p.mp4"}, "variant"},
+		{"tagged: non-media sidecar with matching stem ignored", plTagged, []string{"Movie (2020) - 1080p.srt"}, "none"},
 		{"tagged: unrelated media only", plTagged, []string{"Something Else.mkv"}, "none"},
 		{"tagged: mid-name token not stripped", plTagged, []string{"Movie (2020) - 1080p - Directors Cut.mkv"}, "none"},
 		{"untagged: exact untagged present", plUntagged, []string{"Movie (2020).mkv"}, "exact"},
@@ -3623,7 +3680,7 @@ func TestScanMovieFolderForResolution(t *testing.T) {
 			for _, f := range c.files {
 				writeFile(t, filepath.Join(dir, f), "x")
 			}
-			sc, err := scanMovieFolderForResolution(dir, c.pl)
+			sc, err := scanMovieFolderForResolution(dir, c.pl, mainExtSet)
 			if err != nil {
 				t.Fatalf("scanMovieFolderForResolution: %v", err)
 			}
@@ -3639,7 +3696,7 @@ func TestScanMovieFolderForResolution(t *testing.T) {
 
 func TestScanMovieFolderForResolution_MissingDir(t *testing.T) {
 	pl := &Plan{Category: CategoryMovie, MainExt: ".mkv", DestRadix: "X", MetadataTitle: "X"}
-	sc, err := scanMovieFolderForResolution(filepath.Join(t.TempDir(), "nope"), pl)
+	sc, err := scanMovieFolderForResolution(filepath.Join(t.TempDir(), "nope"), pl, map[string]struct{}{".mkv": {}})
 	if err != nil {
 		t.Fatalf("err = %v, want nil for a missing dir", err)
 	}
@@ -3821,10 +3878,15 @@ func TestPlan_ResolutionAware_MovieDecisionMatrix(t *testing.T) {
 			wantDestBase: "Interstellar (2014) - 2160p.mkv",
 		},
 		{
-			name:         "different extension sibling ignored -> sort in",
-			incoming:     "Interstellar.2014.2160p.BluRay.mkv",
-			existing:     []string{"Interstellar (2014) - 1080p.mp4"},
-			wantDestBase: "Interstellar (2014) - 2160p.mkv",
+			// Container format isn't part of a movie's identity -- a
+			// different-resolution sibling in a different container is still
+			// recognized and sorted in alongside it, same as the same-container
+			// case above.
+			name:              "different resolution, different extension -> sort alongside",
+			incoming:          "Interstellar.2014.2160p.BluRay.mkv",
+			existing:          []string{"Interstellar (2014) - 1080p.mp4"},
+			wantDestBase:      "Interstellar (2014) - 2160p.mkv",
+			wantAlongsideBase: "Interstellar (2014) - 1080p.mp4",
 		},
 		{
 			name:     "case-only on-disk difference -> duplicate",
