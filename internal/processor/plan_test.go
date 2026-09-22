@@ -1151,6 +1151,43 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// Same double-episode shape as ShowFile_EpisodeRange_DashForm_MultiEpisode,
+			// but with a period between season and episode ("S5.E12-E13")
+			// rather than no separator at all -- reSeasonEpisodeRange used to
+			// only tolerate a space there (unlike reSeasonEpisode, which
+			// already tolerated a period), so this used to fail to match at
+			// all and silently fall through to a single-episode parse that
+			// kept only E12.
+			name: "ShowFile_EpisodeRange_PeriodForm_MultiEpisode",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Magicians - S5.E12-E13 - Some Title.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				if pl.Category != CategoryShow {
+					t.Fatalf("Category = %q, want %q", pl.Category, CategoryShow)
+				}
+				if pl.ShowName != "The Magicians" {
+					t.Fatalf("ShowName = %q, want %q", pl.ShowName, "The Magicians")
+				}
+				if pl.Season != 5 || pl.Episode != 12 || pl.EpisodeEnd != 13 {
+					t.Fatalf("Season/Episode/EpisodeEnd = %d/%d/%d, want 5/12/13", pl.Season, pl.Episode, pl.EpisodeEnd)
+				}
+				if !strings.Contains(pl.DestRadix, "S05E12-E13") {
+					t.Fatalf("DestRadix = %q, want it to contain %q", pl.DestRadix, "S05E12-E13")
+				}
+			},
+		},
+		{
 			// Same double-episode shape as the case above, but with both
 			// season and episode repeated in full ("S03E12.S03E13") rather
 			// than sharing a single "S01E12-E13" prefix -- a separate release
