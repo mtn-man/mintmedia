@@ -91,6 +91,16 @@ var (
 	// captures needed, same reasoning as reMultiEpisodeChain.
 	reMultiEpisodeXChain = regexp.MustCompile(`(?i)(?:^|[^0-9x])[0-9]{1,2}(?:x[0-9]{2,3}){3,}(?:[^0-9]|$)`)
 
+	// Matches a season stated once followed by three-or-more chained "-Eyy"
+	// episode segments, e.g. "S01E12-E13-E14", "S01E12E13E14" -- the
+	// compact-chain counterpart to reMultiEpisodeXChain, for the SxxEyy
+	// convention instead of x-form. Checked before reSeasonEpisodeRange is
+	// ever tried (detectRefusedMultiEpisode), same reasoning as
+	// reMultiEpisodeXChain: without it, a 3+ chain's first two tokens read as
+	// a valid two-episode range and the trailing episode(s) are silently
+	// dropped.
+	reMultiEpisodeRangeChain = regexp.MustCompile(`(?i)\bS\d{1,2}[ .]?E\d{1,3}(?:-?E\d{1,3}){2,}\b`)
+
 	// Matches season range tokens, e.g. "S01-S04", "S1-S4", "S01-04".
 	reSeasonRange = regexp.MustCompile(`(?i)\bS(\d{1,2})\s*-\s*S?(\d{1,2})\b`)
 

@@ -173,6 +173,8 @@ func TestDetectRefusedMultiEpisode(t *testing.T) {
 		{name: "ConsecutiveXFormPair_NotRefused", raw: "Show.Name.1x02x03.Title.mkv", want: false},
 		{name: "NonConsecutiveXFormPair_Refused", raw: "Show.Name.1x02x04.Title.mkv", want: true},
 		{name: "ThreeChain_XForm_Refused", raw: "Show_Name.1x02x03x04.HDTV_XViD_Etc-Group.mkv", want: true},
+		{name: "ThreeChain_DashSeparator_Refused", raw: "Show.S03E12-E13-E14.Title.mkv", want: true},
+		{name: "ThreeChain_NoSeparator_Refused", raw: "Show.S03E12E13E14.Title.mkv", want: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -249,9 +251,26 @@ func compileTestBlacklist(t *testing.T, patterns []string) []*regexp.Regexp {
 	t.Helper()
 	bl := make([]*regexp.Regexp, len(patterns))
 	for i, p := range patterns {
-		bl[i] = regexp.MustCompile("(?i)" + p)
+		re, err := compileBlacklistPattern(p)
+		if err != nil {
+			t.Fatalf("compileBlacklistPattern(%q): %v", p, err)
+		}
+		bl[i] = re
 	}
 	return bl
+}
+
+func TestCompileBlacklistPattern(t *testing.T) {
+	re, err := compileBlacklistPattern("aac")
+	if err != nil {
+		t.Fatalf("compileBlacklistPattern(%q): %v", "aac", err)
+	}
+	if re.MatchString("Isaac") {
+		t.Errorf("pattern %q matched %q as a bare substring, want whole-word only", "aac", "Isaac")
+	}
+	if !re.MatchString("Movie.Name.AAC.mkv") {
+		t.Errorf("pattern %q should match a standalone token", "aac")
+	}
 }
 
 func TestCleanReleaseName(t *testing.T) {
@@ -284,6 +303,13 @@ func TestCleanReleaseName(t *testing.T) {
 		{
 			raw:  "Movie.Name.EXTENDED.UNRATED.REMUX.x264-GROUP",
 			want: "Movie Name",
+		},
+		{
+			// A blacklist word that also occurs as legitimate trailing title
+			// text ("Remastered" here) must not truncate the real title text
+			// that follows it -- only a genuine trailing metadata block does.
+			raw:  "The.Great.Escape.Remastered.Anniversary.Cut",
+			want: "The Great Escape Anniversary Cut",
 		},
 	}
 	for _, tc := range tests {
