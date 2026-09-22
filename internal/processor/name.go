@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"golang.org/x/text/cases"
@@ -625,15 +626,16 @@ func parseEpisodeComponent(raw string) (episode int, idx int, end int, ok bool) 
 // parsing. Each clause here is a distinct known-bad shape; more may be added
 // over time as they're identified.
 //
-// reMultiEpisodeChain and reMultiEpisodeXChain are checked first, and must
-// be: a 3+ chain's first two tokens (e.g. "S01E00 & S01E01" out of
-// "S01E00 & S01E01 & S01E02", or "02x03" out of "1x02x03x04") would
-// otherwise read as a perfectly valid two-token pair to the clauses below --
-// for the x-form chain this is worse than just dropping an episode, since
-// the second token gets misread as the season number entirely (see
-// reMultiEpisodeXChain's doc).
+// reMultiEpisodeChain, reMultiEpisodeXChain, and reMultiEpisodeRangeChain are
+// checked first, and must be: a 3+ chain's first two tokens (e.g.
+// "S01E00 & S01E01" out of "S01E00 & S01E01 & S01E02", "02x03" out of
+// "1x02x03x04", or "S01E12-E13" out of "S01E12-E13-E14") would otherwise read
+// as a perfectly valid two-token pair to the clauses below -- for the x-form
+// chain this is worse than just dropping an episode, since the second token
+// gets misread as the season number entirely (see reMultiEpisodeXChain's
+// doc).
 func detectRefusedMultiEpisode(raw string) bool {
-	if reMultiEpisodeChain.MatchString(raw) || reMultiEpisodeXChain.MatchString(raw) {
+	if reMultiEpisodeChain.MatchString(raw) || reMultiEpisodeXChain.MatchString(raw) || reMultiEpisodeRangeChain.MatchString(raw) {
 		return true
 	}
 
@@ -808,14 +810,14 @@ func cleanReleaseName(blacklist []*regexp.Regexp, raw string) string {
 	s = strings.ReplaceAll(s, "-", " ")
 	s = strings.ReplaceAll(s, "\x00", "-")
 
-	// Once title text gives way to known quality/source/codec metadata,
-	// whatever follows is never real title content, whether or not it's
-	// itself a recognized tag -- so truncate at the last blacklist match,
-	// the same truncation the year already gets. Normally masked because a
-	// year truncates the title before this ever runs; without a year (the
+	// Once title text gives way to a genuine trailing run of quality/source/
+	// codec metadata, whatever follows is never real title content, whether
+	// or not it's itself a recognized tag -- so truncate at the start of that
+	// run, the same truncation the year already gets. Normally masked because
+	// a year truncates the title before this ever runs; without a year (the
 	// only case this matters for), a bare non-bracketed release-group tag
 	// (e.g. "YIFY") would otherwise survive into the title untouched.
-	if cut := lastBlacklistMatchEnd(blacklist, s); cut >= 0 {
+	if cut := trailingReleaseTagStart(blacklist, s); cut >= 0 {
 		s = s[:cut]
 	}
 
@@ -830,7 +832,10 @@ func cleanReleaseName(blacklist []*regexp.Regexp, raw string) string {
 }
 
 // lastBlacklistMatchEnd returns the end index (in s) of whichever blacklist
-// pattern's match ends furthest to the right, or -1 if none match.
+// pattern's match ends furthest to the right, or -1 if none match. Used only
+// as a boolean "does any junk appear anywhere in s" check by
+// extractShowEpisodeTitle -- for truncating a title at a trailing run of
+// release metadata, see trailingReleaseTagStart instead.
 func lastBlacklistMatchEnd(blacklist []*regexp.Regexp, s string) int {
 	end := -1
 	for _, re := range blacklist {
@@ -845,6 +850,56 @@ func lastBlacklistMatchEnd(blacklist []*regexp.Regexp, s string) int {
 	return end
 }
 
+// reTrailingToken splits a string into whitespace-delimited tokens while
+// keeping each token's byte offset, so trailingReleaseTagStart can walk them
+// backward and still report a cut position in the original string.
+var reTrailingToken = regexp.MustCompile(`\S+`)
+
+// matchesAnyBlacklist reports whether any blacklist pattern matches
+// somewhere within tok (not necessarily the whole token -- a compound token
+// like "x264-GROUP" still counts as a match on "x264").
+func matchesAnyBlacklist(blacklist []*regexp.Regexp, tok string) bool {
+	for _, re := range blacklist {
+		if re.MatchString(tok) {
+			return true
+		}
+	}
+	return false
+}
+
+// trailingReleaseTagStart returns the start index of a trailing run of
+// release-tag metadata at the end of s (e.g. "1080p BrRip x264 YIFY"), or -1
+// if s doesn't end in one. Unlike lastBlacklistMatchEnd -- used elsewhere only
+// as a boolean "any junk anywhere" check -- this walks s backward token by
+// token so an isolated blacklist word mid-title ("Remastered" in "The Great
+// Escape Remastered Anniversary Cut") doesn't truncate real trailing title
+// text that follows it. A single unrecognized trailing token is tolerated
+// (the bare release-group-tag case, e.g. "YIFY" after "1080p.BrRip.x264") as
+// long as a real blacklist match follows it further back; two unrecognized
+// tokens in a row with no blacklist match yet means there's no metadata block
+// here at all, just ordinary title text -- abort with no truncation.
+func trailingReleaseTagStart(blacklist []*regexp.Regexp, s string) int {
+	tokens := reTrailingToken.FindAllStringIndex(s, -1)
+	sawBareToken, sawBlacklist, cut := false, false, -1
+	for _, loc := range slices.Backward(tokens) {
+		tok := s[loc[0]:loc[1]]
+		if matchesAnyBlacklist(blacklist, tok) {
+			sawBlacklist = true
+			cut = loc[0]
+			continue
+		}
+		if !sawBlacklist && !sawBareToken {
+			sawBareToken = true
+			continue
+		}
+		break
+	}
+	if !sawBlacklist {
+		return -1
+	}
+	return cut
+}
+
 // findYear returns the release year embedded in raw, preferring the *last*
 // 19xx/20xx-shaped match rather than the first. A title that itself embeds a
 // year-looking number (e.g. "Blade.Runner.2049.2017.1080p...") matches both
@@ -856,6 +911,16 @@ func lastBlacklistMatchEnd(blacklist []*regexp.Regexp, s string) int {
 // block, and that block never produces an isolated 19xx/20xx-shaped run (a
 // "2160p" token doesn't match -- the trailing "p" breaks \b), so the later
 // match is always the more trustworthy one.
+//
+// Known limitation, accepted rather than fixed: this heuristic can misfire on
+// the mirror-image shape, where the *first* year is the real one and a later,
+// unrelated year appears further in (e.g. "Blade Runner 1982 Final Cut 2007
+// BluRay" resolves year=2007, not the correct 1982). Filename-only parsing
+// has no way to distinguish "a number that looks like a year but is really
+// part of the title" from "a number that looks like a year and really is one"
+// without a title database -- optimizing for one shape necessarily trades off
+// against the other, and the "title embeds a year" shape this was written for
+// is the more common one in practice.
 func findYear(raw string) string {
 	ms := reYear.FindAllStringSubmatch(raw, -1)
 	if len(ms) == 0 {

@@ -61,7 +61,7 @@ func New(cfg Config, xfer Transferer, metaTagger MetadataTagger, logger logging.
 			if pat == "" {
 				continue
 			}
-			re, err := regexp.Compile("(?i)" + pat)
+			re, err := compileBlacklistPattern(pat)
 			if err != nil {
 				return nil, fmt.Errorf(
 					"invalid naming.media_tag_blacklist pattern %q: %w",
@@ -74,6 +74,18 @@ func New(cfg Config, xfer Transferer, metaTagger MetadataTagger, logger logging.
 	}
 
 	return p, nil
+}
+
+// compileBlacklistPattern compiles a naming.media_tag_blacklist pattern
+// (built-in or user-supplied) case-insensitively, anchored to whole-word
+// matches. The pattern is wrapped in a non-capturing group before the \b
+// anchors so a pattern containing alternation (e.g. "foo|bar") gets anchored
+// as a whole rather than per-side. Without the anchors, a bare substring
+// pattern like "proper" would also match inside an unrelated word like
+// "Property", corrupting titles that have nothing to do with a PROPER
+// release tag.
+func compileBlacklistPattern(pat string) (*regexp.Regexp, error) {
+	return regexp.Compile(`(?i)\b(?:` + pat + `)\b`)
 }
 
 type processorImpl struct {

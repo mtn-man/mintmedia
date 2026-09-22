@@ -1370,6 +1370,30 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// The compact-chain counterpart of the x-form case above: three
+			// episodes chained via the SxxEyy dash convention with no repeated
+			// season token, the shape reMultiEpisodeRangeChain exists to catch
+			// -- must be refused rather than reSeasonEpisodeRange silently
+			// matching only the first two episodes and dropping the third.
+			name: "ShowFile_EpisodeRange_ThreeChainDashForm_NeedsReview",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				name := "The Office (US) (2005) - S03E12-E13-E14 - Three Episodes (1080p BluRay x265 Silence).mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				var pse *ParseShowError
+				if !errors.As(err, &pse) {
+					t.Fatalf("expected *ParseShowError, got %v (plan=%+v)", err, pl)
+				}
+			},
+		},
+		{
 			// Regression test for the parseShowFolderQualifier fix: an
 			// existing "Name (Qualifier) (Year)" folder must be reused
 			// (Rule 2 exact-year match), not treated as unrelated and
