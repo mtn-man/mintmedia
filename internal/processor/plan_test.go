@@ -2310,6 +2310,63 @@ func TestPlan_TableDriven(t *testing.T) {
 			},
 		},
 		{
+			// Regression test for the Rule 4 no-year gap: a double-qualifier
+			// folder like "Ghosts (US) (2021)" used to be completely invisible
+			// to a filename with no year at all -- the loop only ever recorded
+			// it as a candidate when a filename year matched the folder's own
+			// year, so a no-year file silently created a duplicate "Ghosts/"
+			// folder instead of reusing the existing one.
+			name: "ShowFile_ExtraQualifierNoYear_UsesBestEffortMatch",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Ghosts (US) (2021)"))
+
+				name := "Ghosts.S02E01.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, p *processorImpl, _ string, pl Plan, err error) {
+				t.Helper()
+
+				if err != nil {
+					t.Fatalf("Plan() error: %v", err)
+				}
+				wantDir := filepath.Join(p.cfg.ShowsDir, "Ghosts (US) (2021)", "Season 02")
+				if pl.DestDir != wantDir {
+					t.Fatalf("DestDir = %q, want %q (existing folder must be reused, not duplicated)", pl.DestDir, wantDir)
+				}
+			},
+		},
+		{
+			// Same as above, but two same-named folders with different
+			// qualifiers exist -- must refuse to guess which release the
+			// no-year file belongs to, same as ShowFile_TheOffice_NoYear_MultipleQualifiedFolders_Ambiguous.
+			name: "ShowFile_ExtraQualifierNoYear_Ambiguous",
+			setup: func(t *testing.T, p *processorImpl) string {
+				t.Helper()
+
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Ghosts (US) (2021)"))
+				mkdirAll(t, filepath.Join(p.cfg.ShowsDir, "Ghosts (UK) (2019)"))
+
+				name := "Ghosts.S02E01.mkv"
+				src := filepath.Join(p.cfg.DropFolder, name)
+				writeFile(t, src, "dummy")
+				return src
+			},
+			check: func(t *testing.T, _ *processorImpl, _ string, _ Plan, err error) {
+				t.Helper()
+
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !errors.Is(err, ErrAmbiguousShow) {
+					t.Fatalf("error = %v, want ErrAmbiguousShow", err)
+				}
+			},
+		},
+		{
 			name: "ShowFolder_YearPack_WithExistingNoYearFolder_Rule1_DropsYear",
 			setup: func(t *testing.T, p *processorImpl) string {
 				t.Helper()
