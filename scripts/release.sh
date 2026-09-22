@@ -79,10 +79,10 @@ command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || com
 [[ -z "$(git status --porcelain)" ]] \
   || err "Working tree is not clean — commit or stash changes before releasing"
 
-# Must be on main branch — auto-switch if currently on dev
+# Must be on main branch -- auto-switch if currently on dev
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$CURRENT_BRANCH" == "dev" ]]; then
-  info "Currently on dev — switching to main"
+  info "Currently on dev -- switching to main"
   git switch main
 elif [[ "$CURRENT_BRANCH" != "main" ]]; then
   err "Must be on main or dev branch (currently on: $CURRENT_BRANCH)"
