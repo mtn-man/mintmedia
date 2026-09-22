@@ -82,6 +82,13 @@ completely untouched by this check.
   aside, and its year agrees), reported so you can confirm the guess. A
   second folder `Ghosts (UK) (2021)/` alongside it would make this
   ambiguous instead -- skipped and reported rather than guessing.
+- Shows has `Ghosts (US) (2021)/`. A file parses as `Ghosts` with no year at
+  all. → Routed to `Ghosts (US) (2021)/` (rule 4: no year to match against,
+  but the extra `(US) (2021)` qualifier suffix is treated as just another
+  unrecognized qualifier, the same as `The Office (UK)/` above), reported so
+  you can confirm the guess. A second folder like `Ghosts (UK) (2019)/`
+  alongside it would make this ambiguous instead -- skipped and reported
+  rather than guessing at which release the file belongs to.
 - Shows is empty. A file parses as `Fringe (2008)`. → Creates
   `Fringe (2008)/` (rule 2, create case: the filename has a year and nothing
   matched, so the new folder keeps that year rather than falling back to a

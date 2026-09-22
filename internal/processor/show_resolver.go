@@ -83,11 +83,19 @@ func resolveShowFolder(p *processorImpl, showsDir, showName, showYear string) (s
 			// missing a qualifier -- not a name mismatch worth flagging as
 			// a possible duplicate. A folder whose outer qualifier is a
 			// different year is evidence of an unrelated show/reboot, not a
-			// missing qualifier, and must never match here.
-			if innerBase, _, iok := parseShowFolderQualifier(base); iok &&
-				normalizeFolderKey(innerBase) == showKey &&
-				showYear != "" && strings.EqualFold(qualifier, showYear) {
-				extraQualifierYearFolders = append(extraQualifierYearFolders, name)
+			// missing qualifier, and must never match here. When the input
+			// has no year at all, there's nothing to disagree with -- treat
+			// the whole "(Qualifier) (Year)" suffix as just another
+			// unrecognized qualifier and let Rule 4's tryQualifiedFallback
+			// decide (single candidate: best-effort guess with a WARNING;
+			// multiple: ambiguous skip), the same as a plain "Show (UK)".
+			if innerBase, _, iok := parseShowFolderQualifier(base); iok && normalizeFolderKey(innerBase) == showKey {
+				switch {
+				case showYear != "" && strings.EqualFold(qualifier, showYear):
+					extraQualifierYearFolders = append(extraQualifierYearFolders, name)
+				case showYear == "":
+					otherQualifiedFolders = append(otherQualifiedFolders, name)
+				}
 			}
 			continue
 		}
