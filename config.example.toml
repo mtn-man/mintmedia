@@ -111,8 +111,10 @@ media_tag_blacklist = []
 #   - a different resolution of a title/episode already in the library sorts
 #     in alongside it (keep 1080p and 2160p side by side)
 #   - only an exact match including the resolution is skipped as a duplicate
-#   - an incoming file with no detectable resolution that collides with a
-#     resolution-tagged copy is left in the drop folder for review, not sorted
+#   - a resolution mismatch against an untagged copy -- an incoming file with
+#     no detectable resolution colliding with a resolution-tagged copy, or a
+#     resolution-tagged incoming file colliding with an untagged copy -- is
+#     left in the drop folder for review, not sorted
 # The resolution is read from the release name only, not the video stream.
 # Off by default.
 resolution_aware = false

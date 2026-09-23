@@ -186,8 +186,8 @@ func decideResolutionDuplicate(sc resScan, incomingTagged bool) (v DuplicateKind
 	case sc.exactMatchPath != "":
 		return DuplicateExact, sc.exactMatchPath, ""
 	case incomingTagged && sc.untaggedSiblingPath != "":
-		return DuplicateSortAlong, "", fmt.Sprintf(
-			"possible duplicate: untagged copy %q already in this folder -- sorting the tagged release in alongside it",
+		return DuplicateReviewHold, sc.untaggedSiblingPath, fmt.Sprintf(
+			"possible duplicate: untagged copy %q already in this folder -- left for human review",
 			filepath.Base(sc.untaggedSiblingPath))
 	case incomingTagged && sc.variantPath != "":
 		return DuplicateSortAlong, "", ""

@@ -46,13 +46,15 @@ const (
 	// DuplicateExact means an existing library entry matches; Apply must skip.
 	DuplicateExact
 	// DuplicateReviewHold applies under resolution_aware, for movies and
-	// shows alike -- an untagged release whose target folder/identity already
-	// holds a resolution-tagged copy. Skipped, but surfaced as a
+	// shows alike -- a tagged/untagged resolution mismatch against the
+	// target folder/identity, in either direction: an untagged incoming
+	// release colliding with a resolution-tagged copy, or a tagged incoming
+	// release colliding with an untagged copy. Skipped, but surfaced as a
 	// WARNING/NeedsReview hold, not a silent skip.
 	DuplicateReviewHold
 	// DuplicateSortAlong applies under resolution_aware, for movies and shows
 	// alike -- not a skip; sorts in beside an existing copy of the same
-	// film/episode at a different resolution.
+	// film/episode at a different resolution (both sides resolution-tagged).
 	DuplicateSortAlong
 )
 

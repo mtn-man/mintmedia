@@ -3533,48 +3533,28 @@ func TestPlan_ResolutionAware_Movie_DifferentResolution_RecordsAlongsidePath(t *
 	}
 }
 
-// The untagged-sibling case emits its own WARNING and does not record an
-// DupVerdict.Path -- that outcome is surfaced through the WARNING, not the
-// multi-resolution INFO / --plan line.
-func TestPlan_ResolutionAware_Movie_UntaggedSibling_NoAlongsidePath(t *testing.T) {
-	p, logs := newTestProcessorResolutionAwareWithLog(t)
-
-	src := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.2160p.BluRay.mkv")
-	writeFile(t, src, "dummy")
-	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014).mkv"), "already here")
-
-	pl, err := planOne(t, p, src)
-	if err != nil {
-		t.Fatalf("Plan() error: %v", err)
-	}
-	if pl.DupVerdict.Path != "" {
-		t.Fatalf("DupVerdict.Path = %q, want empty for an untagged-sibling sort", pl.DupVerdict.Path)
-	}
-	if s := logs.String(); strings.Contains(s, "alongside existing") {
-		t.Fatalf("did not expect the multi-resolution INFO for an untagged-sibling sort; log:\n%s", s)
-	}
-}
-
-// TestPlan_ResolutionAware_Movie_UntaggedExisting_TaggedIncoming_SortsWithWarning:
+// TestPlan_ResolutionAware_Movie_UntaggedExisting_TaggedIncoming_HeldForReview:
 // a library file with no resolution suffix (sorted before the toggle, or
-// hand-named) no longer blocks an incoming tagged copy -- it sorts in as a
-// distinct file, with a non-blocking possible-duplicate WARNING.
-func TestPlan_ResolutionAware_Movie_UntaggedExisting_TaggedIncoming_SortsWithWarning(t *testing.T) {
+// hand-named) can't be safely told apart from an incoming tagged copy at
+// filename level, so it's held for review with a non-blocking WARNING rather
+// than sorted in alongside it.
+func TestPlan_ResolutionAware_Movie_UntaggedExisting_TaggedIncoming_HeldForReview(t *testing.T) {
 	p := newTestProcessorResolutionAware(t)
 
 	src := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.1080p.BluRay.mkv")
 	writeFile(t, src, "dummy")
-	writeFile(t, filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014).mkv"), "already here")
+	existing := filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014).mkv")
+	writeFile(t, existing, "already here")
 
 	pl, err := planOne(t, p, src)
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.DupVerdict.Skip() {
-		t.Fatalf("DupVerdict.Skip() = true, want false")
+	if pl.DupVerdict.Kind != DuplicateReviewHold {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateReviewHold", pl.DupVerdict.Kind)
 	}
-	if got := filepath.Base(pl.DestMainPath); got != "Interstellar (2014) - 1080p.mkv" {
-		t.Fatalf("DestMainPath base = %q, want %q", got, "Interstellar (2014) - 1080p.mkv")
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
 	}
 }
 
@@ -3732,49 +3712,28 @@ func TestPlan_ResolutionAware_Duplicate_ShowSameResolution_CrossContainer(t *tes
 	}
 }
 
-// TestPlan_ResolutionAware_Show_UntaggedSibling_NoAlongsidePath mirrors
-// TestPlan_ResolutionAware_Movie_UntaggedSibling_NoAlongsidePath for the show
-// branch: an untagged sibling sort emits its own WARNING rather than
-// recording a DupVerdict.Path.
-func TestPlan_ResolutionAware_Show_UntaggedSibling_NoAlongsidePath(t *testing.T) {
-	p, logs := newTestProcessorResolutionAwareWithLog(t)
-
-	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.2160p.BluRay.mkv")
-	writeFile(t, src, "dummy")
-	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01.mkv"), "already here")
-
-	pl, err := planOne(t, p, src)
-	if err != nil {
-		t.Fatalf("Plan() error: %v", err)
-	}
-	if pl.DupVerdict.Path != "" {
-		t.Fatalf("DupVerdict.Path = %q, want empty for an untagged-sibling sort", pl.DupVerdict.Path)
-	}
-	if s := logs.String(); strings.Contains(s, "alongside existing") {
-		t.Fatalf("did not expect the multi-resolution INFO for an untagged-sibling sort; log:\n%s", s)
-	}
-}
-
-// TestPlan_ResolutionAware_Show_UntaggedExisting_TaggedIncoming_SortsWithWarning
-// mirrors the movie case: a library episode with no resolution suffix no
-// longer blocks an incoming tagged copy -- it sorts in as a distinct file,
-// with a non-blocking possible-duplicate WARNING.
-func TestPlan_ResolutionAware_Show_UntaggedExisting_TaggedIncoming_SortsWithWarning(t *testing.T) {
+// TestPlan_ResolutionAware_Show_UntaggedExisting_TaggedIncoming_HeldForReview
+// mirrors the movie case: a library episode with no resolution suffix can't
+// be safely told apart from an incoming tagged copy at filename level, so
+// it's held for review with a non-blocking WARNING rather than sorted in
+// alongside it.
+func TestPlan_ResolutionAware_Show_UntaggedExisting_TaggedIncoming_HeldForReview(t *testing.T) {
 	p := newTestProcessorResolutionAware(t)
 
 	src := filepath.Join(p.cfg.DropFolder, "Deadwood.S01E01.1080p.BluRay.mkv")
 	writeFile(t, src, "dummy")
-	writeFile(t, filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01.mkv"), "already here")
+	existing := filepath.Join(p.cfg.ShowsDir, "Deadwood", "Season 01", "Deadwood - S01E01.mkv")
+	writeFile(t, existing, "already here")
 
 	pl, err := planOne(t, p, src)
 	if err != nil {
 		t.Fatalf("Plan() error: %v", err)
 	}
-	if pl.DupVerdict.Skip() {
-		t.Fatalf("DupVerdict.Skip() = true, want false")
+	if pl.DupVerdict.Kind != DuplicateReviewHold {
+		t.Fatalf("DupVerdict.Kind = %v, want DuplicateReviewHold", pl.DupVerdict.Kind)
 	}
-	if got := filepath.Base(pl.DestMainPath); got != "Deadwood - S01E01 - 1080p.mkv" {
-		t.Fatalf("DestMainPath base = %q, want %q", got, "Deadwood - S01E01 - 1080p.mkv")
+	if pl.DupVerdict.Path != existing {
+		t.Fatalf("DupVerdict.Path = %q, want %q", pl.DupVerdict.Path, existing)
 	}
 }
 
@@ -4180,10 +4139,11 @@ func TestDecideResolutionDuplicate(t *testing.T) {
 			wantVerdict: DuplicateSortAlong,
 		},
 		{
-			name:        "tagged + untagged sibling -> sort along, with warn",
+			name:        "tagged + untagged sibling -> review, with warn",
 			sc:          resScan{untaggedSiblingPath: "/lib/M.mkv"},
 			tagged:      true,
-			wantVerdict: DuplicateSortAlong,
+			wantVerdict: DuplicateReviewHold,
+			wantMatch:   "/lib/M.mkv",
 			wantWarn:    true,
 		},
 		{
@@ -4305,17 +4265,18 @@ func TestPlan_ResolutionAware_MovieDecisionMatrix(t *testing.T) {
 			wantAlongsideBase: "Interstellar (2014) - 1080p.mkv",
 		},
 		{
-			name:         "untagged sibling only -> sort alongside (+warn)",
-			incoming:     "Interstellar.2014.2160p.BluRay.mkv",
-			existing:     []string{"Interstellar (2014).mkv"},
-			wantDestBase: "Interstellar (2014) - 2160p.mkv",
+			name:       "untagged sibling only -> held for review (+warn)",
+			incoming:   "Interstellar.2014.2160p.BluRay.mkv",
+			existing:   []string{"Interstellar (2014).mkv"},
+			wantDup:    true,
+			wantReview: true,
 		},
 		{
-			name:              "untagged sibling + different resolution -> sort alongside (+warn)",
-			incoming:          "Interstellar.2014.2160p.BluRay.mkv",
-			existing:          []string{"Interstellar (2014).mkv", "Interstellar (2014) - 1080p.mkv"},
-			wantDestBase:      "Interstellar (2014) - 2160p.mkv",
-			wantAlongsideBase: "Interstellar (2014) - 1080p.mkv",
+			name:       "untagged sibling + different resolution -> held for review (+warn)",
+			incoming:   "Interstellar.2014.2160p.BluRay.mkv",
+			existing:   []string{"Interstellar (2014).mkv", "Interstellar (2014) - 1080p.mkv"},
+			wantDup:    true,
+			wantReview: true,
 		},
 		{
 			name:     "untagged sibling + same resolution -> duplicate (exact wins)",
