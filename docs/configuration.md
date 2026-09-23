@@ -60,7 +60,7 @@ resolution of the same content:
 | --- | --- | --- |
 | `… - 2160p` | a `… - 2160p` file (exact match) | skipped as a duplicate |
 | `… - 2160p` | only `… - 1080p` / `… - 720p` etc. | sorted in alongside; `--plan` shows an `Alongside:` line, and the completed sort logs an INFO naming the resolution already there |
-| `… - 2160p` | an untagged copy, no `… - 2160p` | sorted in, with a WARNING |
+| `… - 2160p` | an untagged copy, no `… - 2160p` | **left in the drop folder for review** (a WARNING, no move -- a tagged release can't be named safely next to an untagged copy) |
 | no resolution detected | an untagged copy | skipped as a duplicate |
 | no resolution detected | only resolution-tagged files | **left in the drop folder for review** (a WARNING, no move -- an untagged release can't be named safely next to a tagged copy) |
 | no resolution detected | nothing for that title/episode | sorted in as an untagged name |

@@ -748,11 +748,10 @@ func applyResolutionDupVerdict(p *processorImpl, pl *Plan, sc resScan) {
 		if v == DuplicateSortAlong && sc.variantPath != "" {
 			// Not a duplicate, but the folder already holds another resolution
 			// of this movie. Record it so --plan can show the folder isn't
-			// empty and Apply logs the INFO line once the move lands. This is
-			// independent of an untagged sibling also being present -- that
-			// case gets its own WARNING below, but doesn't make the variant
-			// any less real, so both can and do apply to the same incoming
-			// file.
+			// empty and Apply logs the INFO line once the move lands.
+			// decideResolutionDuplicate checks the untagged sibling before the
+			// variant, so this only fires when no untagged sibling is also
+			// present -- that case is a review hold instead, handled above.
 			pl.DupVerdict = DuplicateVerdict{Kind: DuplicateSortAlong, Path: sc.variantPath}
 		}
 	}
@@ -761,21 +760,17 @@ func applyResolutionDupVerdict(p *processorImpl, pl *Plan, sc resScan) {
 	}
 	// A review hold stays in the drop folder and gets re-planned on every
 	// rescan; warn about it once per processor lifetime, like the pack /
-	// unparseable-file skips do (see firstSkipWarning). The sort-along warning
-	// is deliberately not gated: the incoming file moves and won't resurface,
-	// but an untagged sibling left in the folder should keep prompting on every
-	// new resolution added until the user tags it or turns resolution_aware off.
+	// unparseable-file skips do (see firstSkipWarning). Every warn-carrying
+	// verdict from decideResolutionDuplicate is a review hold now -- a
+	// tagged/untagged resolution mismatch, in either direction, holds rather
+	// than sorting in -- so this gate covers every case that reaches here.
 	if v == DuplicateReviewHold && !p.firstSkipWarning(pl.InputPath) {
 		return
 	}
-	// warn names an existing library file: the resolution-tagged copy for a
-	// review hold (matchPath), the untagged sibling for a sort-along (where
-	// matchPath is empty because nothing is being skipped). Carry it as a field
-	// so the history record stands on its own without the message text.
+	// warn names the existing library file the incoming one collided with;
+	// matchPath always carries it for a review hold. Carry it as a field so
+	// the history record stands on its own without the message text.
 	existing := matchPath
-	if existing == "" {
-		existing = sc.untaggedSiblingPath
-	}
 	// Stem, not basename: "existing" pairs with "incoming" (pl.DestRadix), and
 	// both sides of that pair are in sorted-name form.
 	existingStem := pathStem(existing)
@@ -800,8 +795,8 @@ func applyResolutionDupVerdict(p *processorImpl, pl *Plan, sc resScan) {
 //   - resolution_aware on: the same shared decision table movies use
 //     (decideResolutionDuplicate) -- same identity + same resolution
 //     (including both untagged) is a duplicate; different resolution sorts in
-//     alongside; the untagged/tagged asymmetry cases hold for review or warn,
-//     exactly as they do for movies.
+//     alongside; a tagged/untagged mismatch, in either direction, holds for
+//     review with a WARNING, exactly as it does for movies.
 func checkShowDuplicate(p *processorImpl, pl *Plan) error {
 	sc, err := scanShowFolderForResolution(pl.DestDir, pl, p.mainExtSet)
 	if err != nil {
