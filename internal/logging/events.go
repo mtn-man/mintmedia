@@ -16,9 +16,6 @@ const (
 
 	EventDaemonPathDuplicate    Event = "daemon.path.duplicate"
 	EventDaemonWatchError       Event = "daemon.watch.error"
-	EventDaemonClipboardError   Event = "daemon.clipboard.error"
-	EventDaemonTxAddError       Event = "daemon.tx.add.error"
-	EventDaemonMagnetAdded      Event = "daemon.magnet.added"
 	EventDaemonProcessError     Event = "daemon.process.error"
 	EventDaemonTxCleanupError   Event = "daemon.tx.cleanup.error"
 	EventDaemonTxCleanupRemoved Event = "daemon.tx.cleanup.removed"
@@ -66,9 +63,6 @@ func AllOperationalEvents() []Event {
 		EventSystemMetadataTaggerUnavailable,
 		EventDaemonPathDuplicate,
 		EventDaemonWatchError,
-		EventDaemonClipboardError,
-		EventDaemonTxAddError,
-		EventDaemonMagnetAdded,
 		EventDaemonProcessError,
 		EventDaemonTxCleanupError,
 		EventDaemonTxCleanupRemoved,
@@ -120,7 +114,6 @@ func DefaultHistoryInfoAllowlist() []Event {
 		EventProcessorInputSkippedInputMissing,
 		EventProcessorInputSkippedParseError,
 		EventProcessorInputSkippedDuplicate,
-		EventDaemonMagnetAdded,
 		EventDaemonTxCleanupRemoved,
 		EventDaemonPathDuplicate,
 		EventDaemonDestinationRecovered,

@@ -31,7 +31,6 @@ const (
 	exitNotRunning  = 3
 	exitInterrupted = 130
 
-	defaultMagnetTimeout   = 10 * time.Second
 	defaultCleanupCooldown = 2 * time.Minute
 
 	defaultReportEvery = 250 * time.Millisecond
@@ -186,6 +185,12 @@ func main() {
 	_, resolved, bootstrapped, err := config.Load(*configPath)
 	if err != nil {
 		die(err, exitError)
+	}
+	if resolved.ClipboardSectionDeprecated {
+		fmt.Fprintln(os.Stderr, console.ColorizePrefixErr(fmt.Sprintf(
+			"WARNING  [clipboard] in %s is deprecated and no longer does anything; it will be rejected as an unknown config key in the next release -- remove it",
+			resolved.ConfigPathAbs,
+		)))
 	}
 	if planRequested && planWasBare && pflag.NArg() > 0 {
 		flagName := "--plan"

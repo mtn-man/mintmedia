@@ -10,8 +10,12 @@ type Config struct {
 	Logging      Logging      `toml:"logging"`
 	System       System       `toml:"system"`
 	Watch        Watch        `toml:"watch"`
-	Clipboard    Clipboard    `toml:"clipboard"`
-	Torrent      Torrent      `toml:"torrent"`
+	// Deprecated: clipboard polling was removed. This section is accepted and
+	// ignored (Load emits a deprecation warning when it's present) so existing
+	// config files keep loading for one more release; both the field and the
+	// warning are dropped in the release after next. Do not wire it into Resolved.
+	Clipboard Clipboard `toml:"clipboard"`
+	Torrent   Torrent   `toml:"torrent"`
 	Media        Media        `toml:"media"`
 	Naming       Naming       `toml:"naming"`
 }
@@ -60,10 +64,11 @@ type Watch struct {
 	DropSettleDuration string `toml:"drop_settle_duration"`
 }
 
-// Clipboard configures magnet-link detection via clipboard polling.
+// Clipboard is deprecated: clipboard-based magnet-link polling was removed.
+// The fields are decoded and discarded purely so a config file still
+// carrying this section doesn't hard-error on load; see Config.Clipboard.
 type Clipboard struct {
-	Enabled bool `toml:"enabled"`
-	// e.g. "1s"
+	Enabled      bool   `toml:"enabled"`
 	PollInterval string `toml:"poll_interval"`
 }
 
@@ -125,7 +130,6 @@ type Resolved struct {
 	DestDirShowsAbs  string
 
 	DropSettleDuration    time.Duration
-	ClipboardPollInterval time.Duration
 	DoneNotificationMode  string
 	ShutdownGraceDuration time.Duration
 	ShutdownForceTimeout  time.Duration
@@ -169,7 +173,11 @@ type Resolved struct {
 	TorrentHost    string
 	TorrentAuth    string
 
-	ClipboardEnabled bool
-
 	DeferDestinationChecks bool
+
+	// ClipboardSectionDeprecated is true when the config file still has a
+	// [clipboard] section (removed in this release, see Config.Clipboard).
+	// Callers should warn the user once per run; the field and the section
+	// it detects are both dropped in the release after next.
+	ClipboardSectionDeprecated bool
 }

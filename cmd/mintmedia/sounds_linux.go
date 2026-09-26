@@ -2,7 +2,4 @@
 
 package main
 
-const (
-	defaultSoundInput = ""
-	defaultSoundDone  = ""
-)
+const defaultSoundDone = ""
