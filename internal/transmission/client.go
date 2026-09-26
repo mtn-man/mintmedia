@@ -11,8 +11,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-
-	"github.com/mtn-man/mintmedia/internal/magnet"
 )
 
 // Client makes JSON-RPC calls to a Transmission daemon over HTTP.
@@ -128,38 +126,4 @@ func (c *Client) doRequest(ctx context.Context, body []byte, sessionID string) (
 		req.SetBasicAuth(parts[0], parts[1])
 	}
 	return http.DefaultClient.Do(req)
-}
-
-// AddMagnet adds a magnet URI to Transmission via the torrent-add RPC method.
-func (c *Client) AddMagnet(ctx context.Context, magnetURI string) error {
-	if err := c.validate(); err != nil {
-		return err
-	}
-
-	info, err := magnet.Parse(magnetURI)
-	if err != nil {
-		magnetURI = strings.TrimSpace(magnetURI)
-		switch {
-		case errors.Is(err, magnet.ErrEmpty):
-			return errors.New("magnet is empty")
-		case errors.Is(err, magnet.ErrInvalidURI):
-			return err
-		case errors.Is(err, magnet.ErrNotMagnet):
-			return fmt.Errorf("not a magnet URI: %q", magnetURI)
-		case errors.Is(err, magnet.ErrMissingBTIH):
-			return fmt.Errorf("magnet missing btih: %q", magnetURI)
-		case errors.Is(err, magnet.ErrBTIHTooShort):
-			return fmt.Errorf("magnet btih too short: %q", magnetURI)
-		default:
-			return err
-		}
-	}
-
-	_, err = c.rpc(ctx, "torrent-add", map[string]string{
-		"filename": info.URI,
-	})
-	if err != nil {
-		return fmt.Errorf("transmission add failed (host=%s): %w", c.Host, err)
-	}
-	return nil
 }

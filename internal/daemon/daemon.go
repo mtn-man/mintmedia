@@ -6,13 +6,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/mtn-man/mintmedia/internal/clipboard"
 	"github.com/mtn-man/mintmedia/internal/jobrunner"
 	"github.com/mtn-man/mintmedia/internal/logging"
-	"github.com/mtn-man/mintmedia/internal/magnet"
 	"github.com/mtn-man/mintmedia/internal/notify"
 	"github.com/mtn-man/mintmedia/internal/paths"
 	"github.com/mtn-man/mintmedia/internal/processor"
@@ -29,21 +26,16 @@ var newDaemonCaffeinate = func() notify.CaffeinateController {
 	return notify.NewCaffeinate()
 }
 
-// Daemon wires together the watcher + clipboard poller + processor + optional Transmission client.
+// Daemon wires together the watcher + processor + optional Transmission client.
 type Daemon struct {
 	Watcher *watch.DropFolderWatcher
-	// Optional: if nil, clipboard polling is disabled.
-	Poller *clipboard.Poller
-	Proc   processor.Processor
+	Proc    processor.Processor
 
-	// Optional: if nil, magnets are logged only.
+	// Optional: if nil, Transmission cleanup is disabled.
 	Tx *transmission.Client
 
 	// Optional: unified operational logger.
 	Logger logging.Logger
-
-	// Host used for "Track progress here" line (e.g., "localhost:9091").
-	TransmissionHost string
 
 	// Destination directories (resolved absolute paths)
 	MoviesDir string
@@ -54,8 +46,7 @@ type Daemon struct {
 	DeferDestinationChecks bool
 
 	// Sounds (best-effort; empty disables)
-	SoundInput string // played on successful Transmission add
-	SoundDone  string // played after successful APPLIED processing based on DoneNotificationMode
+	SoundDone string // played after successful APPLIED processing based on DoneNotificationMode
 	// done notification policy: per_file | per_job | off
 	DoneNotificationMode string
 
@@ -73,9 +64,6 @@ type Daemon struct {
 
 	// Additional time to wait after force-canceling in-flight jobs.
 	ShutdownForceTimeout time.Duration
-
-	// Transmission add timeout
-	MagnetTimeout time.Duration
 
 	// If true, after any successful APPLIED processing, attempt to remove all completed torrents from Transmission.
 	AutoCleanupCompletedTorrents bool
@@ -105,9 +93,6 @@ type Daemon struct {
 
 	// internal test seam; defaults to notify.PlaySound when nil.
 	playSoundFn func(context.Context, string) error
-
-	// internal: ensures "Track progress here" is logged at most once per session.
-	trackProgressOnce sync.Once
 }
 
 // retryItem is a path deferred because its destination category was
@@ -129,8 +114,7 @@ type workItem struct {
 // Recommended usage from main:
 //
 //	w := watch.NewDropFolderWatcher(...)
-//	p := clipboard.NewPoller(...)
-//	d := &daemon.Daemon{Watcher:w, Poller:p, Proc:proc, Tx:tx, ...}
+//	d := &daemon.Daemon{Watcher:w, Proc:proc, Tx:tx, ...}
 //	return d.Run(ctx)
 func (d *Daemon) Run(ctx context.Context) error {
 	if d.Watcher == nil {
@@ -145,9 +129,6 @@ func (d *Daemon) Run(ctx context.Context) error {
 	defer stop()
 
 	// Defaults
-	if d.MagnetTimeout <= 0 {
-		d.MagnetTimeout = 10 * time.Second
-	}
 	if d.CleanupCooldown <= 0 {
 		d.CleanupCooldown = 120 * time.Second
 	}
@@ -205,7 +186,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return sorted
 	})
 
-	// Start watcher + poller (safe to call even if already running in your design).
+	// Start watcher (safe to call even if already running in your design).
 	if err := d.Watcher.Start(ctx); err != nil {
 		return fmt.Errorf("start watcher: %w", err)
 	}
@@ -215,26 +196,13 @@ func (d *Daemon) Run(ctx context.Context) error {
 		}
 	}()
 
-	var pollerEvents <-chan string
-	var pollerErrors <-chan error
-	if d.Poller != nil {
-		d.Poller.Start(ctx)
-		pollerEvents = d.Poller.Events()
-		pollerErrors = d.Poller.Errors()
-	}
-
 	workQueue := make(chan workItem, 128)
 	outcome := make(chan workerOutcome, 1)
 	go d.runWorker(ctx, policy, hooks, workQueue, outcome)
 
 	d.logConsoleInfo(logging.EventSystemStartup, "STARTED  mintmedia daemon\n", nil)
-	switch {
-	case d.Poller == nil:
-		d.logConsoleInfo(logging.EventSystemStartup, "Clipboard polling disabled.", nil)
-	case d.Tx != nil:
-		d.logConsoleInfo(logging.EventSystemStartup, "Polling clipboard for magnet links (Transmission enabled).", nil)
-	default:
-		d.logConsoleInfo(logging.EventSystemStartup, "Polling clipboard for magnet links (logging only).", nil)
+	if d.Tx != nil {
+		d.logConsoleInfo(logging.EventSystemStartup, "Transmission cleanup enabled.", nil)
 	}
 	d.logConsoleInfo(logging.EventSystemStartup, "Press Ctrl+C to stop.\n", nil)
 	d.logHistoryInfo(logging.EventSystemStartup, logging.Fields{
@@ -315,23 +283,6 @@ runLoop:
 			if d.dispatchToQueue(ctx, workQueue, path, key) {
 				break runLoop
 			}
-
-		// --- Clipboard errors ---
-		case err, ok := <-pollerErrors:
-			if !ok {
-				// poller shuts down with ctx; watcher may still be running
-				continue
-			}
-			if err != nil {
-				d.logError(logging.EventDaemonClipboardError, fmt.Sprintf("ERROR    clipboard: %v", err), err, nil)
-			}
-
-		// --- Clipboard magnet events ---
-		case magnet, ok := <-pollerEvents:
-			if !ok {
-				continue
-			}
-			d.handleMagnet(ctx, magnet)
 		}
 	}
 
@@ -433,66 +384,6 @@ func (d *Daemon) awaitShutdown(outcome <-chan workerOutcome) error {
 		shutdown.FormatDurationCompact(d.ShutdownGraceDuration),
 		shutdown.FormatDurationCompact(d.ShutdownForceTimeout),
 	)
-}
-
-// handleMagnet parses a raw magnet URI pulled off the clipboard poller,
-// logs it, and (if Transmission is configured) queues a non-blocking add.
-// Malformed or empty input is ignored silently -- the poller can emit
-// clipboard noise that never was a magnet link.
-func (d *Daemon) handleMagnet(ctx context.Context, magnet string) {
-	magnet = strings.TrimSpace(magnet)
-	if magnet == "" {
-		return
-	}
-
-	btih, dn, tr, okMag := magnetSummary(magnet)
-	if !okMag {
-		// Not a valid magnet URI; ignore silently.
-		return
-	}
-	if dn == "" {
-		dn = "(no dn)"
-	}
-
-	d.logConsoleInfo(
-		logging.EventDaemonMagnetAdded,
-		fmt.Sprintf("TORRENT  %q  (btih=%s, %d trackers)", truncateForLog(dn, 80), btih, tr),
-		logging.Fields{"btih": btih, "dn": dn, "trackers": tr},
-	)
-
-	// If Transmission not enabled, just log.
-	if d.Tx == nil {
-		return
-	}
-
-	// Non-blocking add
-	go func(m string, btihShort string, dn string) {
-		tctx, cancel := context.WithTimeout(ctx, d.MagnetTimeout)
-		defer cancel()
-
-		if err := d.Tx.AddMagnet(tctx, m); err != nil {
-			d.logError(logging.EventDaemonTxAddError, fmt.Sprintf("ERROR    torrent: could not add -- %v", err), err, logging.Fields{
-				"btih": btihShort,
-			})
-			return
-		}
-
-		if strings.TrimSpace(d.TransmissionHost) != "" {
-			d.trackProgressOnce.Do(func() {
-				d.logConsoleInfo(
-					logging.EventDaemonMagnetAdded,
-					fmt.Sprintf("TORRENT  Track progress here: http://%s/transmission/web/", d.TransmissionHost),
-					logging.Fields{"host": d.TransmissionHost},
-				)
-			})
-		}
-		base := context.WithoutCancel(ctx)
-		_ = notify.PlaySound(base, d.SoundInput)
-		d.logHistoryInfo(logging.EventDaemonMagnetAdded, logging.Fields{
-			"btih": btihShort,
-			"dn":   dn,
-		})
-	}(magnet, btih, dn)
 }
 
 // workerOutcome reports how runWorker's item processing ended.
@@ -700,29 +591,4 @@ func (d *Daemon) destinationsReady() bool {
 		return false
 	}
 	return paths.DirWritable(d.MoviesDir) && paths.DirWritable(d.ShowsDir)
-}
-
-// --- Magnet formatting helpers ---------------------------------------------
-
-func magnetSummary(m string) (btihShort string, dn string, trackers int, ok bool) {
-	info, err := magnet.Parse(m)
-	if err != nil {
-		return "", "", 0, false
-	}
-	return magnet.ShortBTIH(info.BTIH, 12), info.DN, info.Trackers, true
-}
-
-func truncateForLog(s string, maxLen int) string {
-	s = strings.TrimSpace(s)
-	if maxLen <= 0 {
-		return s
-	}
-	rs := []rune(s)
-	if len(rs) <= maxLen {
-		return s
-	}
-	if maxLen <= 3 {
-		return string(rs[:maxLen])
-	}
-	return string(rs[:maxLen-3]) + "..."
 }

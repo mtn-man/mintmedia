@@ -78,7 +78,7 @@ func resolveMediaTagBlacklist(user []string) []string {
 type configFields struct {
 	dropAbs, stateAbs, moviesAbs, showsAbs, historyAbs string
 
-	settle, poll, shutdownGrace, shutdownForce time.Duration
+	settle, shutdownGrace, shutdownForce time.Duration
 
 	doneNotificationMode string
 	torrentOn            bool
@@ -115,7 +115,6 @@ func validateConfigFields(cfg *Config) (configFields, []error) {
 
 	// Durations
 	settle := parseDurationFieldMin(&errs, "watch.drop_settle_duration", cfg.Watch.DropSettleDuration, "3s", 500*time.Millisecond)
-	poll := parseDurationFieldMin(&errs, "clipboard.poll_interval", cfg.Clipboard.PollInterval, "250ms", 250*time.Millisecond)
 	shutdownGrace := parseDurationFieldPositive(&errs, "system.shutdown_grace_duration", cfg.System.ShutdownGraceDuration, "10m")
 	shutdownForce := parseDurationFieldPositive(&errs, "system.shutdown_force_timeout", cfg.System.ShutdownForceTimeout, "15s")
 
@@ -212,7 +211,6 @@ func validateConfigFields(cfg *Config) (configFields, []error) {
 		showsAbs:             showsAbs,
 		historyAbs:           historyAbs,
 		settle:               settle,
-		poll:                 poll,
 		shutdownGrace:        shutdownGrace,
 		shutdownForce:        shutdownForce,
 		doneNotificationMode: doneNotificationMode,
@@ -300,7 +298,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		DestDirShowsAbs:  fields.showsAbs,
 
 		DropSettleDuration:    fields.settle,
-		ClipboardPollInterval: fields.poll,
 		DoneNotificationMode:  fields.doneNotificationMode,
 		ShutdownGraceDuration: fields.shutdownGrace,
 		ShutdownForceTimeout:  fields.shutdownForce,
@@ -325,8 +322,6 @@ func normalizeAndValidate(cfg *Config, cfgPathAbs string) (*Resolved, error) {
 		TorrentEnabled: fields.torrentOn,
 		TorrentHost:    cfg.Torrent.Host,
 		TorrentAuth:    cfg.Torrent.Auth,
-
-		ClipboardEnabled: cfg.Clipboard.Enabled,
 
 		DeferDestinationChecks: cfg.System.DeferDestinationChecks,
 

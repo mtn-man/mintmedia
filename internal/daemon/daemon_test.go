@@ -48,8 +48,7 @@ func TestDaemon_RunProcessesDropEvents(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		SoundInput: "",
-		SoundDone:  "",
+		SoundDone: "",
 
 		AutoCleanupCompletedTorrents: false,
 		DeferDestinationChecks:       false,
@@ -113,8 +112,7 @@ func TestDaemon_RunWaitsForInFlightJobsOnShutdown(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		SoundInput: "",
-		SoundDone:  "",
+		SoundDone: "",
 
 		AutoCleanupCompletedTorrents: false,
 		DeferDestinationChecks:       false,
@@ -193,8 +191,7 @@ func TestDaemon_RunCaffeinateStaysActiveDuringShutdownDrain(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		SoundInput: "",
-		SoundDone:  "",
+		SoundDone: "",
 
 		AutoCleanupCompletedTorrents: false,
 		DeferDestinationChecks:       false,
@@ -274,8 +271,7 @@ func TestDaemon_RunForceCancelsInFlightAfterGrace(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		SoundInput: "",
-		SoundDone:  "",
+		SoundDone: "",
 
 		ShutdownGraceDuration: 60 * time.Millisecond,
 		ShutdownForceTimeout:  250 * time.Millisecond,
@@ -343,8 +339,7 @@ func TestDaemon_RunReturnsShutdownTimeoutWhenJobsIgnoreCancel(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		SoundInput: "",
-		SoundDone:  "",
+		SoundDone: "",
 
 		ShutdownGraceDuration: 50 * time.Millisecond,
 		ShutdownForceTimeout:  60 * time.Millisecond,
@@ -404,8 +399,7 @@ func TestDaemon_RunSkipsWaitingLogWhenNoInFlightJobs(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		SoundInput: "",
-		SoundDone:  "",
+		SoundDone: "",
 
 		ShutdownGraceDuration: 10 * time.Minute,
 		ShutdownForceTimeout:  15 * time.Second,
@@ -470,8 +464,7 @@ func TestDaemon_RunWaitingLogStartsOnNewLineForInFlightJobs(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		SoundInput: "",
-		SoundDone:  "",
+		SoundDone: "",
 
 		ShutdownGraceDuration: 50 * time.Millisecond,
 		ShutdownForceTimeout:  250 * time.Millisecond,
@@ -534,8 +527,7 @@ func TestDaemon_DeferDestinationChecks(t *testing.T) {
 		MoviesDir: movies,
 		ShowsDir:  shows,
 
-		SoundInput: "",
-		SoundDone:  "",
+		SoundDone: "",
 
 		AutoCleanupCompletedTorrents: false,
 		DeferDestinationChecks:       true,

@@ -1297,6 +1297,70 @@ resolution_aware = true
 	}
 }
 
+func TestLoad_ClipboardSection_DeprecatedButAccepted(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[system]
+auto_create_missing_dirs = true
+
+[clipboard]
+enabled = false
+poll_interval = "250ms"
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, res, _, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v, want a deprecated [clipboard] section to still load", err)
+	}
+	if !res.ClipboardSectionDeprecated {
+		t.Fatalf("ClipboardSectionDeprecated = false, want true when [clipboard] is present")
+	}
+}
+
+func TestLoad_NoClipboardSection_NotFlaggedDeprecated(t *testing.T) {
+	root := t.TempDir()
+	drop := filepath.Join(root, "drop")
+	state := filepath.Join(root, "state")
+	movies := filepath.Join(root, "Movies")
+	shows := filepath.Join(root, "Shows")
+
+	toml := fmt.Sprintf(`
+[paths]
+drop_folder = %q
+state_dir = %q
+
+[destinations]
+dest_dir_movies = %q
+dest_dir_shows = %q
+
+[system]
+auto_create_missing_dirs = true
+`, drop, state, movies, shows)
+
+	cfgPath := writeConfigFile(t, root, toml)
+	_, res, _, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if res.ClipboardSectionDeprecated {
+		t.Fatalf("ClipboardSectionDeprecated = true, want false when [clipboard] is absent")
+	}
+}
+
 func TestLoad_PreserveEpisodeTitles_DefaultsFalse(t *testing.T) {
 	root := t.TempDir()
 	drop := filepath.Join(root, "drop")
@@ -1449,7 +1513,6 @@ func TestDefaultsAgreeAcrossSources(t *testing.T) {
 			checkDuration("system.shutdown_grace_duration", cfg.System.ShutdownGraceDuration, defaultShutdownGraceDuration)
 			checkDuration("system.shutdown_force_timeout", cfg.System.ShutdownForceTimeout, defaultShutdownForceTimeout)
 			checkDuration("watch.drop_settle_duration", cfg.Watch.DropSettleDuration, defaultDropSettleDuration)
-			checkDuration("clipboard.poll_interval", cfg.Clipboard.PollInterval, defaultClipboardPollInterval)
 			checkString("logging.console_level", cfg.Logging.ConsoleLevel, defaultConsoleLevel)
 			checkString("logging.history_level", cfg.Logging.HistoryLevel, defaultHistoryLevel)
 			checkString("logging.history_file", cfg.Logging.HistoryFile, defaultHistoryFile)

@@ -2,7 +2,4 @@
 
 package main
 
-const (
-	defaultSoundInput = "/System/Library/Sounds/Funk.aiff"
-	defaultSoundDone  = "/System/Library/Sounds/Glass.aiff"
-)
+const defaultSoundDone = "/System/Library/Sounds/Glass.aiff"

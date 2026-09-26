@@ -130,8 +130,8 @@ info "Building binaries for $VERSION"
 mkdir -p "$DIST_DIR"
 
 TARGETS=(
-  "darwin  amd64  1"
-  "darwin  arm64  1"
+  "darwin  amd64  0"
+  "darwin  arm64  0"
   "linux   amd64  0"
   "linux   arm64  0"
 )

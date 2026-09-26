@@ -52,7 +52,6 @@ const (
 	DefaultConfigPathRel = ".config/" + DefaultConfigSubpath
 
 	// Defaults (opinionated for reliability).
-	defaultClipboardPollInterval = 250 * time.Millisecond
 	defaultDropSettleDuration    = 3 * time.Second
 	defaultShutdownGraceDuration = 10 * time.Minute
 	defaultShutdownForceTimeout  = 15 * time.Second
@@ -127,6 +126,12 @@ func Load(configPath string) (*Config, *Resolved, bool, error) {
 	if unknown := formatUndecodedKeys(md.Undecoded()); len(unknown) > 0 {
 		return nil, nil, false, formatConfigError(cfgPathAbs, fmt.Errorf("unknown config key(s): %s", strings.Join(unknown, ", ")))
 	}
+	// Deprecated: clipboard polling was removed. Detected via md rather than
+	// zero-value checks on cfg.Clipboard, so a config that merely spells out
+	// the (now no-op) defaults still gets flagged. Remove this check, the
+	// Config.Clipboard field, and Resolved.ClipboardSectionDeprecated together
+	// in the release after next.
+	clipboardSectionPresent := md.IsDefined("clipboard")
 
 	applyDefaults(&cfg)
 
@@ -134,6 +139,7 @@ func Load(configPath string) (*Config, *Resolved, bool, error) {
 	if err != nil {
 		return nil, nil, false, err
 	}
+	res.ClipboardSectionDeprecated = clipboardSectionPresent
 
 	return &cfg, res, bootstrapped, nil
 }
@@ -169,11 +175,6 @@ func applyDefaults(cfg *Config) {
 	// Watch defaults
 	if strings.TrimSpace(cfg.Watch.DropSettleDuration) == "" {
 		cfg.Watch.DropSettleDuration = defaultDropSettleDuration.String()
-	}
-
-	// Clipboard defaults
-	if strings.TrimSpace(cfg.Clipboard.PollInterval) == "" {
-		cfg.Clipboard.PollInterval = defaultClipboardPollInterval.String()
 	}
 
 	// Logging defaults

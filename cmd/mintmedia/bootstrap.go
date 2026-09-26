@@ -114,7 +114,6 @@ func printConfigSummary(resolved *config.Resolved) {
 
 	fmt.Println("Runtime settings:")
 	fmt.Printf("  Drop settle:        %s\n", resolved.DropSettleDuration)
-	fmt.Printf("  Clipboard poll:     %s\n", resolved.ClipboardPollInterval)
 	fmt.Printf("  Shutdown grace:     %s\n", resolved.ShutdownGraceDuration)
 	fmt.Printf("  Shutdown force:     %s\n", resolved.ShutdownForceTimeout)
 	fmt.Printf("  Console log level:  %s\n", resolved.ConsoleLogLevel)

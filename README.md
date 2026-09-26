@@ -10,7 +10,7 @@ Drop a file or folder into the MintDrop folder (typically ~/Downloads/MintDrop) 
 
 Want to automate your entire media workflow?
 
-Once you've enabled Transmission integration and started the daemon (mintmedia -d), all you have to do is copy a magnet link, and mintmedia handles the rest: queuing the download, organizing the files when it finishes, and sorting them into a library structure ready for media servers like Plex, Infuse, Jellyfin, or any local media player.
+Run mintmedia as a daemon (`mintmedia -d`) and it watches your drop folder continuously, organizing each file the moment it finishes downloading, ready for media servers like Plex, Infuse, Jellyfin, or any local media player. Optional Transmission integration can automatically clear completed torrents from Transmission's queue once their files are organized.
 
 mintmedia leans on an old idea: a tool should do one thing, and do it well.
 
@@ -42,8 +42,6 @@ go install github.com/mtn-man/mintmedia/cmd/mintmedia@latest
 ```
 
 This requires Go 1.25.5 or newer ([install Go](https://go.dev/doc/install) if you don't have it), and installs to `$(go env GOPATH)/bin` (or `$GOBIN` if set) -- make sure that directory is on your `PATH`. To pin to a specific release instead of the latest commit on `main`, use a tag in place of `@latest`, e.g. `@v0.1.5`.
-
-On Linux, clipboard-based magnet link detection additionally requires a Wayland session with `wl-clipboard` installed (`wl-paste` must be on `PATH`) -- see [Transmission Integration](#transmission-integration).
 
 ## Quick Start
 
@@ -149,7 +147,7 @@ If a file ended up somewhere unexpected, or a subtitle was left behind, that's t
 
 ## Transmission Integration
 
-See [Transmission integration](docs/transmission-integration.md) for the config and platform requirements needed to enable the hands-free magnet-link-to-library workflow described above.
+mintmedia can optionally clean up after Transmission: once a completed download's files are organized, it removes the finished torrent from Transmission's queue (queue entry only -- your downloaded files are never touched). Enable it with `features.enable_torrent_automation`, `torrent.enabled`, `torrent.host`, and `torrent.auto_cleanup_completed_torrents` in your config -- see `config.example.toml` for the full set of options. Adding magnets to Transmission in the first place is outside mintmedia's scope; use Transmission's own web UI, `transmission-remote`, or a client-side tool of your choice.
 
 ## License
 
