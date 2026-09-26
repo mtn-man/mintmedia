@@ -4029,6 +4029,41 @@ func TestPlan_HasResolutionSuffix(t *testing.T) {
 	}
 }
 
+func TestPlan_EpisodeLabel(t *testing.T) {
+	cases := []struct {
+		name        string
+		season      int
+		episode     int
+		episodeEnd  int
+		episodePart string
+		want        string
+	}{
+		{"plain", 5, 8, 0, "", "5/8"},
+		{"range", 5, 8, 9, "", "5/8-9"},
+		{"split part", 3, 4, 0, "a", "3/4a"},
+		{
+			// EpisodeEnd and EpisodePart are set mutually exclusively by every
+			// producer today (see the Plan.EpisodeEnd/EpisodePart field docs),
+			// but this guards against a future parser change silently dropping
+			// one of them from the label instead of combining both.
+			name:        "range and split part both set",
+			season:      5,
+			episode:     8,
+			episodeEnd:  9,
+			episodePart: "a",
+			want:        "5/8a-9",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			pl := Plan{Season: c.season, Episode: c.episode, EpisodeEnd: c.episodeEnd, EpisodePart: c.episodePart}
+			if got := pl.EpisodeLabel(); got != c.want {
+				t.Fatalf("EpisodeLabel() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
 // --- resolution_aware: movie folder scan + decision table (pure) ----------
 
 func TestScanMovieFolderForResolution(t *testing.T) {

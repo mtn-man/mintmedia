@@ -179,6 +179,18 @@ func (pl Plan) IsDatedEpisode() bool {
 	return pl.EpisodeDate != ""
 }
 
+// EpisodeLabel formats Season/Episode for display, folding in EpisodeEnd
+// and EpisodePart independently of each other rather than picking one --
+// the two are set by construction as mutually exclusive today, but a
+// display helper that assumes so silently drops one if that ever changes.
+func (pl Plan) EpisodeLabel() string {
+	label := fmt.Sprintf("%d/%d%s", pl.Season, pl.Episode, pl.EpisodePart)
+	if pl.IsEpisodeRange() {
+		label += fmt.Sprintf("-%d", pl.EpisodeEnd)
+	}
+	return label
+}
+
 // Result reports the outcome of applying a plan.
 type Result struct {
 	Plan    Plan
