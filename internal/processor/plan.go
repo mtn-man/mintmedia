@@ -115,12 +115,12 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 			names := make(map[string]struct{}, len(mainPaths))
 			years := make(map[string]struct{}, len(mainPaths))
 			for _, main := range mainPaths {
-				sn, sy, _, _, _, _, _, _, err := resolveShowIdentity(p, filepath.Base(abs), main, hint, true)
+				si, err := resolveShowIdentity(p, filepath.Base(abs), main, hint, true)
 				if err != nil {
 					continue
 				}
-				names[sn] = struct{}{}
-				years[sy] = struct{}{}
+				names[si.name] = struct{}{}
+				years[si.year] = struct{}{}
 			}
 			if len(names) > 1 {
 				forceHintName = true
@@ -374,6 +374,20 @@ func planAssociatedMoves(ctx context.Context, p *processorImpl, pl Plan) ([]Move
 
 // --- plan construction ------------------------------------------------------
 
+// showIdentity is resolveShowIdentity's result. A struct instead of positional
+// returns because several fields share a type (name/year are both string;
+// season/episode/episodeEnd are all int) -- field access by name at the call
+// site means a future reordering here can't silently mis-bind at a caller.
+type showIdentity struct {
+	name, year   string
+	season       int
+	episode      int
+	episodeEnd   int
+	episodePart  string
+	episodeDate  string
+	inputHadYear bool
+}
+
 // resolveShowIdentity parses the show name/year/season/episode for a single
 // main media file, given the top-level folder it came from, its full path,
 // and an optional showHint derived from that top-level folder. This is the
@@ -399,7 +413,7 @@ func planAssociatedMoves(ctx context.Context, p *processorImpl, pl Plan) ([]Move
 // directory) would still pick up a name from its literal parent directory --
 // reintroducing the folder context that single-file mode deliberately opts
 // out of.
-func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint showHint, dirMode bool) (showName, showYear string, season, episode, episodeEnd int, episodePart string, episodeDate string, inputHadYear bool, err error) {
+func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint showHint, dirMode bool) (showIdentity, error) {
 	mainBaseName := filepath.Base(mainPath)
 
 	effHint := hint
@@ -414,8 +428,10 @@ func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint
 		}
 	}
 
-	showName, showYear, season, episode, episodeEnd, episodePart, err = parseShowFromName(p.blacklist, folderBaseName, mainBaseName)
-	inputHadYear = err == nil && showYear != ""
+	var si showIdentity
+	var err error
+	si.name, si.year, si.season, si.episode, si.episodeEnd, si.episodePart, err = parseShowFromName(p.blacklist, folderBaseName, mainBaseName)
+	si.inputHadYear = err == nil && si.year != ""
 	if err != nil {
 		// A date-based episode identifier (no SxxEyy token at all -- see
 		// parseDatedShowFromName) is tried before the hint fallback below:
@@ -423,31 +439,31 @@ func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint
 		// fallback only ever succeeds when a real numeric season/episode
 		// token is still present somewhere in the filename.
 		if sn, sy, dt, dok := parseDatedShowFromName(p.blacklist, folderBaseName, mainBaseName); dok {
-			showName, showYear, episodeDate = sn, sy, dt
-			season, episode, episodeEnd, episodePart = 0, 0, 0, ""
-			inputHadYear = sy != ""
+			si.name, si.year, si.episodeDate = sn, sy, dt
+			si.season, si.episode, si.episodeEnd, si.episodePart = 0, 0, 0, ""
+			si.inputHadYear = sy != ""
 			err = nil
 		} else if effHint.ok && effHint.name != "" {
 			if s, e, ee, ep, _, ok := parseSeasonEpisode(mainBaseName); ok {
-				showName = effHint.name
-				showYear = effHint.year
-				season = s
-				episode = e
-				episodeEnd = ee
-				episodePart = ep
+				si.name = effHint.name
+				si.year = effHint.year
+				si.season = s
+				si.episode = e
+				si.episodeEnd = ee
+				si.episodePart = ep
 				err = nil
 			} else if s, e, ok := parseBareSeasonEpisode(effHint, mainBaseName); ok {
-				showName = effHint.name
-				showYear = effHint.year
-				season = s
-				episode = e
-				episodeEnd = 0
-				episodePart = ""
+				si.name = effHint.name
+				si.year = effHint.year
+				si.season = s
+				si.episode = e
+				si.episodeEnd = 0
+				si.episodePart = ""
 				err = nil
 			}
 		}
 	}
-	return showName, showYear, season, episode, episodeEnd, episodePart, episodeDate, inputHadYear, err
+	return si, err
 }
 
 func planForMain(
@@ -489,10 +505,18 @@ func planForMain(
 	switch pl.Category {
 	case CategoryShow:
 		// --- Phase: Resolve (show) -- parse identity, resolve show folder ---
-		showName, showYear, season, episode, episodeEnd, episodePart, episodeDate, inputHadYear, err := resolveShowIdentity(p, filepath.Base(pl.InputPath), pl.MainSourcePath, bc.hint, dirMode)
+		si, err := resolveShowIdentity(p, filepath.Base(pl.InputPath), pl.MainSourcePath, bc.hint, dirMode)
 		if err != nil {
 			return Plan{}, err
 		}
+		showName := si.name
+		showYear := si.year
+		season := si.season
+		episode := si.episode
+		episodeEnd := si.episodeEnd
+		episodePart := si.episodePart
+		episodeDate := si.episodeDate
+		inputHadYear := si.inputHadYear
 		// forceHintName is set by the caller only when a pre-scan of the
 		// whole batch (see plan()) found sibling files that would otherwise
 		// resolve to *different* show names -- e.g. one episode's filename
