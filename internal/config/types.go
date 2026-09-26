@@ -16,8 +16,8 @@ type Config struct {
 	// warning are dropped in the release after next. Do not wire it into Resolved.
 	Clipboard Clipboard `toml:"clipboard"`
 	Torrent   Torrent   `toml:"torrent"`
-	Media        Media        `toml:"media"`
-	Naming       Naming       `toml:"naming"`
+	Media     Media     `toml:"media"`
+	Naming    Naming    `toml:"naming"`
 }
 
 // Paths holds the drop folder and state directory locations.
