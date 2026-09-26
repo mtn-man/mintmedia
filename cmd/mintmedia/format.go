@@ -56,15 +56,10 @@ func printPlanBody(pl processor.Plan) {
 	} else {
 		fmt.Printf("ShowName:     %s\n", pl.ShowName)
 		fmt.Printf("ShowYear:     %s\n", pl.ShowYear)
-		switch {
-		case pl.IsDatedEpisode():
+		if pl.IsDatedEpisode() {
 			fmt.Printf("AirDate:      %s\n", pl.EpisodeDate)
-		case pl.IsEpisodeRange():
-			fmt.Printf("Season/Ep:    %d/%d-%d\n", pl.Season, pl.Episode, pl.EpisodeEnd)
-		case pl.EpisodePart != "":
-			fmt.Printf("Season/Ep:    %d/%d%s\n", pl.Season, pl.Episode, pl.EpisodePart)
-		default:
-			fmt.Printf("Season/Ep:    %d/%d\n", pl.Season, pl.Episode)
+		} else {
+			fmt.Printf("Season/Ep:    %s\n", pl.EpisodeLabel())
 		}
 	}
 
