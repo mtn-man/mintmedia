@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-var errConflictingModes = errors.New("use only one of --plan (or --dry-run), --plan=<path>, --process, --process-drop, or --daemon at a time")
+var errConflictingModes = errors.New("use only one of --plan (or --dry-run), --plan=<path>, --process, or --daemon at a time")
 var errProcessingDisabled = errors.New("processing modes require features.enable_processing=true in the config.toml; set it to true or run with no mode flags for a config-only smoke test")
 
 type modePolicy struct {
@@ -21,7 +21,6 @@ func resolveModePolicy(
 	planPath string,
 	planDrop bool,
 	processPath string,
-	processDrop bool,
 	daemon bool,
 	enableProcessing bool,
 ) (modePolicy, error) {
@@ -29,7 +28,6 @@ func resolveModePolicy(
 		PlanPath:    strings.TrimSpace(planPath),
 		PlanDrop:    planDrop,
 		ProcessPath: strings.TrimSpace(processPath),
-		ProcessDrop: processDrop,
 		Daemon:      daemon,
 	}
 
@@ -40,9 +38,6 @@ func resolveModePolicy(
 		mode.ExplicitCount++
 	}
 	if mode.ProcessPath != "" {
-		mode.ExplicitCount++
-	}
-	if mode.ProcessDrop {
 		mode.ExplicitCount++
 	}
 	if mode.Daemon {

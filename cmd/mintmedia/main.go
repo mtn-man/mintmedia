@@ -125,7 +125,6 @@ func main() {
 	dryRunPath := pflag.String("dry-run", "", "Alias for --plan")
 	pflag.Lookup("dry-run").NoOptDefVal = planDropSentinel
 	processPath := pflag.String("process", "", "Process a path with policy (ignore non-media/no-media dirs)")
-	processDrop := pflag.BoolP("process-drop", "p", false, "Process all paths currently in the drop folder (one-shot)")
 	daemonFlag := pflag.BoolP("daemon", "d", false, "Run the daemon (watch/poll/automations)")
 	statusFlag := pflag.BoolP("status", "s", false, "Check whether the daemon is running")
 	stopFlag := pflag.BoolP("stop", "S", false, "Gracefully stop the running daemon")
@@ -142,12 +141,12 @@ func main() {
 			_, _ = fmt.Fprintln(out, args...)
 		}
 		write("Usage: %s [flags]\n\n", filepath.Base(os.Args[0]))
-		writeln("Modes (choose one; default is -p/--process-drop when features.enable_processing=true):")
+		writeln("Modes (choose one; with no mode flag, processes the drop folder when features.enable_processing=true):")
+		writeln("  (no flag)            Process all paths currently in the drop folder (one-shot)")
 		writeln("  --plan[=path]        Preview what would happen (no changes); omit path to preview drop folder")
 		writeln("                       (use --plan=path, not --plan path -- the path is only optional with =)")
 		writeln("  --dry-run[=path]     Alias for --plan")
 		writeln("  --process <path>     Process a path with policy (ignore non-media/no-media dirs)")
-		writeln("  -p, --process-drop   Process all paths currently in the drop folder (one-shot)")
 		writeln("  -d, --daemon         Run the daemon (watch/poll/automations)")
 		writeln("\nDaemon control:")
 		writeln("  -s, --status         Check whether the daemon is running (exit 0 = running, exit 3 = stopped)")
@@ -215,7 +214,6 @@ func main() {
 		*planPath,
 		planDrop,
 		*processPath,
-		*processDrop,
 		*daemonFlag,
 		resolved.EnableProcessing,
 	)
@@ -229,7 +227,7 @@ func main() {
 		switch {
 		case mode.ExplicitCount == 0:
 			if !confirmProcessDrop(resolved.DropFolderAbs) {
-				offerEditConfig(resolved.ConfigPathAbs, "Review the paths above -- especially destinations.dest_dir_movies/dest_dir_shows if you have an existing library -- then re-run with -p/--process-drop or -d/--daemon when ready.")
+				offerEditConfig(resolved.ConfigPathAbs, "Review the paths above -- especially destinations.dest_dir_movies/dest_dir_shows if you have an existing library -- then re-run with no flags, or with -d/--daemon, when ready.")
 				return
 			}
 			fmt.Println()
