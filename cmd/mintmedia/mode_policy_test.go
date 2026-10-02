@@ -14,7 +14,6 @@ func TestResolveModePolicy(t *testing.T) {
 		plan             string
 		planDrop         bool
 		process          string
-		processDrop      bool
 		daemon           bool
 		wantErr          error
 		wantPlan         string
@@ -82,7 +81,6 @@ func TestResolveModePolicy(t *testing.T) {
 				tt.plan,
 				tt.planDrop,
 				tt.process,
-				tt.processDrop,
 				tt.daemon,
 				tt.enableProcessing,
 			)
