@@ -188,6 +188,19 @@ func plan(ctx context.Context, p *processorImpl, req Request) ([]Plan, error) {
 
 // --- main media selection ---------------------------------------------------
 
+// promoFileStems are lowercased filename stems of release-group promo clips
+// that ship alongside the real media and must never be sorted as a title.
+var promoFileStems = map[string]struct{}{
+	"rarbg.com": {},
+}
+
+func isPromoFile(path string) bool {
+	base := filepath.Base(path)
+	stem := strings.ToLower(strings.TrimSuffix(base, filepath.Ext(base)))
+	_, ok := promoFileStems[stem]
+	return ok
+}
+
 func listMainMediaFromDir(ctx context.Context, p *processorImpl, dir string) ([]string, bool, error) {
 	var mainPaths []string
 	hitMaxDepth := false
@@ -227,7 +240,7 @@ func listMainMediaFromDir(ctx context.Context, p *processorImpl, dir string) ([]
 		}
 
 		e := strings.ToLower(filepath.Ext(path))
-		if !isExtInSet(e, p.mainExtSet) {
+		if !isExtInSet(e, p.mainExtSet) || isPromoFile(path) {
 			return nil
 		}
 		mainPaths = append(mainPaths, path)

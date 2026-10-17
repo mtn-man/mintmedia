@@ -4671,3 +4671,38 @@ func TestPlan_DuplicateNotice_LabelsConsoleAndLeavesHistoryMessageEmpty(t *testi
 		}
 	}
 }
+
+// TestPlan_DirectoryBatch_SkipsPromoFile covers a release folder that ships a
+// release-group promo clip beside the real movie: only the movie is planned,
+// and it still gets folder-first parsing because it is the sole main file.
+func TestPlan_DirectoryBatch_SkipsPromoFile(t *testing.T) {
+	p := newTestProcessor(t)
+
+	dir := filepath.Join(p.cfg.DropFolder, "Oceans.Eleven.2001.1080p.BluRay.H264.AAC-RARBG")
+	writeFile(t, filepath.Join(dir, "Oceans.Eleven.2001.1080p.BluRay.H264.AAC-RARBG.mp4"), "dummy")
+	writeFile(t, filepath.Join(dir, "RARBG.com.mp4"), "dummy")
+
+	plans, err := p.Plan(context.Background(), Request{InputPath: dir})
+	if err != nil {
+		t.Fatalf("Plan() error: %v", err)
+	}
+	if len(plans) != 1 {
+		t.Fatalf("expected 1 plan, got %d", len(plans))
+	}
+	if want := filepath.Join(p.cfg.MoviesDir, "Oceans Eleven (2001)"); filepath.Dir(plans[0].DestMainPath) != want {
+		t.Fatalf("DestMainPath dir = %q, want %q", filepath.Dir(plans[0].DestMainPath), want)
+	}
+}
+
+func TestIsPromoFile(t *testing.T) {
+	for path, want := range map[string]bool{
+		"/d/RARBG.com.mp4":                 true,
+		"/d/rarbg.COM.mkv":                 true,
+		"/d/RARBG.mp4":                     false,
+		"/d/Some.Movie.2001.RARBG.com.mp4": false,
+	} {
+		if got := isPromoFile(path); got != want {
+			t.Errorf("isPromoFile(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
