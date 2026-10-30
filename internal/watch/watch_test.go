@@ -288,3 +288,55 @@ func writeFile(t *testing.T, path string, contents string) {
 		t.Fatalf("write file: %v", err)
 	}
 }
+
+func TestDropFolderWatcher_SortFuncReceivesIsDir(t *testing.T) {
+	root := t.TempDir()
+
+	filePath := filepath.Join(root, "movie.mkv")
+	writeFile(t, filePath, "data")
+
+	// Scene-style folder name: filepath.Ext would report ".x265-RARBG".
+	dirPath := filepath.Join(root, "Some.Show.S01.1080p.BluRay.x265-RARBG")
+	if err := os.MkdirAll(dirPath, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeFile(t, filepath.Join(dirPath, "episode.mkv"), "data")
+
+	w, err := NewDropFolderWatcher(root, 300*time.Millisecond)
+	if err != nil {
+		t.Fatalf("NewDropFolderWatcher error: %v", err)
+	}
+
+	got := make(chan []Entry, 1)
+	w.SetSortFunc(func(entries []Entry) []string {
+		got <- entries
+		paths := make([]string, len(entries))
+		for i, e := range entries {
+			paths[i] = e.Path
+		}
+		return paths
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := w.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("Start error: %v", err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		_ = w.Close()
+	})
+
+	select {
+	case entries := <-got:
+		isDir := make(map[string]bool, len(entries))
+		for _, e := range entries {
+			isDir[e.Path] = e.IsDir
+		}
+		if len(isDir) != 2 || isDir[filePath] || !isDir[dirPath] {
+			t.Errorf("sort func entries = %v, want %q as file and %q as directory", entries, filePath, dirPath)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for sort func to be called")
+	}
+}

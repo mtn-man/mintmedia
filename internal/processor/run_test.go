@@ -25,7 +25,11 @@ func (s *stubRunProcessor) Process(_ context.Context, req Request) error {
 	}
 	return s.err
 }
-func (s *stubRunProcessor) SortCandidates(_ context.Context, paths []string) ([]string, []SortError, error) {
+func (s *stubRunProcessor) SortCandidates(_ context.Context, candidates []Candidate) ([]string, []SortError, error) {
+	paths := make([]string, len(candidates))
+	for i, c := range candidates {
+		paths[i] = c.Path
+	}
 	return paths, nil, nil
 }
 

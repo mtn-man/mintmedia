@@ -22,7 +22,7 @@ func discoverDropPaths(ctx context.Context, proc processor.Processor, dropRoot s
 		return nil, 0, readErr, nil
 	}
 
-	var candidates []string
+	var candidates []processor.Candidate
 	for _, ent := range entries {
 		name := ent.Name()
 		if watch.IsIgnorableDropEntry(name) {
@@ -39,7 +39,7 @@ func discoverDropPaths(ctx context.Context, proc processor.Processor, dropRoot s
 		if !info.IsDir() && !info.Mode().IsRegular() {
 			continue
 		}
-		candidates = append(candidates, path)
+		candidates = append(candidates, processor.Candidate{Path: path, IsDir: info.IsDir()})
 	}
 
 	sortedPaths, sortErrs, sortErr := proc.SortCandidates(ctx, candidates)

@@ -40,7 +40,7 @@ type DropFolderWatcher struct {
 	// sortFn is applied to each settled batch before paths are emitted.
 	// Protected by sortFnMu; set via SetSortFunc.
 	sortFnMu sync.RWMutex
-	sortFn   func([]string) []string
+	sortFn   func([]Entry) []string
 }
 
 // NewDropFolderWatcher creates a recursive watcher rooted at rootDir.
@@ -135,9 +135,16 @@ func (d *DropFolderWatcher) Close() error {
 	return d.watcher.Close()
 }
 
+// Entry is a settled path together with whether it is a directory, as observed
+// when the watcher confirmed the path still exists.
+type Entry struct {
+	Path  string
+	IsDir bool
+}
+
 // SetSortFunc sets the function applied to each settled batch before paths are
 // emitted. Safe to call concurrently or after Start().
-func (d *DropFolderWatcher) SetSortFunc(fn func([]string) []string) {
+func (d *DropFolderWatcher) SetSortFunc(fn func([]Entry) []string) {
 	d.sortFnMu.Lock()
 	d.sortFn = fn
 	d.sortFnMu.Unlock()
@@ -220,7 +227,7 @@ func (d *DropFolderWatcher) loopSettle(ctx context.Context) {
 		case now := <-t.C:
 			var (
 				candidates []pendingItem
-				toEmit     []string
+				toEmit     []Entry
 			)
 
 			d.mu.Lock()
@@ -247,7 +254,8 @@ func (d *DropFolderWatcher) loopSettle(ctx context.Context) {
 			for _, item := range candidates {
 				// If the path no longer exists, drop it silently.
 				// This is expected when Mintmedia moves a file out of the drop folder.
-				if _, err := os.Stat(item.path); err != nil {
+				st, err := os.Stat(item.path)
+				if err != nil {
 					d.mu.Lock()
 					if cur, ok := d.pending[item.path]; ok && cur.Equal(item.last) {
 						delete(d.pending, item.path)
@@ -271,19 +279,23 @@ func (d *DropFolderWatcher) loopSettle(ctx context.Context) {
 				delete(d.pending, item.path)
 				d.mu.Unlock()
 
-				toEmit = append(toEmit, item.path)
+				toEmit = append(toEmit, Entry{Path: item.path, IsDir: st.IsDir()})
 			}
 
+			emitPaths := make([]string, len(toEmit))
+			for i, e := range toEmit {
+				emitPaths[i] = e.Path
+			}
 			if len(toEmit) > 1 {
 				d.sortFnMu.RLock()
 				sortFn := d.sortFn
 				d.sortFnMu.RUnlock()
 				if sortFn != nil {
-					toEmit = sortFn(toEmit)
+					emitPaths = sortFn(toEmit)
 				}
 			}
 
-			for _, pth := range toEmit {
+			for _, pth := range emitPaths {
 				emitTime := time.Now()
 
 				// Mark as emitted before releasing the lock so new fsnotify events during

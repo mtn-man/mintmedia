@@ -102,6 +102,16 @@ func TestSortKey_Less(t *testing.T) {
 }
 
 // --- SortCandidates tests ---
+
+// cands wraps file-style paths as non-directory Candidates.
+func cands(paths ...string) []Candidate {
+	out := make([]Candidate, len(paths))
+	for i, p := range paths {
+		out[i] = Candidate{Path: p}
+	}
+	return out
+}
+
 // parseSortKey uses filename parsing only (no filesystem I/O), so paths do not
 // need to exist on disk. newTestProcessor is still needed for the blacklist and
 // extension config.
@@ -123,7 +133,7 @@ func TestSortCandidates_MoviesFirst(t *testing.T) {
 	show := "/drop/Fallout.S01E01.1080p.x265.mkv"
 
 	// Pass show first to confirm ordering is by media type, not input order.
-	sorted, errs, err := p.SortCandidates(context.Background(), []string{show, movie})
+	sorted, errs, err := p.SortCandidates(context.Background(), cands(show, movie))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -149,7 +159,7 @@ func TestSortCandidates_MovieOrder(t *testing.T) {
 	aliens := "/drop/Aliens.1986.1080p.BluRay.x265.mkv"
 	madMax := "/drop/Mad.Max.1979.1080p.BluRay.x265.mkv"
 
-	sorted, errs, err := p.SortCandidates(context.Background(), []string{zodiac, madMax, aliens})
+	sorted, errs, err := p.SortCandidates(context.Background(), cands(zodiac, madMax, aliens))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -172,7 +182,7 @@ func TestSortCandidates_ShowOrder(t *testing.T) {
 	s01e01 := "/drop/Fallout.S01E01.1080p.x265.mkv"
 	s02e01 := "/drop/Fallout.S02E01.1080p.x265.mkv"
 
-	sorted, errs, err := p.SortCandidates(context.Background(), []string{s01e02, s02e01, s01e01})
+	sorted, errs, err := p.SortCandidates(context.Background(), cands(s01e02, s02e01, s01e01))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -198,7 +208,7 @@ func TestSortCandidates_MultipleShows(t *testing.T) {
 	fallout := "/drop/Fallout.S01E01.1080p.x265.mkv"
 	bb := "/drop/Breaking.Bad.S03E07.1080p.x265.mkv"
 
-	sorted, errs, err := p.SortCandidates(context.Background(), []string{fallout, aliens, bb})
+	sorted, errs, err := p.SortCandidates(context.Background(), cands(fallout, aliens, bb))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -220,7 +230,7 @@ func TestSortCandidates_NonMediaSilentlySkipped(t *testing.T) {
 	movie := "/drop/Aliens.1986.1080p.BluRay.x265.mkv"
 	nonMedia := "/drop/notes.txt"
 
-	sorted, errs, err := p.SortCandidates(context.Background(), []string{nonMedia, movie})
+	sorted, errs, err := p.SortCandidates(context.Background(), cands(nonMedia, movie))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -240,7 +250,7 @@ func TestSortCandidates_ParseFailureExcluded(t *testing.T) {
 	unparseable := "/drop/1080p.x265.mkv"
 	valid := "/drop/Aliens.1986.1080p.BluRay.x265.mkv"
 
-	sorted, errs, err := p.SortCandidates(context.Background(), []string{unparseable, valid})
+	sorted, errs, err := p.SortCandidates(context.Background(), cands(unparseable, valid))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -262,11 +272,46 @@ func TestSortCandidates_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // canceled before the call
 
-	sorted, errs, err := p.SortCandidates(ctx, []string{"/drop/Aliens.1986.1080p.BluRay.x265.mkv"})
+	sorted, errs, err := p.SortCandidates(ctx, cands("/drop/Aliens.1986.1080p.BluRay.x265.mkv"))
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled", err)
 	}
 	if sorted != nil || errs != nil {
 		t.Errorf("expected nil sorted and errs on cancel, got sorted=%v errs=%v", sorted, errs)
+	}
+}
+
+// Scene release folders are named like "Show.S01.1080p.BluRay.x265-RARBG", so
+// filepath.Ext reports a bogus extension; IsDir must override the name.
+func TestSortCandidates_DottedDirectoryIncluded(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessor(t)
+
+	dir := "/drop/Star.Trek.The.Next.Generation.S01.1080p.BluRay.x265-RARBG"
+
+	sorted, errs, err := p.SortCandidates(context.Background(), []Candidate{{Path: dir, IsDir: true}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(errs) != 0 {
+		t.Fatalf("unexpected sort errors: %v", errs)
+	}
+	if len(sorted) != 1 || sorted[0] != dir {
+		t.Errorf("sorted = %v, want [%q]", sorted, dir)
+	}
+}
+
+func TestSortCandidates_DottedNonDirectorySkipped(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessor(t)
+
+	file := "/drop/Star.Trek.The.Next.Generation.S01.1080p.BluRay.x265-RARBG"
+
+	sorted, errs, err := p.SortCandidates(context.Background(), []Candidate{{Path: file}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(errs) != 0 || len(sorted) != 0 {
+		t.Errorf("sorted = %v, errs = %v; want a non-directory with a non-media extension dropped silently", sorted, errs)
 	}
 }

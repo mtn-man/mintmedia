@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -175,8 +176,14 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	// Wire media-aware ordering into the watcher's settle batch. The closure
 	// captures ctx so sorting respects daemon shutdown cancellation.
-	d.Watcher.SetSortFunc(func(paths []string) []string {
-		sorted, errs, sortErr := d.Proc.SortCandidates(ctx, paths)
+	d.Watcher.SetSortFunc(func(entries []watch.Entry) []string {
+		candidates := make([]processor.Candidate, len(entries))
+		paths := make([]string, len(entries))
+		for i, e := range entries {
+			candidates[i] = processor.Candidate{Path: e.Path, IsDir: e.IsDir}
+			paths[i] = e.Path
+		}
+		sorted, errs, sortErr := d.Proc.SortCandidates(ctx, candidates)
 		if sortErr != nil {
 			return paths // context canceled; preserve original order
 		}
@@ -301,7 +308,7 @@ func (d *Daemon) retryDeferredDestinationChecks(ctx context.Context, workQueue c
 	for _, pth := range pending {
 		pendingPaths = append(pendingPaths, pth)
 	}
-	sortedPaths, sortErrs, sortErr := d.Proc.SortCandidates(ctx, pendingPaths)
+	sortedPaths, sortErrs, sortErr := d.Proc.SortCandidates(ctx, candidatesForPaths(pendingPaths))
 	if sortErr != nil {
 		sortedPaths = pendingPaths // context canceled; fall back to arbitrary order
 	}
@@ -326,6 +333,18 @@ func (d *Daemon) retryDeferredDestinationChecks(ctx context.Context, workQueue c
 		d.dispatchToQueue(ctx, workQueue, pth, key)
 	}
 	return nil
+}
+
+// candidatesForPaths builds SortCandidates input from bare paths, which carry
+// no directory fact of their own. A path that can't be stat'd is treated as a
+// non-directory; Plan reports the real error when it is dispatched.
+func candidatesForPaths(paths []string) []processor.Candidate {
+	candidates := make([]processor.Candidate, len(paths))
+	for i, p := range paths {
+		st, err := os.Stat(p)
+		candidates[i] = processor.Candidate{Path: p, IsDir: err == nil && st.IsDir()}
+	}
+	return candidates
 }
 
 // recoverDegradedDestinations probes any runtime-degraded destination for

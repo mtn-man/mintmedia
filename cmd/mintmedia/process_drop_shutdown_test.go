@@ -556,7 +556,11 @@ func (s *processDropStubProcessor) Process(ctx context.Context, req processor.Re
 	return nil
 }
 
-func (s *processDropStubProcessor) SortCandidates(_ context.Context, paths []string) ([]string, []processor.SortError, error) {
+func (s *processDropStubProcessor) SortCandidates(_ context.Context, candidates []processor.Candidate) ([]string, []processor.SortError, error) {
+	paths := make([]string, len(candidates))
+	for i, c := range candidates {
+		paths[i] = c.Path
+	}
 	return paths, nil, nil
 }
 
