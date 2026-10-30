@@ -21,7 +21,11 @@ func (f *categoryTestProcessor) Apply(context.Context, []Plan) ([]Result, error)
 
 func (f *categoryTestProcessor) Process(context.Context, Request) error { return nil }
 
-func (f *categoryTestProcessor) SortCandidates(_ context.Context, paths []string) ([]string, []SortError, error) {
+func (f *categoryTestProcessor) SortCandidates(_ context.Context, candidates []Candidate) ([]string, []SortError, error) {
+	paths := make([]string, len(candidates))
+	for i, c := range candidates {
+		paths[i] = c.Path
+	}
 	return paths, nil, nil
 }
 

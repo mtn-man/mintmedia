@@ -251,6 +251,14 @@ type SortError struct {
 	Err  error
 }
 
+// Candidate is a drop-folder entry handed to SortCandidates. IsDir is the
+// caller's already-known directory fact, so SortCandidates never has to infer
+// it from the name (dotted release-folder names have "extensions").
+type Candidate struct {
+	Path  string
+	IsDir bool
+}
+
 // Processor is the core media decision+execution engine.
 // Plan should be deterministic and side-effect free except for filesystem reads (stat/list).
 // Apply performs the actual filesystem modifications (moves, logging events).
@@ -259,7 +267,7 @@ type Processor interface {
 	Plan(ctx context.Context, req Request) ([]Plan, error)
 	Apply(ctx context.Context, plans []Plan) ([]Result, error)
 	Process(ctx context.Context, req Request) error
-	SortCandidates(ctx context.Context, paths []string) ([]string, []SortError, error)
+	SortCandidates(ctx context.Context, candidates []Candidate) ([]string, []SortError, error)
 	CountMainMedia(ctx context.Context, path string) (int, error)
 }
 

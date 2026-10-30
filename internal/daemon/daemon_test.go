@@ -1288,7 +1288,11 @@ func (s *stubProcessor) Process(ctx context.Context, req processor.Request) erro
 	return nil
 }
 
-func (s *stubProcessor) SortCandidates(_ context.Context, paths []string) ([]string, []processor.SortError, error) {
+func (s *stubProcessor) SortCandidates(_ context.Context, candidates []processor.Candidate) ([]string, []processor.SortError, error) {
+	paths := make([]string, len(candidates))
+	for i, c := range candidates {
+		paths[i] = c.Path
+	}
 	return paths, nil, nil
 }
 
@@ -1430,5 +1434,31 @@ func TestDaemon_DestDegradedTransitions(t *testing.T) {
 	}
 	if d.destDegraded.Any() {
 		t.Fatalf("expected nothing degraded after clearing")
+	}
+}
+
+func TestCandidatesForPaths(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+
+	dir := filepath.Join(root, "Show.S01.1080p.BluRay.x265-RARBG")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	file := filepath.Join(root, "movie.mkv")
+	if err := os.WriteFile(file, []byte("data"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	missing := filepath.Join(root, "gone.mkv")
+
+	got := candidatesForPaths([]string{dir, file, missing})
+	want := []processor.Candidate{{Path: dir, IsDir: true}, {Path: file}, {Path: missing}}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("candidate %d = %+v, want %+v", i, got[i], want[i])
+		}
 	}
 }

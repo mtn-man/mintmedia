@@ -98,12 +98,13 @@ func parseSortKey(blacklist []*regexp.Regexp, path string) (sortKey, error) {
 
 // SortCandidates returns paths in media-aware order: movies first (alphabetical
 // by title), then shows (alphabetical by name, then season, then episode).
-// Non-media paths are silently dropped. Paths that appear to be media but whose
+// Non-media files are silently dropped; directories are always candidates,
+// whatever their name looks like. Paths that appear to be media but whose
 // names cannot be parsed are omitted from sorted and reported in errs. A non-nil
 // err signals a fatal failure (e.g. context canceled); in that case both sorted
 // and errs are nil.
-func (p *processorImpl) SortCandidates(ctx context.Context, paths []string) ([]string, []SortError, error) {
-	if len(paths) == 0 {
+func (p *processorImpl) SortCandidates(ctx context.Context, candidates []Candidate) ([]string, []SortError, error) {
+	if len(candidates) == 0 {
 		return nil, nil, nil
 	}
 
@@ -115,16 +116,20 @@ func (p *processorImpl) SortCandidates(ctx context.Context, paths []string) ([]s
 	var items []keyed
 	var errs []SortError
 
-	for _, path := range paths {
+	for _, c := range candidates {
 		if ctx.Err() != nil {
 			return nil, nil, ctx.Err()
 		}
+		path := c.Path
 
-		// Files with non-media extensions are silently skipped.
-		// Directories (no extension) are always candidates.
-		if ext := strings.ToLower(filepath.Ext(path)); ext != "" {
-			if !isExtInSet(ext, p.mainExtSet) {
-				continue
+		// Files with non-media extensions are silently skipped. Directories
+		// are always candidates: their names routinely contain dots (scene
+		// release names), so filepath.Ext says nothing about them.
+		if !c.IsDir {
+			if ext := strings.ToLower(filepath.Ext(path)); ext != "" {
+				if !isExtInSet(ext, p.mainExtSet) {
+					continue
+				}
 			}
 		}
 

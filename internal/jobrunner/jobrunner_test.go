@@ -28,7 +28,11 @@ func (f *fakeProcessor) Process(ctx context.Context, req processor.Request) erro
 	return f.processFn(ctx, req)
 }
 
-func (f *fakeProcessor) SortCandidates(_ context.Context, paths []string) ([]string, []processor.SortError, error) {
+func (f *fakeProcessor) SortCandidates(_ context.Context, candidates []processor.Candidate) ([]string, []processor.SortError, error) {
+	paths := make([]string, len(candidates))
+	for i, c := range candidates {
+		paths[i] = c.Path
+	}
 	return paths, nil, nil
 }
 
