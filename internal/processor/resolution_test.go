@@ -81,3 +81,87 @@ func TestHeightToBucket(t *testing.T) {
 		}
 	}
 }
+
+// TestDetectResolutionFromAncestors covers the nearest-ancestor walk that
+// backs pl.Resolution. The cases that matter are the ones where the file's
+// own name carries no tag: the resolution then has to come from the most
+// specific enclosing folder that does, without ever reading above the
+// caller-supplied input path.
+func TestDetectResolutionFromAncestors(t *testing.T) {
+	tests := []struct {
+		name      string
+		mainPath  string
+		inputPath string
+		want      string
+	}{
+		{
+			name:      "FileOwnTagWins",
+			mainPath:  "/drop/Show (Season 1) [720p]/Show - S01E01 [1080p].mkv",
+			inputPath: "/drop/Show (Season 1) [720p]",
+			want:      "1080p",
+		},
+		{
+			name:      "FlatReleaseFolder",
+			mainPath:  "/drop/[Judas] Cyberpunk Edgerunners (Season 1) [1080p][HEVC x265 10bit]/[Judas] Cyberpunk Edgerunners - S01E01.mkv",
+			inputPath: "/drop/[Judas] Cyberpunk Edgerunners (Season 1) [1080p][HEVC x265 10bit]",
+			want:      "1080p",
+		},
+		{
+			// The motivating case: the tag sits on an intermediate folder,
+			// not on the input path itself.
+			name:      "NestedSeasonFolderTag",
+			mainPath:  "/drop/Cyberpunk Edgerunners Complete/Season 1 [1080p][HEVC]/Show - S01E01.mkv",
+			inputPath: "/drop/Cyberpunk Edgerunners Complete",
+			want:      "1080p",
+		},
+		{
+			// Nearest ancestor wins over a more loosely scoped claim higher
+			// up: this season really is 720p inside an otherwise-1080p pack.
+			name:      "NearestAncestorBeatsOuterFolder",
+			mainPath:  "/drop/Complete [1080p]/Season 3 [720p]/Show - S03E01.mkv",
+			inputPath: "/drop/Complete [1080p]",
+			want:      "720p",
+		},
+		{
+			// Intermediate folders with no tag are skipped, not treated as a
+			// negative answer -- the walk continues outward to the input path.
+			name:      "FallsBackToInputPathBaseName",
+			mainPath:  "/drop/Show Pack [2160p]/Season 1/Extras/Show - S01E01.mkv",
+			inputPath: "/drop/Show Pack [2160p]",
+			want:      "2160p",
+		},
+		{
+			// Lone-file input: inputPath IS the media file, so Dir(mainPath)
+			// sits above it and no directory is consulted. The enclosing
+			// "[1080p]" folder is deliberately not read, since the caller
+			// never named it.
+			name:      "LoneFileInputIgnoresParentFolder",
+			mainPath:  "/drop/Show (Season 1) [1080p]/Show - S01E01.mkv",
+			inputPath: "/drop/Show (Season 1) [1080p]/Show - S01E01.mkv",
+			want:      "",
+		},
+		{
+			name:      "NoTagAnywhere",
+			mainPath:  "/drop/Cyberpunk Edgerunners Complete/Season 1/Show - S01E01.mkv",
+			inputPath: "/drop/Cyberpunk Edgerunners Complete",
+			want:      "",
+		},
+		{
+			// Guard: a main path outside inputPath yields nothing rather than
+			// walking off toward the filesystem root.
+			name:      "MainPathOutsideInputPath",
+			mainPath:  "/elsewhere/Season 1 [1080p]/Show - S01E01.mkv",
+			inputPath: "/drop/Show Pack",
+			want:      "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := detectResolutionFromAncestors(tc.mainPath, tc.inputPath); got != tc.want {
+				t.Errorf("detectResolutionFromAncestors(%q, %q) = %q, want %q",
+					tc.mainPath, tc.inputPath, got, tc.want)
+			}
+		})
+	}
+}
