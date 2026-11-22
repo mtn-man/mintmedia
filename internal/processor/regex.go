@@ -166,6 +166,16 @@ var (
 	// Removes bracketed tags like "[EZTVx.to]" or "[YTS]".
 	reBracketedTag = regexp.MustCompile(`\[[^\]]*\]`)
 
+	// Removes a parenthesized group left with no alphanumeric content of its
+	// own, e.g. the "( )" that remains once a season marker or a blacklisted
+	// tag is stripped from inside the parens ("Show (Season 1)",
+	// "Movie (EXTENDED)"). Deliberately tolerates leftover punctuation inside
+	// the group ("( - )", "( , )") -- a parenthesized group with no letters or
+	// digits left in it carries no title content either way. Parens
+	// themselves are excluded from the inner class so a match can never run
+	// across a neighboring group's boundary. See cleanReleaseName.
+	reEmptyParens = regexp.MustCompile(`\([^0-9A-Za-z()]*\)`)
+
 	// Accept years 1900-2099.
 	reYear = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
 
