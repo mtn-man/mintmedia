@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -479,6 +480,48 @@ func resolveShowIdentity(p *processorImpl, folderBaseName, mainPath string, hint
 	return si, err
 }
 
+// detectResolutionFromAncestors finds the release resolution for mainPath,
+// preferring the most specific name that carries one: the file's own basename
+// first, then each ancestor directory from the file's immediate parent
+// outward, ending at inputPath itself.
+//
+// Nearest-ancestor-wins keeps the precedence consistent all the way up -- a
+// per-file "[1080p]" tag overrides the folder's blanket "[720p]" claim the
+// same way a "Season 1 [720p]" subfolder overrides an enclosing
+// "Complete [1080p]". A more narrowly scoped tag is always the better
+// evidence for the file actually in hand.
+//
+// The walk is bounded to inputPath: paths.RelComponents reports ok=false for
+// anything outside it, which is also what keeps the lone-file input path
+// (where inputPath is the media file, not a directory) from reading a parent
+// directory the caller never named -- there, Dir(mainPath) sits above
+// inputPath, so no directory is consulted at all. The number of components
+// needs no separate cap, since listMainMediaFromDir already refuses to
+// descend past paths.MaxDepth.
+//
+// Pure: inspects names only, never touches the filesystem, so it stays
+// inside Plan's deterministic half.
+func detectResolutionFromAncestors(mainPath, inputPath string) string {
+	if res := detectResolution(filepath.Base(mainPath)); res != "" {
+		return res
+	}
+
+	parts, ok := paths.RelComponents(inputPath, filepath.Dir(mainPath))
+	if !ok {
+		return ""
+	}
+	// parts runs root-to-leaf, so iterate backward for nearest-first. Each
+	// component is already the directory's own base name, which is all
+	// detectResolution needs.
+	for _, part := range slices.Backward(parts) {
+		if res := detectResolution(part); res != "" {
+			return res
+		}
+	}
+
+	return detectResolution(filepath.Base(inputPath))
+}
+
 func planForMain(
 	ctx context.Context,
 	p *processorImpl,
@@ -495,14 +538,11 @@ func planForMain(
 	pl.MainExt = strings.ToLower(filepath.Ext(mainPath))
 	pl.MainBaseName = filepath.Base(mainPath)
 
-	// Detect the release resolution from the raw filename (falling back to the
-	// input folder name) before any release-tag cleanup strips the token. This
-	// is recorded unconditionally; it is only appended to DestRadix below when
-	// p.cfg.ResolutionAware is set.
-	pl.Resolution = detectResolution(pl.MainBaseName)
-	if pl.Resolution == "" {
-		pl.Resolution = detectResolution(filepath.Base(pl.InputPath))
-	}
+	// Detect the release resolution from the raw filename, falling back to the
+	// nearest enclosing folder name that carries one, before any release-tag
+	// cleanup strips the token. This is recorded unconditionally; it is only
+	// appended to DestRadix below when p.cfg.ResolutionAware is set.
+	pl.Resolution = detectResolutionFromAncestors(mainPath, pl.InputPath)
 
 	// --- Phase: Classify -- determine category (Movies vs Shows) ---------
 	cat := normalizeCategory(bc.categoryHint)
