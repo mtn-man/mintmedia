@@ -826,6 +826,14 @@ func cleanReleaseName(blacklist []*regexp.Regexp, raw string) string {
 		s = re.ReplaceAllString(s, " ")
 	}
 
+	// Drop any parenthesized group the removals above just emptied out. Both
+	// the blacklist loop here and deriveShowHintFromFolder's season-marker
+	// stripping (which runs before this function) can leave a bare "( )"
+	// behind, which would otherwise survive into a show folder name as
+	// "Cyberpunk Edgerunners ( )". Runs after the blacklist loop so it sees
+	// the groups that loop emptied, not just the ones already empty on entry.
+	s = reEmptyParens.ReplaceAllString(s, " ")
+
 	// Collapse whitespace
 	s = strings.Join(strings.Fields(s), " ")
 	return s

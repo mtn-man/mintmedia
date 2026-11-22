@@ -312,11 +312,120 @@ func TestCleanReleaseName(t *testing.T) {
 			raw:  "The.Great.Escape.Remastered.Anniversary.Cut",
 			want: "The Great Escape Anniversary Cut",
 		},
+		{
+			// Parens already empty on entry: the shape
+			// deriveShowHintFromFolder hands over after stripping a season
+			// marker from inside them ("... (Season 1) ...").
+			raw:  "Cyberpunk Edgerunners ( )",
+			want: "Cyberpunk Edgerunners",
+		},
+		{
+			// Parens emptied by the blacklist loop itself, mid-title so no
+			// trailing-metadata truncation applies -- the empty group has to
+			// be dropped after the removals, not before.
+			raw:  "Movie.Name.(EXTENDED).Special.Cut",
+			want: "Movie Name Special Cut",
+		},
+		{
+			// Leftover punctuation inside the group still counts as empty.
+			raw:  "Cyberpunk Edgerunners ( - )",
+			want: "Cyberpunk Edgerunners",
+		},
+		{
+			// Guard: a parenthesized group that still holds alphanumeric
+			// content is title text and must survive untouched.
+			raw:  "Movie Name (2020) Special Cut",
+			want: "Movie Name (2020) Special Cut",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.raw, func(t *testing.T) {
 			if got := cleanReleaseName(bl, tc.raw); got != tc.want {
 				t.Errorf("cleanReleaseName(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestDeriveShowHintFromFolder covers the season-pack folder shapes the hint
+// is derived from. The motivating case is a season marker written inside
+// parens: stripping "Season 1" out of "(Season 1)" used to leave the group
+// behind, and because a batch with one unparseable sibling forces every file
+// to the hint name (see Plan's Reconcile phase), that "( )" reached the
+// created show folder name.
+func TestDeriveShowHintFromFolder(t *testing.T) {
+	bl := compileTestBlacklist(t, []string{
+		"2160p", "1080p", "720p", "480p", "x265", "x264", "hevc", "bluray",
+		"brrip", "web[- ]?dl", "proper", "repack", "extended",
+	})
+
+	tests := []struct {
+		name         string
+		folder       string
+		wantName     string
+		wantYear     string
+		wantSeason   int
+		wantSeasonOK bool
+		wantOK       bool
+	}{
+		{
+			name:         "ParenthesizedSeasonMarker",
+			folder:       "[Judas] Cyberpunk Edgerunners (Season 1) [1080p][HEVC x265 10bit][Multi-Subs]",
+			wantName:     "Cyberpunk Edgerunners",
+			wantSeason:   1,
+			wantSeasonOK: true,
+			wantOK:       true,
+		},
+		{
+			name:         "BareSeasonMarker",
+			folder:       "Cyberpunk.Edgerunners.Season.1.1080p.WEB-DL",
+			wantName:     "Cyberpunk Edgerunners",
+			wantSeason:   1,
+			wantSeasonOK: true,
+			wantOK:       true,
+		},
+		{
+			name:         "ParenthesizedSeasonMarkerWithYear",
+			folder:       "Fallout (2024) (Season 1) [1080p]",
+			wantName:     "Fallout",
+			wantYear:     "2024",
+			wantSeason:   1,
+			wantSeasonOK: true,
+			wantOK:       true,
+		},
+		{
+			name:     "SeasonRangeHasNoSingleSeason",
+			folder:   "Cyberpunk Edgerunners (Season 1-2) [1080p]",
+			wantName: "Cyberpunk Edgerunners",
+			wantOK:   true,
+		},
+		{
+			name:   "NoSeasonMarkerAtAll",
+			folder: "Cyberpunk.Edgerunners.1080p.WEB-DL",
+			wantOK: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			name, year, season, seasonOK, ok := deriveShowHintFromFolder(bl, tc.folder)
+			if ok != tc.wantOK {
+				t.Fatalf("deriveShowHintFromFolder(%q) ok = %v, want %v", tc.folder, ok, tc.wantOK)
+			}
+			if !ok {
+				return
+			}
+			if name != tc.wantName {
+				t.Errorf("name = %q, want %q", name, tc.wantName)
+			}
+			if year != tc.wantYear {
+				t.Errorf("year = %q, want %q", year, tc.wantYear)
+			}
+			if season != tc.wantSeason {
+				t.Errorf("season = %d, want %d", season, tc.wantSeason)
+			}
+			if seasonOK != tc.wantSeasonOK {
+				t.Errorf("seasonOK = %v, want %v", seasonOK, tc.wantSeasonOK)
 			}
 		})
 	}
