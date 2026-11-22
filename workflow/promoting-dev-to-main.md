@@ -31,19 +31,27 @@ below.
    next promotion PR will show false conflicts against commits that already
    landed:
    ```
-   git switch main && git pull
-   git switch dev && git rebase main
-   git push --force-with-lease
+   ./scripts/sync-dev.sh
    ```
-   The `git pull` on `main` has to happen *before* the rebase, and must
-   actually land (confirm it fast-forwards, not "already up to date" against
-   a stale ref) -- `git rebase main` rebases onto the local `main` branch
-   pointer, not `origin/main`. If local `main` hasn't been updated yet,
-   `git rebase main` on `dev` doesn't error, it just silently no-ops (reports
+   Run it from the repo root with a clean working tree, from either `main` or
+   `dev`; it always ends on `dev`. It fetches, fast-forwards local `main` to
+   `origin/main`, rebases `dev` onto it, and force-pushes `dev` with a lease
+   pinned to the `origin/dev` it just fetched. It is idempotent -- a re-run
+   reports nothing to rebase or push. On a rebase conflict it aborts and
+   leaves `dev` unchanged.
+
+   The script exists because of a gotcha in the manual sequence
+   (`git switch main && git pull`, then `git switch dev && git rebase main`,
+   then `git push --force-with-lease`): `git rebase main` rebases onto the
+   local `main` branch pointer, not `origin/main`. If local `main` hasn't been
+   updated yet, the rebase doesn't error, it just silently no-ops (reports
    success against the old commit), leaving `dev` still carrying the
-   pre-merge commits under their old SHAs. Re-running the rebase after
-   actually pulling `main` fixes it -- Git recognizes the old and new commits
-   as content-identical (`patch-id` match) and drops the duplicates.
+   pre-merge commits under their old SHAs. The script fast-forwards `main`
+   with `--ff-only` and refuses to continue if local `main` is ahead of
+   `origin/main`, so it can't no-op that way. If you ever do the steps by
+   hand and hit the no-op, re-running the rebase after actually pulling `main`
+   fixes it -- Git recognizes the old and new commits as content-identical
+   (`patch-id` match) and drops the duplicates.
 
 ## Releasing is separate
 
