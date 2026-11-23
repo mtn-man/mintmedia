@@ -7,6 +7,8 @@ set -euo pipefail
 #
 # Fast-forwards local main to origin/main, rebases dev onto it, and
 # force-pushes dev with a lease pinned to the origin/dev fetched at the start.
+# Refuses to run when origin/dev carries a commit that would not survive that
+# push -- one neither in local dev nor already landed on origin/main.
 
 info()    { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 success() { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
@@ -36,6 +38,28 @@ git fetch origin main dev --quiet
 AHEAD="$(git rev-list --count origin/main..main)"
 [[ "$AHEAD" -eq 0 ]] \
   || err "Local main is $AHEAD commit(s) ahead of origin/main -- resolve that first"
+
+# The lease below is pinned to the origin/dev fetched above, so it only guards
+# the seconds between that fetch and the push -- it can't notice a commit that
+# was already on origin/dev before this run (pushed from another machine, or
+# made in the GitHub web UI) but never reached local dev. The force-push would
+# silently drop such a commit, so refuse here instead. An origin/dev commit is
+# safe to overwrite if local dev already has it or a patch-equivalent of it
+# (git cherry dev origin/dev marks it "-"), or if origin/main does (git cherry
+# origin/main origin/dev marks it "-", or omits it as reachable) -- the
+# promotion's rebase-merge rewrites dev's SHAs onto main, and dev is about to
+# be rebased onto main. Only a commit unaccounted for on both sides is lost.
+UNSYNCED="$(comm -12 \
+  <(git cherry dev origin/dev | sed -n 's/^+ //p' | sort) \
+  <(git cherry origin/main origin/dev | sed -n 's/^+ //p' | sort))"
+if [[ -n "$UNSYNCED" ]]; then
+  printf '\033[1;31mError:\033[0m origin/dev has commit(s) missing from both local dev and origin/main:\n' >&2
+  while IFS= read -r sha; do
+    printf '  %s\n' "$(git log -1 --format='%h %s' "$sha")" >&2
+  done <<< "$UNSYNCED"
+  printf 'Bring them into local dev first (git switch dev && git pull --rebase), then re-run.\n' >&2
+  exit 1
+fi
 
 git switch main --quiet
 BEFORE="$(git rev-parse HEAD)"

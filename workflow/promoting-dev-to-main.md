@@ -36,9 +36,12 @@ below.
    Run it from the repo root with a clean working tree, from either `main` or
    `dev`; it always ends on `dev`. It fetches, fast-forwards local `main` to
    `origin/main`, rebases `dev` onto it, and force-pushes `dev` with a lease
-   pinned to the `origin/dev` it just fetched. It is idempotent -- a re-run
-   reports nothing to rebase or push. On a rebase conflict it aborts and
-   leaves `dev` unchanged.
+   pinned to the `origin/dev` it just fetched. Before touching anything it
+   refuses to run if `origin/dev` holds a commit that is neither in local
+   `dev` nor already on `origin/main` (e.g. pushed from another machine after
+   the merge) -- the force-push would otherwise drop it; pull it into `dev`
+   and re-run. It is idempotent -- a re-run reports nothing to rebase or
+   push. On a rebase conflict it aborts and leaves `dev` unchanged.
 
    The script exists because of a gotcha in the manual sequence
    (`git switch main && git pull`, then `git switch dev && git rebase main`,

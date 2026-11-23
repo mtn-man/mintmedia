@@ -148,7 +148,7 @@ If a file ended up somewhere unexpected, or a subtitle was left behind, that's t
 
 ## Transmission Integration
 
-mintmedia can optionally clean up after Transmission: once a completed download's files are organized, it removes the finished torrent from Transmission's queue (queue entry only -- your downloaded files are never touched). Enable it with `features.enable_torrent_automation`, `torrent.enabled`, `torrent.host`, and `torrent.auto_cleanup_completed_torrents` in your config -- see `config.example.toml` for the full set of options. Adding magnets to Transmission in the first place is outside mintmedia's scope; use Transmission's own web UI, `transmission-remote`, or a client-side tool of your choice.
+mintmedia can optionally clean up after Transmission: once a completed download's files are organized, it removes the finished torrent from Transmission's queue (queue entry only -- your downloaded files are never touched). Enable it by setting `enable_torrent_automation` under `[features]`, then `enabled`, `host`, and `auto_cleanup_completed_torrents` under `[torrent]` in your config -- see `config.example.toml` for the full set of options. Adding magnets to Transmission in the first place is outside mintmedia's scope; use Transmission's own web UI, `transmission-remote`, or a client-side tool of your choice.
 
 ## License
 

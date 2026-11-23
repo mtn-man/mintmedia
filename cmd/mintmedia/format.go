@@ -70,7 +70,13 @@ func printPlanBody(pl processor.Plan) {
 
 	switch pl.DupVerdict.Kind {
 	case processor.DuplicateReviewHold:
-		fmt.Printf("Duplicate:    held for review (untagged release; existing tagged copy: %s)\n", pl.DupVerdict.Path)
+		// The hold fires in either direction; pl.Resolution says which side
+		// carries the tag.
+		if pl.Resolution != "" {
+			fmt.Printf("Duplicate:    held for review (%s release; existing untagged copy: %s)\n", pl.Resolution, pl.DupVerdict.Path)
+		} else {
+			fmt.Printf("Duplicate:    held for review (untagged release; existing tagged copy: %s)\n", pl.DupVerdict.Path)
+		}
 	case processor.DuplicateExact:
 		if pl.DupVerdict.Path != "" {
 			fmt.Printf("Duplicate:    yes (matches existing library entry: %s)\n", pl.DupVerdict.Path)

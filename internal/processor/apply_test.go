@@ -1367,6 +1367,52 @@ func TestApply_ResolutionAware_DuplicateReview_SkipsWithReviewReason(t *testing.
 	}
 }
 
+// TestApply_ResolutionAware_DuplicateReview_TaggedIncomingReason covers the
+// other hold direction: a resolution-tagged incoming file against an untagged
+// library copy. The skip reason must name the incoming resolution and call the
+// library copy the untagged one -- not reuse the untagged-incoming wording.
+func TestApply_ResolutionAware_DuplicateReview_TaggedIncomingReason(t *testing.T) {
+	t.Parallel()
+	p := newTestProcessorWithExecDeps(t)
+	p.xfer = failIfCalledTransferer{t: t}
+
+	mainSrc := filepath.Join(p.cfg.DropFolder, "Interstellar.2014.1080p.mkv")
+	writeFile(t, mainSrc, "dummy")
+	match := filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014).mkv")
+	writeFile(t, match, "already here")
+
+	pl := Plan{
+		Category:       CategoryMovie,
+		MainSourcePath: mainSrc,
+		MainExt:        ".mkv",
+		DestDir:        filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)"),
+		DestRadix:      "Interstellar (2014) - 1080p",
+		DestMainPath:   filepath.Join(p.cfg.MoviesDir, "Interstellar (2014)", "Interstellar (2014) - 1080p.mkv"),
+		InputPath:      mainSrc,
+		Resolution:     "1080p",
+		DupVerdict:     DuplicateVerdict{Kind: DuplicateReviewHold, Path: match},
+	}
+
+	results, err := p.Apply(context.Background(), []Plan{pl})
+	if err != nil {
+		t.Fatalf("Apply() error: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	res := results[0]
+	if res.Applied || !res.NeedsReview {
+		t.Fatalf("Applied=%v NeedsReview=%v, want false/true", res.Applied, res.NeedsReview)
+	}
+	want := "1080p release, possible duplicate of untagged " + match + " -- left for review"
+	if res.Reason != want {
+		t.Fatalf("Reason = %q, want %q", res.Reason, want)
+	}
+	if _, err := os.Stat(mainSrc); err != nil {
+		t.Fatalf("source should remain in place: %v", err)
+	}
+}
+
 // TestApply_ResolutionAware_PlainDuplicate_ReasonUnchanged confirms a normal
 // duplicate (DuplicateReview unset) still gets the "already in library" line.
 func TestApply_ResolutionAware_PlainDuplicate_ReasonUnchanged(t *testing.T) {

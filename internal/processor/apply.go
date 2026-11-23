@@ -318,11 +318,18 @@ func skipDuplicateResult(p *processorImpl, pl Plan, duplicateSkippedByInput map[
 	// A DuplicateReviewHold verdict always satisfies Skip() -- so a review
 	// plan short-circuits at the pl.DupVerdict.Skip() guard in applyOne and
 	// never reaches the TOCTOU downgrade caller. Here it just selects the
-	// wording.
+	// wording. A hold arises in either direction (decideResolutionDuplicate):
+	// an untagged incoming file against a tagged library copy, or a tagged
+	// incoming file against an untagged one -- pl.Resolution, the same input
+	// that decision keyed on, says which.
 	isReview := pl.DupVerdict.Kind == DuplicateReviewHold
 	reason := fmt.Sprintf("already in library: %s", matchPath)
 	if isReview {
-		reason = fmt.Sprintf("untagged release, possible duplicate of %s -- left for review", matchPath)
+		if pl.Resolution != "" {
+			reason = fmt.Sprintf("%s release, possible duplicate of untagged %s -- left for review", pl.Resolution, matchPath)
+		} else {
+			reason = fmt.Sprintf("untagged release, possible duplicate of %s -- left for review", matchPath)
+		}
 	}
 	logHistoryInfo(p, logging.EventProcessorInputSkippedDuplicate, logging.Fields{
 		"input_path":      pl.InputPath,

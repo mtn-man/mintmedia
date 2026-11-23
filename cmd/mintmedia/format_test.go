@@ -84,8 +84,27 @@ func TestPrintPlan_DuplicateReviewLine(t *testing.T) {
 	if !strings.Contains(out, "Duplicate:    held for review") {
 		t.Fatalf("expected a held-for-review Duplicate line, got:\n%s", out)
 	}
-	if !strings.Contains(out, "Interstellar (2014) - 1080p.mkv") {
-		t.Fatalf("expected the existing tagged copy cited, got:\n%s", out)
+	if !strings.Contains(out, "untagged release; existing tagged copy: /Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv") {
+		t.Fatalf("expected the untagged-incoming wording citing the tagged copy, got:\n%s", out)
+	}
+}
+
+// TestPrintPlan_DuplicateReviewLine_TaggedIncoming covers the other hold
+// direction: a resolution-tagged incoming file against an untagged library
+// copy must not be described as the untagged side.
+func TestPrintPlan_DuplicateReviewLine_TaggedIncoming(t *testing.T) {
+	pl := processor.Plan{
+		Category:       processor.CategoryMovie,
+		MainSourcePath: "/tmp/drop/Interstellar.2014.1080p.mkv",
+		DestMainPath:   "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014) - 1080p.mkv",
+		MovieTitle:     "Interstellar (2014)",
+		Resolution:     "1080p",
+		DupVerdict:     processor.DuplicateVerdict{Kind: processor.DuplicateReviewHold, Path: "/Volumes/media/Movies/Interstellar (2014)/Interstellar (2014).mkv"},
+	}
+
+	out := captureStdout(t, func() { printPlan(pl) })
+	if !strings.Contains(out, "held for review (1080p release; existing untagged copy: /Volumes/media/Movies/Interstellar (2014)/Interstellar (2014).mkv)") {
+		t.Fatalf("expected the tagged-incoming wording citing the untagged copy, got:\n%s", out)
 	}
 }
 
