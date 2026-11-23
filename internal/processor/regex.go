@@ -171,10 +171,13 @@ var (
 	// tag is stripped from inside the parens ("Show (Season 1)",
 	// "Movie (EXTENDED)"). Deliberately tolerates leftover punctuation inside
 	// the group ("( - )", "( , )") -- a parenthesized group with no letters or
-	// digits left in it carries no title content either way. Parens
-	// themselves are excluded from the inner class so a match can never run
-	// across a neighboring group's boundary. See cleanReleaseName.
-	reEmptyParens = regexp.MustCompile(`\([^0-9A-Za-z()]*\)`)
+	// digits left in it carries no title content either way. Letters and
+	// digits are matched as Unicode classes, not ASCII ranges, so a
+	// native-script title in parens ("Kingdom (킹덤)") counts as content and
+	// survives. Parens themselves are excluded from the inner class so a match
+	// can never run across a neighboring group's boundary. See
+	// cleanReleaseName.
+	reEmptyParens = regexp.MustCompile(`\([^\p{L}\p{N}()]*\)`)
 
 	// Accept years 1900-2099.
 	reYear = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)

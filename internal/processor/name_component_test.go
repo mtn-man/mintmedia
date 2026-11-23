@@ -337,6 +337,16 @@ func TestCleanReleaseName(t *testing.T) {
 			raw:  "Movie Name (2020) Special Cut",
 			want: "Movie Name (2020) Special Cut",
 		},
+		{
+			// Guard: a native-script title in parens is letter content even
+			// though none of it is ASCII, so it must survive too.
+			raw:  "Shingeki no Kyojin (進撃の巨人)",
+			want: "Shingeki no Kyojin (進撃の巨人)",
+		},
+		{
+			raw:  "Kingdom (킹덤)",
+			want: "Kingdom (킹덤)",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.raw, func(t *testing.T) {
